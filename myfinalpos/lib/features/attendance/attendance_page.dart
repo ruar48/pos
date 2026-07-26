@@ -14,7 +14,6 @@ import '../pos/pages/pos_home_page.dart';
 import '../pos/widgets/app_drawer_section.dart';
 import 'attendance_formatters.dart';
 import 'widgets/attendance_staff_card.dart';
-import 'widgets/attendance_stat_cards.dart';
 import 'widgets/attendance_selfie_sheet.dart';
 
 class AttendancePage extends StatefulWidget {
@@ -96,6 +95,13 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
+  Future<void> _selectBoardDate(DateTime date) async {
+    final iso = toIsoDate(date);
+    if (iso == _boardDate) return;
+    setState(() => _boardDate = iso);
+    await _load();
+  }
+
   Future<void> _pickBoardDate() async {
     final initial = DateTime.tryParse(_boardDate) ?? DateTime.now();
     final picked = await showDatePicker(
@@ -105,8 +111,7 @@ class _AttendancePageState extends State<AttendancePage> {
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
     );
     if (picked == null || !mounted) return;
-    setState(() => _boardDate = toIsoDate(picked));
-    await _load();
+    await _selectBoardDate(picked);
   }
 
   Future<void> _addEmployee() async {
@@ -265,10 +270,10 @@ class _AttendancePageState extends State<AttendancePage> {
     return ManagementPageShell(
       pageState: widget.pageState,
       activeSection: AppDrawerSection.attendance,
-      title: 'Attendance',
+      title: 'Staff',
       subtitle: _canManageBoard
-          ? 'Tap TIME IN / OUT on a staff member, then take a selfie. No face recognition.'
-          : 'Tap TIME IN / OUT, then take a selfie to record your punch.',
+          ? 'Tap IN / OUT, take a selfie — no face recognition'
+          : 'Tap IN / OUT, then take a selfie to record your punch',
       scrollBody: false,
       actions: [
         if (_canAddEmployee)
@@ -291,7 +296,6 @@ class _AttendancePageState extends State<AttendancePage> {
                   ? _AdminBoardView(
                       boardDate: _boardDate,
                       schedule: _schedule,
-                      rows: _boardRows,
                       filteredRows: _filteredRows,
                       searchController: _searchController,
                       submitting: _submitting,
@@ -299,6 +303,7 @@ class _AttendancePageState extends State<AttendancePage> {
                       clockEnabled: isTodayIso(_boardDate),
                       lastPunchSummary: _lastPunchSummary,
                       onPickDate: _pickBoardDate,
+                      onSelectDate: _selectBoardDate,
                       onSearchChanged: (value) =>
                           setState(() => _searchQuery = value),
                       onPunch: _punchBoardRow,
@@ -319,7 +324,6 @@ class _AdminBoardView extends StatelessWidget {
   const _AdminBoardView({
     required this.boardDate,
     required this.schedule,
-    required this.rows,
     required this.filteredRows,
     required this.searchController,
     required this.submitting,
@@ -327,6 +331,7 @@ class _AdminBoardView extends StatelessWidget {
     required this.clockEnabled,
     required this.lastPunchSummary,
     required this.onPickDate,
+    required this.onSelectDate,
     required this.onSearchChanged,
     required this.onPunch,
     this.onAddEmployee,
@@ -334,7 +339,6 @@ class _AdminBoardView extends StatelessWidget {
 
   final String boardDate;
   final AttendanceSchedule? schedule;
-  final List<AttendanceBoardRow> rows;
   final List<AttendanceBoardRow> filteredRows;
   final TextEditingController searchController;
   final bool submitting;
@@ -342,98 +346,185 @@ class _AdminBoardView extends StatelessWidget {
   final bool clockEnabled;
   final String? lastPunchSummary;
   final VoidCallback onPickDate;
+  final Future<void> Function(DateTime date) onSelectDate;
   final ValueChanged<String> onSearchChanged;
   final Future<void> Function(AttendanceBoardRow) onPunch;
   final VoidCallback? onAddEmployee;
 
   @override
   Widget build(BuildContext context) {
+    final dates = attendanceRecentDates();
+    final now = DateTime.now();
+
     return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
+      padding: const EdgeInsets.fromLTRB(12, 12, 16, 16),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Flexible(
-                child: OutlinedButton.icon(
-                  onPressed: onPickDate,
-                  icon: const Icon(Icons.calendar_today_outlined, size: 16),
-                  label: Text(boardDate, overflow: TextOverflow.ellipsis),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                clockEnabled ? 'Today' : 'Past day',
-                style: TextStyle(
-                  color: clockEnabled ? AppColors.green : AppColors.muted,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
-              const Spacer(),
-              if (onAddEmployee != null)
-                FilledButton.icon(
-                  onPressed: onAddEmployee,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.green,
-                    foregroundColor: Colors.white,
+          SizedBox(
+            width: 132,
+            child: ListView.separated(
+              itemCount: dates.length + 1,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                if (index == dates.length) {
+                  return OutlinedButton(
+                    onPressed: onPickDate,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text('More…', style: TextStyle(fontSize: 12)),
+                  );
+                }
+                final date = dates[index];
+                final iso = toIsoDate(date);
+                final selected = iso == boardDate;
+                return Material(
+                  color: selected
+                      ? const Color(0xFFD4A574)
+                      : const Color(0xFFF3EDE6),
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => onSelectDate(date),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_today_outlined,
+                            size: 14,
+                            color: selected
+                                ? Colors.white
+                                : const Color(0xFF8B7355),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              attendanceDateRailLabel(date),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: selected
+                                    ? Colors.white
+                                    : const Color(0xFF5C4A3A),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  icon: const Icon(Icons.person_add_alt_1, size: 18),
-                  label: const Text('Add employee'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          AttendanceStatCards(rows: rows, schedule: schedule, compact: true),
-          if (lastPunchSummary != null) ...[
-            const SizedBox(height: 12),
-            _LastPunchCard(summary: lastPunchSummary!),
-          ],
-          const SizedBox(height: 12),
-          TextField(
-            controller: searchController,
-            onChanged: onSearchChanged,
-            decoration: InputDecoration(
-              hintText: 'Search staff…',
-              prefixIcon: const Icon(Icons.search),
-              filled: true,
-              fillColor: AppColors.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.border),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.border),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                );
+              },
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(width: 14),
           Expanded(
-            child: filteredRows.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No staff found',
-                      style: TextStyle(color: AppColors.muted),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: searchController,
+                        onChanged: onSearchChanged,
+                        decoration: InputDecoration(
+                          hintText: 'Search…',
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(999),
+                            borderSide: const BorderSide(color: AppColors.border),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(999),
+                            borderSide: const BorderSide(color: AppColors.border),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                          ),
+                        ),
+                      ),
                     ),
-                  )
-                : ListView.separated(
-                    itemCount: filteredRows.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final row = filteredRows[index];
-                      return AttendanceStaffCard(
-                        row: row,
-                        schedule: schedule,
-                        punchEnabled: clockEnabled,
-                        punchBusy:
-                            submitting && punchingUserId == row.userId,
-                        onPunch: () => onPunch(row),
-                      );
-                    },
-                  ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          attendanceDateRailLabel(
+                            DateTime.tryParse(boardDate) ?? now,
+                          ),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.text,
+                          ),
+                        ),
+                        Text(
+                          clockEnabled ? 'Today' : 'Past day',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: clockEnabled
+                                ? AppColors.green
+                                : AppColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (onAddEmployee != null) ...[
+                      const SizedBox(width: 10),
+                      IconButton.filled(
+                        onPressed: onAddEmployee,
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.person_add_alt_1),
+                        tooltip: 'Add employee',
+                      ),
+                    ],
+                  ],
+                ),
+                if (lastPunchSummary != null) ...[
+                  const SizedBox(height: 10),
+                  _LastPunchCard(summary: lastPunchSummary!),
+                ],
+                const SizedBox(height: 12),
+                Expanded(
+                  child: filteredRows.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No staff found',
+                            style: TextStyle(color: AppColors.muted),
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: filteredRows.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final row = filteredRows[index];
+                            return AttendanceStaffCard(
+                              row: row,
+                              schedule: schedule,
+                              punchEnabled: clockEnabled,
+                              punchBusy: submitting &&
+                                  punchingUserId == row.userId,
+                              onPunch: () => onPunch(row),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

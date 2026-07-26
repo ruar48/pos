@@ -68,18 +68,17 @@ String? attendanceNextActionLabel(
   return null;
 }
 
-/// Primary button label for manual Time In / Out (no face recognition).
+/// Primary button label for manual Time In / Out (matches past tablet UI).
 String attendancePunchButtonLabel({
   required bool dayComplete,
   required String? nextAction,
   int punchCount = 0,
 }) {
   if (dayComplete) return 'DONE';
-  if (nextAction == 'clock_in') return 'TIME IN';
+  if (nextAction == 'clock_in') return 'IN';
   if (nextAction == 'clock_out') {
     if (punchCount == 1) return 'START BREAK';
-    if (punchCount == 3) return 'OUT';
-    return 'TIME OUT';
+    return 'OUT';
   }
   return 'WAIT';
 }
@@ -90,6 +89,71 @@ bool attendanceCanPunch({
 }) {
   if (dayComplete) return false;
   return nextAction == 'clock_in' || nextAction == 'clock_out';
+}
+
+String attendanceHoursLabel(String label) {
+  return label
+      .replaceAll('hrs', 'hour')
+      .replaceAll('hr', 'hour')
+      .replaceAll('mins', 'minute')
+      .replaceAll('min', 'minute');
+}
+
+/// Latest “in” selfie for the past-system two-column display.
+String? attendanceSelfieInUrl(AttendanceBoardRow row) {
+  if (row.afternoonInPhotoUrl != null && row.afternoonInPhotoUrl!.isNotEmpty) {
+    return row.afternoonInPhotoUrl;
+  }
+  return row.morningInPhotoUrl;
+}
+
+String attendanceSelfieInTime(AttendanceBoardRow row) {
+  if (row.afternoonInAt != null) {
+    return row.afternoonInDisplay ?? formatAttendanceIsoTime(row.afternoonInAt);
+  }
+  return row.morningInDisplay ??
+      formatAttendanceIsoTime(row.morningInAt ?? row.clockInAt);
+}
+
+/// Latest “out” selfie for the past-system two-column display.
+String? attendanceSelfieOutUrl(AttendanceBoardRow row) {
+  if (row.dayOutPhotoUrl != null && row.dayOutPhotoUrl!.isNotEmpty) {
+    return row.dayOutPhotoUrl;
+  }
+  return row.lunchOutPhotoUrl;
+}
+
+String attendanceSelfieOutTime(AttendanceBoardRow row) {
+  if (row.dayOutAt != null) {
+    return row.dayOutDisplay ?? formatAttendanceIsoTime(row.dayOutAt);
+  }
+  return row.lunchOutDisplay ?? formatAttendanceIsoTime(row.lunchOutAt);
+}
+
+List<DateTime> attendanceRecentDates({int days = 7}) {
+  final today = DateTime.now();
+  final start = DateTime(today.year, today.month, today.day);
+  return List.generate(days, (i) => start.subtract(Duration(days: i)));
+}
+
+String attendanceDateRailLabel(DateTime date) {
+  const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  final weekday = weekdays[date.weekday - 1];
+  return '$weekday, ${date.day} ${months[date.month - 1]}';
 }
 
 String attendanceScheduleSummary(AttendanceSchedule schedule) {

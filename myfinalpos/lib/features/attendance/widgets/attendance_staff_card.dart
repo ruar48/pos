@@ -34,7 +34,6 @@ class AttendanceStaffCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final nextLabel = attendanceNextActionLabel(row, schedule);
     final buttonLabel = attendancePunchButtonLabel(
       dayComplete: row.dayComplete,
       nextAction: row.nextAction,
@@ -46,321 +45,247 @@ class AttendanceStaffCard extends StatelessWidget {
           dayComplete: row.dayComplete,
           nextAction: row.nextAction,
         );
+    final inUrl = resolveAttendancePhotoUrl(attendanceSelfieInUrl(row));
+    final outUrl = resolveAttendancePhotoUrl(attendanceSelfieOutUrl(row));
+    final inTime = attendanceSelfieInTime(row);
+    final outTime = attendanceSelfieOutTime(row);
+    final actionColor = _actionColor(buttonLabel);
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      row.fullName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.text,
-                      ),
-                    ),
-                    Text(
-                      '${row.role.replaceAll('_', ' ')} · ${row.branchName}',
-                      style: const TextStyle(fontSize: 12, color: AppColors.muted),
-                    ),
-                  ],
-                ),
-              ),
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: row.isClockedIn
-                    ? AppColors.lightGreen
-                    : AppColors.softSurface,
-                child: Text(
-                  attendanceInitials(row.fullName),
-                  style: TextStyle(
-                    fontSize: 11,
+          Expanded(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  row.fullName.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     fontWeight: FontWeight.w800,
-                    color: row.isClockedIn ? AppColors.green : AppColors.muted,
+                    fontSize: 15,
+                    letterSpacing: 0.2,
+                    color: AppColors.text,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final punchCells = [
-                _PunchCell(
-                  label: 'In AM',
-                  time: row.morningInDisplay ??
-                      formatAttendanceIsoTime(row.morningInAt ?? row.clockInAt),
-                  photoUrl: resolveAttendancePhotoUrl(row.morningInPhotoUrl),
-                  active: row.isClockedIn && row.punchCount == 1,
-                ),
-                _PunchCell(
-                  label: 'Out lunch',
-                  time: row.lunchOutDisplay ??
-                      formatAttendanceIsoTime(row.lunchOutAt),
-                  photoUrl: resolveAttendancePhotoUrl(row.lunchOutPhotoUrl),
-                  active: row.isClockedIn && row.punchCount == 1,
-                ),
-                _PunchCell(
-                  label: 'In PM',
-                  time: row.afternoonInDisplay ??
-                      formatAttendanceIsoTime(row.afternoonInAt),
-                  photoUrl: resolveAttendancePhotoUrl(row.afternoonInPhotoUrl),
-                  active: row.isClockedIn && row.punchCount == 3,
-                ),
-                _PunchCell(
-                  label: 'Out EOD',
-                  time: row.dayOutDisplay ??
-                      formatAttendanceIsoTime(
-                    row.dayOutAt ?? (!row.isClockedIn ? row.clockOutAt : null),
+                const SizedBox(height: 2),
+                Text(
+                  attendanceHoursLabel(row.totalHoursLabel),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.muted,
                   ),
-                  photoUrl: resolveAttendancePhotoUrl(row.dayOutPhotoUrl),
                 ),
-              ];
-
-              if (constraints.maxWidth >= 440) {
-                return Row(
-                  children: [
-                    for (final cell in punchCells) Expanded(child: cell),
-                  ],
-                );
-              }
-
-              return Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: punchCells[0]),
-                      Expanded(child: punchCells[1]),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(child: punchCells[2]),
-                      Expanded(child: punchCells[3]),
-                    ],
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _Badge(
-                label: row.totalHoursLabel,
-                background: AppColors.softSurface,
-                foreground: AppColors.muted,
-              ),
-              _Badge(
-                label: attendanceDayTypeLabel(row.dayType),
-                background: row.dayType == 'full'
-                    ? AppColors.lightGreen
-                    : row.dayType == 'half'
-                        ? const Color(0xFFFFF7E6)
-                        : AppColors.softSurface,
-                foreground: row.dayType == 'full'
-                    ? AppColors.green
-                    : row.dayType == 'half'
-                        ? const Color(0xFFB45309)
-                        : AppColors.muted,
-              ),
-              if (row.clockInAt != null)
-                _Badge(
-                  label: row.punctualityLabel,
-                  background: _punctualityBackground(row.punctualityStatus),
-                  foreground: _punctualityForeground(row.punctualityStatus),
-                ),
-              if (nextLabel != null)
-                _Badge(
-                  label: nextLabel,
-                  background: row.dayComplete
-                      ? AppColors.softSurface
-                      : AppColors.lightGreen,
-                  foreground:
-                      row.dayComplete ? AppColors.muted : AppColors.green,
-                ),
-            ],
-          ),
-          if (onPunch != null) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 44,
-              child: FilledButton(
-                onPressed: canPunch && !punchBusy ? onPunch : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: canPunch
-                      ? (row.nextAction == 'clock_out'
-                          ? const Color(0xFF0D9488)
-                          : AppColors.green)
-                      : AppColors.border,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppColors.softSurface,
-                  disabledForegroundColor: AppColors.muted,
-                ),
-                child: punchBusy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        buttonLabel,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-              ),
+              ],
             ),
-          ],
+          ),
+          _PhotoCircle(url: inUrl, emptyIcon: Icons.login_rounded),
+          const SizedBox(width: 8),
+          _PhotoCircle(url: outUrl, emptyIcon: Icons.logout_rounded),
+          const SizedBox(width: 12),
+          _ActionCircle(
+            label: buttonLabel,
+            color: actionColor,
+            enabled: canPunch,
+            busy: punchBusy,
+            onTap: canPunch && !punchBusy ? onPunch : null,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _SelfieMeta(
+                    label: 'Selfie-In',
+                    time: inTime,
+                    color: const Color(0xFF0D9488),
+                  ),
+                ),
+                Expanded(
+                  child: _SelfieMeta(
+                    label: 'Selfie-Out',
+                    time: outTime,
+                    color: AppColors.orange,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Color _punctualityBackground(String? status) {
-    switch (status) {
-      case 'late':
-        return const Color(0xFFFEE2E2);
-      case 'morning_absent':
-        return const Color(0xFFFFEDD5);
-      case 'almost_late':
-        return const Color(0xFFFFF7E6);
-      case 'on_time':
-      case 'early':
-        return AppColors.lightGreen;
+  Color _actionColor(String label) {
+    switch (label) {
+      case 'OUT':
+        return AppColors.orange;
+      case 'START BREAK':
+        return const Color(0xFF38BDF8);
+      case 'DONE':
+      case 'WAIT':
+        return AppColors.border;
       default:
-        return AppColors.softSurface;
-    }
-  }
-
-  Color _punctualityForeground(String? status) {
-    switch (status) {
-      case 'late':
-        return const Color(0xFFB91C1C);
-      case 'morning_absent':
-        return const Color(0xFFC2410C);
-      case 'almost_late':
-        return const Color(0xFFB45309);
-      case 'on_time':
-      case 'early':
         return AppColors.green;
-      default:
-        return AppColors.muted;
     }
   }
 }
 
-class _PunchCell extends StatelessWidget {
-  const _PunchCell({
-    required this.label,
-    required this.time,
-    this.photoUrl,
-    this.active = false,
-  });
+class _PhotoCircle extends StatelessWidget {
+  const _PhotoCircle({required this.url, required this.emptyIcon});
 
-  final String label;
-  final String time;
-  final String? photoUrl;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.muted)),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: photoUrl != null
-                ? Image.network(
-                    photoUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _photoPlaceholder(),
-                  )
-                : _photoPlaceholder(),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          time,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: active
-                ? AppColors.green
-                : time == '—'
-                    ? AppColors.muted
-                    : AppColors.text,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _photoPlaceholder() {
-    return ColoredBox(
-      color: AppColors.softSurface,
-      child: Icon(
-        Icons.person_outline,
-        size: 22,
-        color: active ? AppColors.green : AppColors.muted,
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({
-    required this.label,
-    required this.background,
-    required this.foreground,
-  });
-
-  final String label;
-  final Color background;
-  final Color foreground;
+  final String? url;
+  final IconData emptyIcon;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      width: 52,
+      height: 52,
       decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(999),
+        shape: BoxShape.circle,
+        color: AppColors.softSurface,
+        border: Border.all(color: AppColors.border, width: 2),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: foreground,
+      clipBehavior: Clip.antiAlias,
+      child: url != null
+          ? Image.network(
+              url!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Icon(
+                emptyIcon,
+                color: AppColors.muted,
+                size: 22,
+              ),
+            )
+          : Icon(emptyIcon, color: AppColors.muted, size: 22),
+    );
+  }
+}
+
+class _ActionCircle extends StatelessWidget {
+  const _ActionCircle({
+    required this.label,
+    required this.color,
+    required this.enabled,
+    required this.busy,
+    this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final bool enabled;
+  final bool busy;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isBreak = label == 'START BREAK';
+    return Material(
+      color: enabled ? color : AppColors.softSurface,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: isBreak ? 88 : 72,
+          height: isBreak ? 88 : 72,
+          child: Center(
+            child: busy
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      color: Colors.white,
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: enabled ? Colors.white : AppColors.muted,
+                        fontWeight: FontWeight.w800,
+                        fontSize: isBreak ? 11 : 14,
+                        height: 1.1,
+                      ),
+                    ),
+                  ),
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _SelfieMeta extends StatelessWidget {
+  const _SelfieMeta({
+    required this.label,
+    required this.time,
+    required this.color,
+  });
+
+  final String label;
+  final String time;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTime = time != '—';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: hasTime ? color : AppColors.border,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.muted,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          hasTime ? 'Today' : '—',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: hasTime ? AppColors.text : AppColors.muted,
+          ),
+        ),
+        if (hasTime)
+          Text(
+            time,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.muted,
+            ),
+          ),
+      ],
     );
   }
 }
