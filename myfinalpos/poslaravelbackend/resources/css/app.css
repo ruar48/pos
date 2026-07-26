@@ -1,0 +1,517 @@
+@import 'tailwindcss';
+
+@import 'tw-animate-css';
+
+@source '../views';
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+    --font-sans:
+        'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'Noto Color Emoji';
+
+    --font-display:
+        'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+
+    --radius-lg: var(--radius);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-sm: calc(var(--radius) - 4px);
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+
+    --color-agri-mint: var(--agri-mint);
+    --color-agri-leaf: var(--agri-leaf);
+    --color-agri-wheat: var(--agri-wheat);
+    --color-agri-soil: var(--agri-soil);
+}
+
+:root {
+    --background: oklch(0.97 0.018 155);
+    --foreground: oklch(0.22 0.04 168);
+    --card: oklch(0.995 0.008 155);
+    --card-foreground: oklch(0.22 0.04 168);
+    --popover: oklch(0.995 0.008 155);
+    --popover-foreground: oklch(0.22 0.04 168);
+    --primary: oklch(0.44 0.11 165);
+    --primary-foreground: oklch(0.98 0.01 155);
+    --secondary: oklch(0.94 0.025 155);
+    --secondary-foreground: oklch(0.32 0.06 168);
+    --muted: oklch(0.94 0.02 155);
+    --muted-foreground: oklch(0.5 0.04 168);
+    --accent: oklch(0.92 0.035 150);
+    --accent-foreground: oklch(0.28 0.06 168);
+    --destructive: oklch(0.55 0.2 25);
+    --destructive-foreground: oklch(0.98 0.01 25);
+    --border: oklch(0.88 0.03 155);
+    --input: oklch(0.9 0.025 155);
+    --ring: oklch(0.52 0.1 165);
+    --chart-1: oklch(0.52 0.12 165);
+    --chart-2: oklch(0.62 0.1 145);
+    --chart-3: oklch(0.72 0.12 85);
+    --chart-4: oklch(0.45 0.08 200);
+    --chart-5: oklch(0.38 0.06 168);
+    --radius: 0.75rem;
+    --sidebar: oklch(0.26 0.055 172);
+    --sidebar-foreground: oklch(0.94 0.02 155);
+    --sidebar-primary: oklch(0.55 0.12 155);
+    --sidebar-primary-foreground: oklch(0.98 0.01 155);
+    --sidebar-accent: oklch(0.32 0.06 168);
+    --sidebar-accent-foreground: oklch(0.96 0.02 155);
+    --sidebar-border: oklch(0.34 0.05 168);
+    --sidebar-ring: oklch(0.55 0.1 155);
+    --agri-mint: oklch(0.96 0.03 155);
+    --agri-leaf: oklch(0.48 0.12 155);
+    --agri-wheat: oklch(0.78 0.11 85);
+    --agri-soil: oklch(0.32 0.04 55);
+
+    /* Brand toast colors — mirrors the Flutter tablet app (lib/core/utils/top_toast.dart) */
+    --agri-toast-success: #1f8a4c;
+    --agri-toast-error: #e23a4e;
+    --agri-toast-warning: #e8891c;
+    --agri-toast-info: #2563eb;
+    --agri-toast-foreground: #ffffff;
+}
+
+.dark {
+    --background: oklch(0.16 0.03 168);
+    --foreground: oklch(0.95 0.02 155);
+    --card: oklch(0.2 0.035 168);
+    --card-foreground: oklch(0.95 0.02 155);
+    --popover: oklch(0.2 0.035 168);
+    --popover-foreground: oklch(0.95 0.02 155);
+    --primary: oklch(0.62 0.12 155);
+    --primary-foreground: oklch(0.16 0.03 168);
+    --secondary: oklch(0.26 0.04 168);
+    --secondary-foreground: oklch(0.92 0.02 155);
+    --muted: oklch(0.26 0.04 168);
+    --muted-foreground: oklch(0.68 0.04 155);
+    --accent: oklch(0.28 0.05 168);
+    --accent-foreground: oklch(0.94 0.02 155);
+    --destructive: oklch(0.5 0.18 25);
+    --destructive-foreground: oklch(0.95 0.02 25);
+    --border: oklch(0.3 0.04 168);
+    --input: oklch(0.28 0.04 168);
+    --ring: oklch(0.55 0.1 155);
+    --chart-1: oklch(0.6 0.12 155);
+    --chart-2: oklch(0.68 0.1 145);
+    --chart-3: oklch(0.75 0.12 85);
+    --chart-4: oklch(0.5 0.08 200);
+    --chart-5: oklch(0.42 0.06 168);
+    --sidebar: oklch(0.18 0.04 172);
+    --sidebar-foreground: oklch(0.92 0.02 155);
+    --sidebar-primary: oklch(0.55 0.12 155);
+    --sidebar-primary-foreground: oklch(0.98 0.01 155);
+    --sidebar-accent: oklch(0.24 0.05 168);
+    --sidebar-accent-foreground: oklch(0.94 0.02 155);
+    --sidebar-border: oklch(0.28 0.04 168);
+    --sidebar-ring: oklch(0.5 0.1 155);
+    --agri-mint: oklch(0.22 0.035 155);
+    --agri-leaf: oklch(0.58 0.12 155);
+    --agri-wheat: oklch(0.72 0.11 85);
+    --agri-soil: oklch(0.38 0.04 55);
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background font-sans text-foreground antialiased;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+        font-family: var(--font-display);
+        @apply tracking-tight;
+    }
+}
+
+@layer components {
+    .agri-main-surface {
+        @apply min-h-svh bg-background;
+        background-image:
+            radial-gradient(
+                ellipse 80% 50% at 50% -20%,
+                oklch(0.92 0.04 155 / 0.5),
+                transparent
+            ),
+            radial-gradient(
+                ellipse 60% 40% at 100% 100%,
+                oklch(0.9 0.03 145 / 0.25),
+                transparent
+            );
+    }
+
+    .agri-card {
+        @apply rounded-2xl border border-border/60 bg-card shadow-sm;
+        box-shadow:
+            0 1px 2px oklch(0.22 0.04 168 / 0.04),
+            0 4px 16px oklch(0.22 0.04 168 / 0.03);
+    }
+
+    .agri-card-interactive {
+        @apply rounded-2xl border border-border/60 bg-card shadow-sm transition-all duration-200;
+        box-shadow:
+            0 1px 2px oklch(0.22 0.04 168 / 0.04),
+            0 4px 16px oklch(0.22 0.04 168 / 0.03);
+    }
+
+    .agri-card-interactive:hover {
+        @apply border-primary/25 shadow-md;
+        transform: translateY(-1px);
+    }
+
+    .agri-stat-value {
+        @apply text-2xl font-bold tracking-tight text-foreground;
+        font-family: var(--font-display);
+    }
+
+    .agri-page-container {
+        @apply flex w-full flex-col gap-6 px-5 py-5 md:px-6 md:py-6 lg:gap-6 lg:px-8;
+    }
+
+    .agri-icon-box {
+        @apply flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary;
+    }
+
+    .agri-stat-card {
+        @apply flex h-full min-h-[7.5rem] flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-sm;
+        box-shadow:
+            0 1px 2px oklch(0.22 0.04 168 / 0.04),
+            0 4px 16px oklch(0.22 0.04 168 / 0.03);
+    }
+
+    .agri-stat-label {
+        @apply text-[11px] font-semibold tracking-wider text-muted-foreground uppercase;
+    }
+
+    .agri-card-title {
+        @apply text-base font-bold text-foreground;
+    }
+
+    .agri-action-card {
+        @apply flex h-full min-h-[11rem] flex-col rounded-2xl border border-border/60 bg-card p-6 shadow-sm;
+        box-shadow:
+            0 1px 2px oklch(0.22 0.04 168 / 0.04),
+            0 4px 16px oklch(0.22 0.04 168 / 0.03);
+    }
+
+    .agri-sidebar-badge {
+        @apply ml-1 text-[8px] font-normal tracking-wide text-sidebar-foreground/30 uppercase;
+    }
+
+    .agri-pin-digit {
+        @apply flex size-14 items-center justify-center rounded-xl border-2 border-border bg-card text-2xl font-semibold text-foreground shadow-sm transition-all duration-150 sm:size-16;
+        font-family: var(--font-display);
+    }
+
+    .agri-pin-digit-filled {
+        @apply border-primary/50 bg-primary/5 text-primary;
+    }
+
+    .agri-pin-digit-active {
+        @apply border-primary ring-4 ring-primary/15;
+    }
+
+    .agri-keypad-btn {
+        @apply flex h-14 items-center justify-center rounded-xl bg-secondary text-lg font-semibold text-foreground transition-all duration-150 hover:bg-primary/10 active:scale-95 sm:h-16;
+        font-family: var(--font-display);
+    }
+
+    .agri-sidebar-nav-active {
+        @apply relative bg-sidebar-accent text-sidebar-accent-foreground;
+    }
+
+    .agri-sidebar-nav-active::before {
+        content: '';
+        @apply absolute top-1/2 left-0 h-6 w-1 -translate-y-1/2 rounded-r-full;
+        background-color: var(--agri-wheat);
+    }
+
+    .agri-landing-hero {
+        background-image:
+            radial-gradient(
+                ellipse 90% 60% at 70% -10%,
+                oklch(0.88 0.06 155 / 0.45),
+                transparent
+            ),
+            radial-gradient(
+                ellipse 50% 40% at 0% 80%,
+                oklch(0.9 0.05 85 / 0.3),
+                transparent
+            );
+    }
+
+    .agri-landing-section {
+        @apply scroll-mt-24;
+    }
+
+    .agri-hero-gradient {
+        background:
+            radial-gradient(
+                ellipse 70% 55% at 75% -5%,
+                oklch(0.85 0.08 155 / 0.55),
+                transparent 70%
+            ),
+            radial-gradient(
+                ellipse 55% 45% at 5% 75%,
+                oklch(0.88 0.06 85 / 0.35),
+                transparent 70%
+            ),
+            linear-gradient(
+                180deg,
+                oklch(0.985 0.012 155),
+                oklch(0.96 0.02 155)
+            );
+    }
+
+    .agri-cta-gradient {
+        background:
+            radial-gradient(
+                ellipse 60% 80% at 100% 0%,
+                oklch(0.42 0.1 165),
+                transparent 70%
+            ),
+            linear-gradient(
+                135deg,
+                oklch(0.3 0.07 172),
+                oklch(0.24 0.055 172)
+            );
+    }
+
+    .agri-eyebrow {
+        @apply inline-flex w-fit items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold tracking-[0.12em] text-primary uppercase;
+    }
+
+    .agri-section-title {
+        @apply text-3xl font-bold tracking-tight text-foreground md:text-4xl;
+    }
+
+    .agri-glass-card {
+        @apply rounded-2xl border border-white/15 bg-white/8 backdrop-blur-md;
+    }
+
+    .agri-marquee {
+        animation: agri-marquee-scroll 32s linear infinite;
+    }
+
+    .agri-marquee-track:hover .agri-marquee {
+        animation-play-state: paused;
+    }
+
+    @keyframes agri-marquee-scroll {
+        from {
+            transform: translateX(0);
+        }
+        to {
+            transform: translateX(-50%);
+        }
+    }
+
+    .agri-feature-card {
+        @apply relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-border/60 bg-card p-6 transition-all duration-200;
+        box-shadow:
+            0 1px 2px oklch(0.22 0.04 168 / 0.04),
+            0 4px 16px oklch(0.22 0.04 168 / 0.03);
+    }
+
+    .agri-feature-card:hover {
+        @apply border-primary/30;
+        transform: translateY(-2px);
+        box-shadow:
+            0 8px 24px oklch(0.22 0.04 168 / 0.08),
+            0 2px 8px oklch(0.22 0.04 168 / 0.05);
+    }
+
+    .agri-feature-card::before {
+        content: '';
+        @apply pointer-events-none absolute inset-x-0 top-0 h-px opacity-0 transition-opacity duration-200;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            var(--agri-leaf),
+            transparent
+        );
+    }
+
+    .agri-feature-card:hover::before {
+        @apply opacity-100;
+    }
+
+    /* Toast — matches the Flutter tablet app's showTopToast/showTopMessage style:
+       rounded 14px card, bold 15px white text, leading 24px icon, soft elevation. */
+    .agri-toast {
+        gap: 12px !important;
+        padding: 14px 18px !important;
+        border-radius: 14px !important;
+        border-width: 0 !important;
+        box-shadow:
+            0 8px 24px oklch(0.22 0.04 168 / 0.18),
+            0 2px 6px oklch(0.22 0.04 168 / 0.12) !important;
+    }
+
+    .agri-toast [data-title] {
+        font-family: var(--font-display);
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+
+    .agri-toast [data-description] {
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 1.3;
+        opacity: 0.92;
+    }
+
+    .agri-toast [data-icon] {
+        margin-right: 0;
+    }
+
+    .agri-toast [data-icon] svg {
+        width: 22px;
+        height: 22px;
+    }
+
+    .live-monitor-wall {
+        @apply min-h-svh w-full overflow-x-hidden;
+    }
+
+    .live-monitor-panel--wall .live-monitor-body {
+        @apply px-3 py-4 sm:px-5 sm:py-5 lg:px-8 lg:py-6;
+    }
+
+    .live-monitor-icon-box {
+        @apply size-10;
+    }
+
+    .live-monitor-icon {
+        @apply size-5;
+    }
+
+    .live-monitor-title {
+        @apply text-base sm:text-lg;
+    }
+
+    .live-monitor-subtitle {
+        @apply text-xs sm:text-sm;
+    }
+
+    .live-monitor-chip {
+        @apply px-3 py-1 text-xs;
+    }
+
+    .live-monitor-chip-icon {
+        @apply size-3.5;
+    }
+
+    .live-monitor-empty-icon {
+        @apply size-12 sm:size-14;
+    }
+
+    .live-monitor-empty-title {
+        @apply text-lg sm:text-xl;
+    }
+
+    .live-monitor-empty-copy {
+        @apply text-sm sm:text-base;
+    }
+
+    .live-monitor-panel--tv .live-monitor-icon-box,
+    .live-monitor-panel--ultra .live-monitor-icon-box {
+        @apply size-14;
+    }
+
+    .live-monitor-panel--tv .live-monitor-icon,
+    .live-monitor-panel--ultra .live-monitor-icon {
+        @apply size-7;
+    }
+
+    .live-monitor-panel--tv .live-monitor-title,
+    .live-monitor-panel--ultra .live-monitor-title {
+        @apply text-2xl sm:text-3xl;
+    }
+
+    .live-monitor-panel--tv .live-monitor-subtitle,
+    .live-monitor-panel--ultra .live-monitor-subtitle {
+        @apply text-sm sm:text-base;
+    }
+
+    .live-monitor-panel--tv .live-monitor-chip,
+    .live-monitor-panel--ultra .live-monitor-chip {
+        @apply px-4 py-1.5 text-sm;
+    }
+
+    .live-monitor-panel--tv .live-monitor-chip-icon,
+    .live-monitor-panel--ultra .live-monitor-chip-icon {
+        @apply size-4;
+    }
+
+    .live-monitor-panel--tv .live-monitor-empty-icon,
+    .live-monitor-panel--ultra .live-monitor-empty-icon {
+        @apply size-16;
+    }
+
+    .live-monitor-panel--tv .live-monitor-empty-title,
+    .live-monitor-panel--ultra .live-monitor-empty-title {
+        @apply text-2xl;
+    }
+
+    .live-monitor-panel--tv .live-monitor-empty-copy,
+    .live-monitor-panel--ultra .live-monitor-empty-copy {
+        @apply text-lg;
+    }
+
+    @media (max-width: 639px) {
+        .live-monitor-grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+        }
+    }
+}
