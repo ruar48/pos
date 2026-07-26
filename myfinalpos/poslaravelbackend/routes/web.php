@@ -95,6 +95,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/pos/staff/attendance', [StaffPageController::class, 'attendance'])->name('pos.staff.attendance');
     Route::get('/pos/staff/attendance/export', [StaffPageController::class, 'exportAttendance'])->name('pos.staff.attendance.export');
     Route::post('/pos/staff/attendance', [StaffPageController::class, 'clockAttendance'])->name('pos.staff.attendance.clock');
+    Route::get('/pos/staff/attendance/photos', [StaffPageController::class, 'attendancePhotoStats'])->name('pos.staff.attendance.photos');
+    Route::post('/pos/staff/attendance/photos/purge', [StaffPageController::class, 'purgeAttendancePhotos'])->name('pos.staff.attendance.photos.purge');
     Route::get('/pos/staff/face-profiles', [StaffPageController::class, 'faceProfiles'])->name('pos.staff.face-profiles');
     Route::post('/pos/staff/face-profiles', [StaffPageController::class, 'enrollFace'])->name('pos.staff.face-profiles.enroll');
     Route::post('/pos/staff/face-profiles/verify', [StaffPageController::class, 'verifyFace'])->name('pos.staff.face-profiles.verify');

@@ -250,3 +250,34 @@ export async function clockStaffAttendance(input: {
         body: JSON.stringify(input),
     });
 }
+
+export type AttendancePhotoStats = {
+    file_count: number;
+    total_bytes: number;
+    total_mb: number;
+    directory: string;
+};
+
+export async function fetchAttendancePhotoStats() {
+    return laravelFetch<{ data: AttendancePhotoStats }>(
+        '/pos/staff/attendance/photos',
+    );
+}
+
+export async function purgeAttendancePhotos(input: {
+    older_than_days?: number;
+    all?: boolean;
+}) {
+    return laravelFetch<{
+        message: string;
+        data: {
+            deleted_files: number;
+            cleared_rows: number;
+            freed_bytes: number;
+            freed_mb: number;
+        };
+    }>('/pos/staff/attendance/photos/purge', {
+        method: 'POST',
+        body: JSON.stringify(input),
+    });
+}

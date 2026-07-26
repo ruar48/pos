@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
-import { Camera, Loader2, RefreshCw, X } from 'lucide-react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { Camera, Loader2, LogIn, LogOut, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,11 +17,10 @@ import {
 
 function punchButtonLabel(row: AttendanceRow): string {
     if (row.day_complete) return 'DONE';
-    if (row.next_action === 'clock_in') return 'TIME IN';
+    if (row.next_action === 'clock_in') return 'IN';
     if (row.next_action === 'clock_out') {
         if ((row.punch_count ?? 0) === 1) return 'START BREAK';
-        if ((row.punch_count ?? 0) === 3) return 'OUT';
-        return 'TIME OUT';
+        return 'OUT';
     }
     return 'WAIT';
 }
@@ -35,6 +34,59 @@ function resolvePhotoUrl(url: string | null | undefined): string | null {
     if (!url) return null;
     if (url.startsWith('http://') || url.startsWith('https://')) return url;
     return url.startsWith('/') ? url : `/${url}`;
+}
+
+function selfieInUrl(row: AttendanceRow): string | null {
+    return resolvePhotoUrl(
+        row.afternoon_in_photo_url || row.morning_in_photo_url,
+    );
+}
+
+function selfieOutUrl(row: AttendanceRow): string | null {
+    return resolvePhotoUrl(row.day_out_photo_url || row.lunch_out_photo_url);
+}
+
+function selfieInTime(row: AttendanceRow): string {
+    if (row.afternoon_in_at) {
+        return row.afternoon_in_display || '—';
+    }
+    return row.morning_in_display || '—';
+}
+
+function selfieOutTime(row: AttendanceRow): string {
+    if (row.day_out_at) {
+        return row.day_out_display || '—';
+    }
+    return row.lunch_out_display || '—';
+}
+
+function actionClass(label: string): string {
+    switch (label) {
+        case 'OUT':
+            return 'bg-orange-500 hover:bg-orange-600 text-white';
+        case 'START BREAK':
+            return 'bg-sky-400 hover:bg-sky-500 text-white';
+        case 'DONE':
+        case 'WAIT':
+            return 'bg-muted text-muted-foreground';
+        default:
+            return 'bg-emerald-600 hover:bg-emerald-700 text-white';
+    }
+}
+
+function actionCaption(label: string): string {
+    switch (label) {
+        case 'OUT':
+            return 'Time Out';
+        case 'START BREAK':
+            return 'Break';
+        case 'DONE':
+            return 'Done';
+        case 'WAIT':
+            return 'Wait';
+        default:
+            return 'Time In';
+    }
 }
 
 type Props = {
@@ -130,7 +182,8 @@ export function AttendanceManualBoard({
         if (!file) return;
         const reader = new FileReader();
         reader.onload = () => {
-            const result = typeof reader.result === 'string' ? reader.result : null;
+            const result =
+                typeof reader.result === 'string' ? reader.result : null;
             if (!result) return;
             setMime(file.type || 'image/jpeg');
             setPreview(result);
@@ -171,16 +224,16 @@ export function AttendanceManualBoard({
 
     return (
         <>
-            <div className="agri-card p-4">
-                <div className="mb-4">
+            <div className="agri-card overflow-hidden p-0">
+                <div className="border-b border-border/60 px-4 py-3">
                     <h3 className="font-semibold text-foreground">Staff today</h3>
                     <p className="text-xs text-muted-foreground">
-                        Tap TIME IN / OUT, then take a selfie. No face recognition.
+                        Tap IN / OUT, take a selfie — no face recognition.
                     </p>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3">
+                <div className="divide-y divide-border/50">
                     {attendance.map((row) => (
-                        <ManualAttendanceCard
+                        <ManualAttendanceRow
                             key={row.user_id}
                             row={row}
                             busy={punchingUserId === row.user_id}
@@ -215,7 +268,7 @@ export function AttendanceManualBoard({
                     <p className="text-sm text-muted-foreground">
                         {target?.full_name} — take a selfie to record this punch.
                     </p>
-                    <div className="relative overflow-hidden rounded-xl border bg-muted aspect-[3/4]">
+                    <div className="relative mx-auto aspect-square w-full max-w-[220px] overflow-hidden rounded-xl border bg-muted">
                         {preview ? (
                             <img
                                 src={preview}
@@ -227,7 +280,7 @@ export function AttendanceManualBoard({
                                 ref={videoRef}
                                 playsInline
                                 muted
-                                className="size-full object-cover scale-x-[-1]"
+                                className="size-full scale-x-[-1] object-cover"
                             />
                         )}
                         {capturing && (
@@ -303,7 +356,7 @@ export function AttendanceManualBoard({
     );
 }
 
-function ManualAttendanceCard({
+function ManualAttendanceRow({
     row,
     busy,
     punchEnabled,
@@ -316,112 +369,110 @@ function ManualAttendanceCard({
 }) {
     const enabled = punchEnabled && canPunch(row) && !busy;
     const label = punchButtonLabel(row);
+    const inUrl = selfieInUrl(row);
+    const outUrl = selfieOutUrl(row);
+    const inTime = selfieInTime(row);
+    const outTime = selfieOutTime(row);
+    const isBreak = label === 'START BREAK';
 
     return (
-        <div className="rounded-xl border border-border/60 bg-card p-3 shadow-sm">
-            <div className="mb-3 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="truncate font-semibold text-foreground">
-                        {row.full_name}
-                    </p>
-                    <p className="text-xs capitalize text-muted-foreground">
-                        {row.role.replace(/_/g, ' ')} · {row.branch_name}
-                    </p>
-                </div>
-                <div
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap">
+            <div className="min-w-[10rem] flex-1">
+                <p className="truncate text-sm font-extrabold uppercase tracking-wide text-foreground">
+                    {row.full_name}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                    {row.total_hours_label
+                        .replace(/hrs?/g, 'hour')
+                        .replace(/mins?/g, 'minute')}
+                </p>
+            </div>
+
+            <PhotoCircle src={inUrl} fallback={<LogIn className="size-4 opacity-40" />} />
+            <PhotoCircle src={outUrl} fallback={<LogOut className="size-4 opacity-40" />} />
+
+            <div className="flex shrink-0 flex-col items-center gap-1">
+                <button
+                    type="button"
+                    disabled={!enabled}
+                    onClick={onPunch}
                     className={cn(
-                        'flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-                        row.is_clocked_in
-                            ? 'bg-primary/10 text-primary'
-                            : 'bg-secondary text-muted-foreground',
+                        'inline-flex items-center justify-center rounded-full text-center text-xs font-extrabold leading-tight shadow-sm transition disabled:cursor-not-allowed',
+                        isBreak ? 'size-20 px-2' : 'size-16',
+                        actionClass(label),
                     )}
                 >
-                    {row.full_name
-                        .split(' ')
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((p) => p[0]?.toUpperCase() ?? '')
-                        .join('')}
-                </div>
-            </div>
-
-            <div className="grid grid-cols-4 gap-2 border-y border-border/50 py-3">
-                <PunchCell
-                    label="In AM"
-                    time={row.morning_in_display}
-                    photoUrl={row.morning_in_photo_url}
-                />
-                <PunchCell
-                    label="Out lunch"
-                    time={row.lunch_out_display}
-                    photoUrl={row.lunch_out_photo_url}
-                />
-                <PunchCell
-                    label="In PM"
-                    time={row.afternoon_in_display}
-                    photoUrl={row.afternoon_in_photo_url}
-                />
-                <PunchCell
-                    label="Out EOD"
-                    time={row.day_out_display}
-                    photoUrl={row.day_out_photo_url}
-                />
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-secondary px-2 py-0.5 font-semibold text-muted-foreground">
-                    {row.total_hours_label}
+                    {busy ? <Loader2 className="size-5 animate-spin" /> : label}
+                </button>
+                <span className="text-[11px] font-bold text-muted-foreground">
+                    {actionCaption(label)}
                 </span>
-                {row.next_action_note ? (
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-primary">
-                        {row.next_action_note}
-                    </span>
-                ) : null}
             </div>
 
-            <Button
-                type="button"
-                className="mt-3 w-full font-extrabold tracking-wide"
-                disabled={!enabled}
-                onClick={onPunch}
-            >
-                {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-                {label}
-            </Button>
+            <div className="grid min-w-[12rem] flex-1 grid-cols-2 gap-2">
+                <SelfieMeta label="Selfie-In" time={inTime} tone="teal" />
+                <SelfieMeta label="Selfie-Out" time={outTime} tone="orange" />
+            </div>
         </div>
     );
 }
 
-function PunchCell({
+function PhotoCircle({
+    src,
+    fallback,
+}: {
+    src: string | null;
+    fallback: ReactNode;
+}) {
+    return (
+        <div className="size-12 shrink-0 overflow-hidden rounded-full border-2 border-border bg-secondary">
+            {src ? (
+                <img src={src} alt="" className="size-full object-cover" />
+            ) : (
+                <div className="flex size-full items-center justify-center text-muted-foreground">
+                    {fallback}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function SelfieMeta({
     label,
     time,
-    photoUrl,
+    tone,
 }: {
     label: string;
-    time?: string | null;
-    photoUrl?: string | null;
+    time: string;
+    tone: 'teal' | 'orange';
 }) {
-    const src = resolvePhotoUrl(photoUrl);
+    const hasTime = time !== '—';
     return (
-        <div className="text-center">
-            <p className="text-[10px] text-muted-foreground">{label}</p>
-            <div className="mx-auto mt-1 size-11 overflow-hidden rounded-lg bg-secondary">
-                {src ? (
-                    <img src={src} alt="" className="size-full object-cover" />
-                ) : (
-                    <div className="flex size-full items-center justify-center text-muted-foreground">
-                        <Camera className="size-4 opacity-40" />
-                    </div>
-                )}
+        <div>
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+                <span
+                    className={cn(
+                        'size-2 rounded-full',
+                        hasTime
+                            ? tone === 'teal'
+                                ? 'bg-teal-500'
+                                : 'bg-orange-500'
+                            : 'bg-border',
+                    )}
+                />
+                {label}
             </div>
             <p
                 className={cn(
-                    'mt-1 text-[11px] font-semibold',
-                    time ? 'text-foreground' : 'text-muted-foreground',
+                    'mt-0.5 text-xs font-bold',
+                    hasTime ? 'text-foreground' : 'text-muted-foreground',
                 )}
             >
-                {time || '—'}
+                {hasTime ? 'Today' : '—'}
             </p>
+            {hasTime ? (
+                <p className="text-xs font-semibold text-muted-foreground">{time}</p>
+            ) : null}
         </div>
     );
 }

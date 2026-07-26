@@ -4,8 +4,10 @@ import {
     BarChart3,
     Clock,
     Download,
+    HardDrive,
     Loader2,
     RefreshCw,
+    Trash2,
     UserCheck,
     UserPlus,
     Users,
@@ -37,9 +39,12 @@ import {
     fetchAttendanceEventLog,
     fetchAttendancePunctualityReport,
     downloadAttendanceExport,
+    fetchAttendancePhotoStats,
+    purgeAttendancePhotos,
     fetchStaffUsers,
     saveStaffUser,
     type AttendanceEventRow,
+    type AttendancePhotoStats,
     type AttendancePunctualityRow,
     type AttendanceRow,
     type AttendanceSchedule,
@@ -109,6 +114,10 @@ export default function PosStaff() {
     const [users, setUsers] = useState<StaffUser[]>([]);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [photoStats, setPhotoStats] = useState<AttendancePhotoStats | null>(
+        null,
+    );
+    const [purgingPhotos, setPurgingPhotos] = useState(false);
     const [form, setForm] = useState({
         full_name: '',
         username: '',
@@ -117,6 +126,15 @@ export default function PosStaff() {
         role: 'cashier',
         branch_id: '1',
     });
+
+    const loadPhotoStats = useCallback(async () => {
+        try {
+            const res = await fetchAttendancePhotoStats();
+            setPhotoStats(res.data ?? null);
+        } catch {
+            setPhotoStats(null);
+        }
+    }, []);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -136,6 +154,7 @@ export default function PosStaff() {
                     setReportSchedule(punctuality.schedule ?? null);
                     setEventRows(events.rows ?? []);
                 }
+                void loadPhotoStats();
             } else {
                 const res = await fetchStaffUsers();
                 setUsers(res.data ?? []);
@@ -145,7 +164,31 @@ export default function PosStaff() {
         } finally {
             setLoading(false);
         }
-    }, [tab, date, attendanceView, reportStart, reportEnd]);
+    }, [tab, date, attendanceView, reportStart, reportEnd, loadPhotoStats]);
+
+    async function handlePurgePhotos(all: boolean) {
+        const confirmMsg = all
+            ? 'Delete ALL attendance selfies from disk and clear photo links? Punch times stay.'
+            : 'Delete attendance selfies older than 30 days? Punch times stay.';
+        if (!window.confirm(confirmMsg)) return;
+
+        setPurgingPhotos(true);
+        try {
+            const res = await purgeAttendancePhotos(
+                all ? { all: true } : { older_than_days: 30 },
+            );
+            toast.success(
+                `${res.message} Removed ${res.data?.deleted_files ?? 0} files (${res.data?.freed_mb ?? 0} MB).`,
+            );
+            await Promise.all([loadPhotoStats(), load()]);
+        } catch (err) {
+            toast.error(
+                err instanceof Error ? err.message : 'Could not clear photos',
+            );
+        } finally {
+            setPurgingPhotos(false);
+        }
+    }
 
     async function handleExportAttendance() {
         setExportingAttendance(true);
@@ -252,7 +295,7 @@ export default function PosStaff() {
                 <PageHeader
                     badge="Staff"
                     title="Staff & Attendance"
-                    description="Tap TIME IN / OUT on a staff member, then take a selfie. Morning only = half day. Set times in Settings → Store."
+                    description="Tap IN / OUT on a staff member, then take a selfie. No face recognition. Morning only = half day."
                     actions={
                         <>
                             <Button variant="outline" size="sm" onClick={load} disabled={loading}>
@@ -415,6 +458,58 @@ export default function PosStaff() {
                                     )}
                                 </p>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {tab === 'attendance' && !loading && !error && (
+                    <div className="agri-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-3">
+                            <div className="rounded-full bg-secondary p-2">
+                                <HardDrive className="size-4 text-primary" />
+                            </div>
+                            <div>
+                                <p className="font-semibold text-foreground">
+                                    Attendance photo storage
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                    {photoStats
+                                        ? `${photoStats.file_count} files · ${photoStats.total_mb} MB in ${photoStats.directory}`
+                                        : 'Loading storage usage…'}
+                                    . Clearing photos frees disk space; punch
+                                    times are kept.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={purgingPhotos}
+                                onClick={() => void handlePurgePhotos(false)}
+                            >
+                                {purgingPhotos ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                    <Trash2 className="size-4" />
+                                )}
+                                Clear older than 30 days
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                disabled={purgingPhotos}
+                                onClick={() => void handlePurgePhotos(true)}
+                            >
+                                {purgingPhotos ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                    <Trash2 className="size-4" />
+                                )}
+                                Clear all photos
+                            </Button>
                         </div>
                     </div>
                 )}
@@ -799,6 +894,42 @@ export default function PosStaff() {
                                     ))}
                                 </SelectContent>
                             </Select>
+                        </div>
+                        <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
+                            <p className="text-sm font-semibold text-foreground">
+                                Attendance buttons (Staff list)
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                After saving, open Attendance and tap these circles:
+                            </p>
+                            <div className="mt-3 flex items-center justify-evenly gap-2">
+                                <div className="flex flex-col items-center gap-1">
+                                    <span className="flex size-14 items-center justify-center rounded-full bg-emerald-600 text-sm font-extrabold text-white">
+                                        IN
+                                    </span>
+                                    <span className="text-[11px] font-bold text-muted-foreground">
+                                        Time In
+                                    </span>
+                                </div>
+                                <div className="flex flex-col items-center gap-1">
+                                    <span className="flex size-16 items-center justify-center rounded-full bg-sky-400 px-1 text-center text-[10px] font-extrabold leading-tight text-white">
+                                        START
+                                        <br />
+                                        BREAK
+                                    </span>
+                                    <span className="text-[11px] font-bold text-muted-foreground">
+                                        Break
+                                    </span>
+                                </div>
+                                <div className="flex flex-col items-center gap-1">
+                                    <span className="flex size-14 items-center justify-center rounded-full bg-orange-500 text-sm font-extrabold text-white">
+                                        OUT
+                                    </span>
+                                    <span className="text-[11px] font-bold text-muted-foreground">
+                                        Time Out
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <DialogFooter>

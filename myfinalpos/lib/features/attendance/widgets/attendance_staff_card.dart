@@ -93,6 +93,7 @@ class AttendanceStaffCard extends StatelessWidget {
           const SizedBox(width: 12),
           _ActionCircle(
             label: buttonLabel,
+            caption: _actionCaption(buttonLabel),
             color: actionColor,
             enabled: canPunch,
             busy: punchBusy,
@@ -138,6 +139,21 @@ class AttendanceStaffCard extends StatelessWidget {
         return AppColors.green;
     }
   }
+
+  String _actionCaption(String label) {
+    switch (label) {
+      case 'OUT':
+        return 'Time Out';
+      case 'START BREAK':
+        return 'Break';
+      case 'DONE':
+        return 'Done';
+      case 'WAIT':
+        return 'Wait';
+      default:
+        return 'Time In';
+    }
+  }
 }
 
 class _PhotoCircle extends StatelessWidget {
@@ -175,6 +191,7 @@ class _PhotoCircle extends StatelessWidget {
 class _ActionCircle extends StatelessWidget {
   const _ActionCircle({
     required this.label,
+    required this.caption,
     required this.color,
     required this.enabled,
     required this.busy,
@@ -182,6 +199,7 @@ class _ActionCircle extends StatelessWidget {
   });
 
   final String label;
+  final String caption;
   final Color color;
   final bool enabled;
   final bool busy;
@@ -190,41 +208,55 @@ class _ActionCircle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isBreak = label == 'START BREAK';
-    return Material(
-      color: enabled ? color : AppColors.softSurface,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: isBreak ? 88 : 72,
-          height: isBreak ? 88 : 72,
-          child: Center(
-            child: busy
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.4,
-                      color: Colors.white,
-                    ),
-                  )
-                : Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: enabled ? Colors.white : AppColors.muted,
-                        fontWeight: FontWeight.w800,
-                        fontSize: isBreak ? 11 : 14,
-                        height: 1.1,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: enabled ? color : AppColors.softSurface,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: isBreak ? 88 : 72,
+              height: isBreak ? 88 : 72,
+              child: Center(
+                child: busy
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Text(
+                          label,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: enabled ? Colors.white : AppColors.muted,
+                            fontWeight: FontWeight.w800,
+                            fontSize: isBreak ? 11 : 14,
+                            height: 1.1,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+              ),
+            ),
           ),
         ),
-      ),
+        const SizedBox(height: 4),
+        Text(
+          caption,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: enabled ? color : AppColors.muted,
+          ),
+        ),
+      ],
     );
   }
 }

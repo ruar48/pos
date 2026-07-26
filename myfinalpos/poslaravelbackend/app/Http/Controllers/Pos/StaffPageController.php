@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Pos\FaceProfileController;
 use App\Http\Controllers\Api\Pos\UserController;
 use App\Http\Controllers\Controller;
 use App\Services\Pos\AttendanceExportService;
+use App\Support\AttendancePhotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -79,6 +80,41 @@ class StaffPageController extends Controller
         ]);
 
         return app(AttendanceController::class)->handle($request);
+    }
+
+    public function attendancePhotoStats(): JsonResponse
+    {
+        $stats = AttendancePhotoStorage::storageStats();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                ...$stats,
+                'total_mb' => round($stats['total_bytes'] / 1048576, 2),
+            ],
+        ]);
+    }
+
+    public function purgeAttendancePhotos(Request $request): JsonResponse
+    {
+        $all = (bool) $request->boolean('all');
+        $days = max(1, (int) $request->input('older_than_days', 30));
+
+        $result = AttendancePhotoStorage::purge(
+            $all ? null : now()->subDays($days),
+            $all,
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => $all
+                ? 'All attendance photos removed.'
+                : "Attendance photos older than {$days} days removed.",
+            'data' => [
+                ...$result,
+                'freed_mb' => round($result['freed_bytes'] / 1048576, 2),
+            ],
+        ]);
     }
 
     public function faceProfiles(): JsonResponse

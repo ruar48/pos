@@ -70,6 +70,141 @@ class AttendancePhotoStorage
         return is_file($fullPath) ? $fullPath : null;
     }
 
+    public static function deleteByUrl(?string $photoUrl): bool
+    {
+        if ($photoUrl === null || trim($photoUrl) === '') {
+            return false;
+        }
+
+        $filename = basename(parse_url($photoUrl, PHP_URL_PATH) ?: $photoUrl);
+        $path = self::resolveStoredPath($filename);
+        if ($path === null) {
+            return false;
+        }
+
+        return @unlink($path);
+    }
+
+    /**
+     * @return array{file_count: int, total_bytes: int, directory: string}
+     */
+    public static function storageStats(): array
+    {
+        $directory = public_path('uploads/attendance');
+        $fileCount = 0;
+        $totalBytes = 0;
+
+        if (is_dir($directory)) {
+            foreach (scandir($directory) ?: [] as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+                $full = $directory.DIRECTORY_SEPARATOR.$entry;
+                if (! is_file($full)) {
+                    continue;
+                }
+                $fileCount++;
+                $totalBytes += (int) filesize($full);
+            }
+        }
+
+        return [
+            'file_count' => $fileCount,
+            'total_bytes' => $totalBytes,
+            'directory' => 'uploads/attendance',
+        ];
+    }
+
+    /**
+     * Delete attendance selfie files older than (or all), and clear DB photo_url.
+     *
+     * @return array{deleted_files: int, cleared_rows: int, freed_bytes: int}
+     */
+    public static function purge(?\DateTimeInterface $olderThan = null, bool $all = false): array
+    {
+        $deletedFiles = 0;
+        $clearedRows = 0;
+        $freedBytes = 0;
+        $keptUrls = [];
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('staff_attendance')
+            && \Illuminate\Support\Facades\Schema::hasColumn('staff_attendance', 'photo_url')
+        ) {
+            $query = \Illuminate\Support\Facades\DB::table('staff_attendance')
+                ->whereNotNull('photo_url')
+                ->where('photo_url', '!=', '');
+
+            if (! $all && $olderThan !== null) {
+                $query->where('created_at', '<', $olderThan->format('Y-m-d H:i:s'));
+            } elseif (! $all) {
+                // Default: older than 30 days
+                $query->where('created_at', '<', now()->subDays(30)->format('Y-m-d H:i:s'));
+            }
+
+            $rows = $query->get(['id', 'photo_url']);
+            foreach ($rows as $row) {
+                $url = (string) ($row->photo_url ?? '');
+                $filename = basename(parse_url($url, PHP_URL_PATH) ?: $url);
+                $path = self::resolveStoredPath($filename);
+                if ($path !== null) {
+                    $size = (int) filesize($path);
+                    if (@unlink($path)) {
+                        $deletedFiles++;
+                        $freedBytes += $size;
+                    }
+                }
+                \Illuminate\Support\Facades\DB::table('staff_attendance')
+                    ->where('id', $row->id)
+                    ->update(['photo_url' => null]);
+                $clearedRows++;
+            }
+
+            // Remaining referenced photos should not be treated as orphans.
+            $kept = \Illuminate\Support\Facades\DB::table('staff_attendance')
+                ->whereNotNull('photo_url')
+                ->where('photo_url', '!=', '')
+                ->pluck('photo_url');
+            foreach ($kept as $url) {
+                $keptUrls[basename(parse_url((string) $url, PHP_URL_PATH) ?: (string) $url)] = true;
+            }
+        }
+
+        // Remove orphan files on disk (not linked in DB).
+        $directory = public_path('uploads/attendance');
+        if (is_dir($directory)) {
+            foreach (scandir($directory) ?: [] as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+                if (isset($keptUrls[$entry])) {
+                    continue;
+                }
+                // When not purging all, only delete orphan files older than cutoff by mtime.
+                $full = $directory.DIRECTORY_SEPARATOR.$entry;
+                if (! is_file($full)) {
+                    continue;
+                }
+                if (! $all) {
+                    $cutoff = $olderThan?->getTimestamp() ?? now()->subDays(30)->getTimestamp();
+                    if (filemtime($full) >= $cutoff) {
+                        continue;
+                    }
+                }
+                $size = (int) filesize($full);
+                if (@unlink($full)) {
+                    $deletedFiles++;
+                    $freedBytes += $size;
+                }
+            }
+        }
+
+        return [
+            'deleted_files' => $deletedFiles,
+            'cleared_rows' => $clearedRows,
+            'freed_bytes' => $freedBytes,
+        ];
+    }
+
     private static function detectExtension(string $binary, string $mimeType): string
     {
         $normalizedMime = strtolower(trim(explode(';', $mimeType)[0]));

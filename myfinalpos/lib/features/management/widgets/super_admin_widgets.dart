@@ -854,7 +854,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                   border: Border.all(color: AppColors.greenBorder),
                 ),
                 child: const Text(
-                  'Labor staff are for attendance and face clock-in only. '
+                  'Labor staff are for attendance only. '
                   'They cannot sign in to the POS.',
                   style: TextStyle(color: AppColors.muted, height: 1.4),
                 ),
@@ -889,28 +889,55 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                 ),
               ],
             ],
-            const SizedBox(height: 12),
-            DropdownButtonFormField<int?>(
-              value: selectedBranchId,
-              decoration: const InputDecoration(
-                labelText: 'Branch',
-                prefixIcon: Icon(Icons.storefront_outlined),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.softSurface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
               ),
-              items: [
-                const DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('Unassigned'),
-                ),
-                for (final branch in widget.pageState.branches
-                    .where((item) => item.isActive))
-                  DropdownMenuItem<int?>(
-                    value: branch.id,
-                    child: Text(branch.name),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Attendance buttons (Staff list)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: AppColors.text,
+                    ),
                   ),
-              ],
-              onChanged: saving
-                  ? null
-                  : (value) => setState(() => selectedBranchId = value),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'After saving, open Attendance and tap these circles:',
+                    style: TextStyle(fontSize: 12, color: AppColors.muted),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: const [
+                      _AttendanceLegendChip(
+                        label: 'IN',
+                        caption: 'Time In',
+                        color: AppColors.green,
+                      ),
+                      _AttendanceLegendChip(
+                        label: 'START\nBREAK',
+                        caption: 'Break',
+                        color: Color(0xFF38BDF8),
+                        compact: true,
+                      ),
+                      _AttendanceLegendChip(
+                        label: 'OUT',
+                        caption: 'Time Out',
+                        color: AppColors.orange,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -923,6 +950,56 @@ class _UserFormDialogState extends State<_UserFormDialog> {
         FilledButton(
           onPressed: saving ? null : _save,
           child: Text(saving ? 'Saving...' : (isEditing ? 'Update' : 'Save')),
+        ),
+      ],
+    );
+  }
+}
+
+class _AttendanceLegendChip extends StatelessWidget {
+  const _AttendanceLegendChip({
+    required this.label,
+    required this.caption,
+    required this.color,
+    this.compact = false,
+  });
+
+  final String label;
+  final String caption;
+  final Color color;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: compact ? 64 : 56,
+          height: compact ? 64 : 56,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: compact ? 10 : 13,
+              height: 1.05,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          caption,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: AppColors.muted,
+          ),
         ),
       ],
     );
