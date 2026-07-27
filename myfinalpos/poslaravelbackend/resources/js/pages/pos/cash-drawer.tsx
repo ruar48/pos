@@ -331,6 +331,12 @@ export default function CashDrawerPage() {
 
     const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
     const [deleting, setDeleting] = useState(false);
+    const [pinDialogOpen, setPinDialogOpen] = useState(false);
+    const [pinValue, setPinValue] = useState('');
+    const [pinError, setPinError] = useState<string | null>(null);
+    const pendingPinAction = useRef<((pin: string) => Promise<void>) | null>(
+        null,
+    );
 
     const isToday = isCurrentBusinessDate(
         selectedDate,
@@ -537,7 +543,31 @@ export default function CashDrawerPage() {
         setBusy: (busy: boolean) => void,
     ) => runMutation(action, setBusy);
 
-    const handleAddCash = async () => {
+    const requestCashDrawerPin = useCallback(
+        (action: (pin: string) => Promise<void>) => {
+            pendingPinAction.current = action;
+            setPinValue('');
+            setPinError(null);
+            setPinDialogOpen(true);
+        },
+        [],
+    );
+
+    const confirmCashDrawerPin = async () => {
+        if (!/^\d{4,6}$/.test(pinValue)) {
+            setPinError('PIN must be 4 to 6 digits.');
+            return;
+        }
+
+        const action = pendingPinAction.current;
+        if (!action) return;
+
+        setPinDialogOpen(false);
+        await action(pinValue);
+        pendingPinAction.current = null;
+    };
+
+    const handleAddCash = () => {
         const amount = Number(cashAmount);
         if (!Number.isFinite(amount) || amount <= 0) {
             toast.error('Enter a valid cash amount');
@@ -545,36 +575,38 @@ export default function CashDrawerPage() {
         }
 
         const remarks = cashRemarks.trim();
-        const snapshot = data;
-        const tempId = -Date.now();
-        const optimistic: CashAddition = {
-            id: tempId,
-            amount,
-            remarks,
-            user_name: 'Saving...',
-            created_at: new Date().toISOString(),
-        };
+        requestCashDrawerPin(async (pin) => {
+            const snapshot = data;
+            const tempId = -Date.now();
+            const optimistic: CashAddition = {
+                id: tempId,
+                amount,
+                remarks,
+                user_name: 'Saving...',
+                created_at: new Date().toISOString(),
+            };
 
-        setCashAmount('');
-        setCashRemarks('');
-        if (snapshot) {
-            setData(applyOptimisticCashAddition(snapshot, optimistic));
-        }
+            setCashAmount('');
+            setCashRemarks('');
+            if (snapshot) {
+                setData(applyOptimisticCashAddition(snapshot, optimistic));
+            }
 
-        const mutation = await runAction(
-            () => addCashAddition(selectedDate, amount, remarks),
-            setSavingCash,
-        );
-        if (mutation) {
-            toast.success('Cash added');
-        } else if (snapshot) {
-            setData(snapshot);
-            setCashAmount(String(amount));
-            setCashRemarks(remarks);
-        }
+            const mutation = await runAction(
+                () => addCashAddition(selectedDate, amount, remarks, pin),
+                setSavingCash,
+            );
+            if (mutation) {
+                toast.success('Cash added');
+            } else if (snapshot) {
+                setData(snapshot);
+                setCashAmount(String(amount));
+                setCashRemarks(remarks);
+            }
+        });
     };
 
-    const handleAddExpense = async () => {
+    const handleAddExpense = () => {
         const name = expenseName.trim();
         const amount = Number(expenseAmount);
         if (!name) {
@@ -587,41 +619,51 @@ export default function CashDrawerPage() {
         }
         const paymentType = expensePaymentType;
         const seriesNo = expenseSeriesNo.trim();
-        const snapshot = data;
-        const tempId = -Date.now();
-        const optimistic: DrawerExpense = {
-            id: tempId,
-            reference_no: nextReferenceNo,
-            series_no: seriesNo || null,
-            name,
-            amount,
-            payment_type: paymentType,
-            payment_label: expensePaymentLabel(paymentType),
-            user_name: 'Saving...',
-            created_at: new Date().toISOString(),
-        };
+        requestCashDrawerPin(async (pin) => {
+            const snapshot = data;
+            const tempId = -Date.now();
+            const optimistic: DrawerExpense = {
+                id: tempId,
+                reference_no: nextReferenceNo,
+                series_no: seriesNo || null,
+                name,
+                amount,
+                payment_type: paymentType,
+                payment_label: expensePaymentLabel(paymentType),
+                user_name: 'Saving...',
+                created_at: new Date().toISOString(),
+            };
 
-        setExpenseName('');
-        setExpenseAmount('');
-        setExpenseSeriesNo('');
-        setExpensePaymentType('cash');
-        if (snapshot) {
-            setData(applyOptimisticExpense(snapshot, optimistic));
-        }
+            setExpenseName('');
+            setExpenseAmount('');
+            setExpenseSeriesNo('');
+            setExpensePaymentType('cash');
+            if (snapshot) {
+                setData(applyOptimisticExpense(snapshot, optimistic));
+            }
 
-        const mutation = await runAction(
-            () => addDrawerExpense(selectedDate, name, amount, paymentType, seriesNo),
-            setSavingExpense,
-        );
-        if (mutation) {
-            toast.success('Expense added');
-        } else if (snapshot) {
-            setData(snapshot);
-            setExpenseName(name);
-            setExpenseAmount(String(amount));
-            setExpenseSeriesNo(seriesNo);
-            setExpensePaymentType(paymentType);
-        }
+            const mutation = await runAction(
+                () =>
+                    addDrawerExpense(
+                        selectedDate,
+                        name,
+                        amount,
+                        paymentType,
+                        pin,
+                        seriesNo,
+                    ),
+                setSavingExpense,
+            );
+            if (mutation) {
+                toast.success('Expense added');
+            } else if (snapshot) {
+                setData(snapshot);
+                setExpenseName(name);
+                setExpenseAmount(String(amount));
+                setExpenseSeriesNo(seriesNo);
+                setExpensePaymentType(paymentType);
+            }
+        });
     };
 
     const printExpense = async (expense: DrawerExpense) => {
@@ -663,26 +705,29 @@ export default function CashDrawerPage() {
         setEditCashRemarks(addition.remarks);
     };
 
-    const handleSaveCashAddition = async () => {
+    const handleSaveCashAddition = () => {
         if (!editingCashAddition) return;
         const amount = Number(editCashAmount);
         if (!Number.isFinite(amount) || amount <= 0) {
             toast.error('Enter a valid cash amount');
             return;
         }
-        const payload = await runAction(
-            () =>
-                updateCashAddition(
-                    editingCashAddition.id,
-                    amount,
-                    editCashRemarks.trim(),
-                ),
-            setSavingCash,
-        );
-        if (payload) {
-            setEditingCashAddition(null);
-            toast.success('Cash addition updated');
-        }
+        requestCashDrawerPin(async (pin) => {
+            const payload = await runAction(
+                () =>
+                    updateCashAddition(
+                        editingCashAddition.id,
+                        amount,
+                        editCashRemarks.trim(),
+                        pin,
+                    ),
+                setSavingCash,
+            );
+            if (payload) {
+                setEditingCashAddition(null);
+                toast.success('Cash addition updated');
+            }
+        });
     };
 
     const handleDeleteCashAddition = (addition: CashAddition) => {
@@ -693,33 +738,35 @@ export default function CashDrawerPage() {
         setDeleteTarget({ kind: 'expense', item: expense });
     };
 
-    const confirmDelete = async () => {
+    const confirmDelete = () => {
         if (!deleteTarget) return;
 
-        setDeleting(true);
-        try {
-            if (deleteTarget.kind === 'expense') {
-                const payload = await runAction(
-                    () => deleteDrawerExpense(deleteTarget.item.id),
-                    setSavingExpense,
-                );
-                if (payload) {
-                    toast.success('Expense deleted');
-                    setDeleteTarget(null);
+        requestCashDrawerPin(async (pin) => {
+            setDeleting(true);
+            try {
+                if (deleteTarget.kind === 'expense') {
+                    const payload = await runAction(
+                        () => deleteDrawerExpense(deleteTarget.item.id, pin),
+                        setSavingExpense,
+                    );
+                    if (payload) {
+                        toast.success('Expense deleted');
+                        setDeleteTarget(null);
+                    }
+                } else {
+                    const payload = await runAction(
+                        () => deleteCashAddition(deleteTarget.item.id, pin),
+                        setSavingCash,
+                    );
+                    if (payload) {
+                        toast.success('Cash addition deleted');
+                        setDeleteTarget(null);
+                    }
                 }
-            } else {
-                const payload = await runAction(
-                    () => deleteCashAddition(deleteTarget.item.id),
-                    setSavingCash,
-                );
-                if (payload) {
-                    toast.success('Cash addition deleted');
-                    setDeleteTarget(null);
-                }
+            } finally {
+                setDeleting(false);
             }
-        } finally {
-            setDeleting(false);
-        }
+        });
     };
 
     const deleteDialogTitle =
@@ -753,20 +800,22 @@ export default function CashDrawerPage() {
             </>
         ) : null;
 
-    const handleSaveStartingCash = async () => {
+    const handleSaveStartingCash = () => {
         const amount = Number(startingCashDraft);
         if (!Number.isFinite(amount) || amount < 0) {
             toast.error('Enter a valid starting cash amount');
             return;
         }
-        const payload = await runAction(
-            () => updateStartingCash(selectedDate, amount),
-            setSavingStartingCash,
-        );
-        if (payload) {
-            setStartingCashOpen(false);
-            toast.success('Starting cash updated');
-        }
+        requestCashDrawerPin(async (pin) => {
+            const payload = await runAction(
+                () => updateStartingCash(selectedDate, amount, pin),
+                setSavingStartingCash,
+            );
+            if (payload) {
+                setStartingCashOpen(false);
+                toast.success('Starting cash updated');
+            }
+        });
     };
 
     const openEditExpense = (expense: DrawerExpense) => {
@@ -777,7 +826,7 @@ export default function CashDrawerPage() {
         setEditExpensePaymentType(expense.payment_type);
     };
 
-    const handleSaveExpense = async () => {
+    const handleSaveExpense = () => {
         if (!editingExpense) return;
         const name = editExpenseName.trim();
         const amount = Number(editExpenseAmount);
@@ -789,21 +838,24 @@ export default function CashDrawerPage() {
             toast.error('Enter a valid expense amount');
             return;
         }
-        const payload = await runAction(
-            () =>
-                updateDrawerExpense(
-                    editingExpense.id,
-                    name,
-                    amount,
-                    editExpensePaymentType,
-                    editExpenseSeriesNo,
-                ),
-            setSavingExpense,
-        );
-        if (payload) {
-            setEditingExpense(null);
-            toast.success('Expense updated');
-        }
+        requestCashDrawerPin(async (pin) => {
+            const payload = await runAction(
+                () =>
+                    updateDrawerExpense(
+                        editingExpense.id,
+                        name,
+                        amount,
+                        editExpensePaymentType,
+                        pin,
+                        editExpenseSeriesNo,
+                    ),
+                setSavingExpense,
+            );
+            if (payload) {
+                setEditingExpense(null);
+                toast.success('Expense updated');
+            }
+        });
     };
 
     const handleDownloadCashAdded = async () => {
@@ -1523,6 +1575,61 @@ export default function CashDrawerPage() {
                             ) : (
                                 'Delete'
                             )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={pinDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setPinDialogOpen(false);
+                        pendingPinAction.current = null;
+                    }
+                }}
+            >
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Cash Drawer PIN</DialogTitle>
+                        <DialogDescription>
+                            Enter the cash drawer PIN to approve this change.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-2">
+                        <Label htmlFor="cash-drawer-pin">PIN (4-6 digits)</Label>
+                        <Input
+                            id="cash-drawer-pin"
+                            type="password"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={pinValue}
+                            onChange={(e) => {
+                                setPinValue(e.target.value.replace(/\D/g, ''));
+                                setPinError(null);
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    void confirmCashDrawerPin();
+                                }
+                            }}
+                        />
+                        {pinError ? (
+                            <p className="text-sm text-destructive">{pinError}</p>
+                        ) : null}
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setPinDialogOpen(false);
+                                pendingPinAction.current = null;
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button onClick={() => void confirmCashDrawerPin()}>
+                            Confirm
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -117,6 +117,8 @@ class CashDrawerService
      */
     public function updateStartingCash(Request $request, int $actorUserId): array
     {
+        $this->requireCashDrawerPin($request);
+
         $amount = round((float) $request->input('starting_cash', 0), 2);
         if ($amount < 0) {
             throw new \InvalidArgumentException('Starting cash cannot be negative');
@@ -157,6 +159,8 @@ class CashDrawerService
      */
     public function addCash(Request $request, int $actorUserId): array
     {
+        $this->requireCashDrawerPin($request);
+
         $amount = round((float) $request->input('amount', 0), 2);
         if ($amount <= 0) {
             throw new \InvalidArgumentException('Cash amount must be greater than zero');
@@ -197,6 +201,8 @@ class CashDrawerService
      */
     public function updateCashAddition(Request $request, int $additionId, int $actorUserId): array
     {
+        $this->requireCashDrawerPin($request);
+
         $addition = DB::table('cash_additions')->where('id', $additionId)->first();
         if ($addition === null) {
             throw new \InvalidArgumentException('Cash addition not found');
@@ -241,6 +247,8 @@ class CashDrawerService
      */
     public function deleteCashAddition(Request $request, int $additionId, int $actorUserId): array
     {
+        $this->requireCashDrawerPin($request);
+
         $addition = DB::table('cash_additions')->where('id', $additionId)->first();
         if ($addition === null) {
             throw new \InvalidArgumentException('Cash addition not found');
@@ -275,6 +283,8 @@ class CashDrawerService
      */
     public function addExpense(Request $request, int $actorUserId): array
     {
+        $this->requireCashDrawerPin($request);
+
         $name = trim((string) $request->input('name', ''));
         if ($name === '') {
             throw new \InvalidArgumentException('Expense name is required');
@@ -335,6 +345,8 @@ class CashDrawerService
      */
     public function updateExpense(Request $request, int $expenseId, int $actorUserId): array
     {
+        $this->requireCashDrawerPin($request);
+
         $expense = DB::table('drawer_expenses')->where('id', $expenseId)->first();
         if ($expense === null) {
             throw new \InvalidArgumentException('Expense not found');
@@ -393,6 +405,8 @@ class CashDrawerService
      */
     public function deleteExpense(Request $request, int $expenseId, int $actorUserId): array
     {
+        $this->requireCashDrawerPin($request);
+
         $expense = DB::table('drawer_expenses')->where('id', $expenseId)->first();
         if ($expense === null) {
             throw new \InvalidArgumentException('Expense not found');
@@ -924,6 +938,14 @@ class CashDrawerService
         }
 
         return mb_substr($series, 0, 60);
+    }
+
+    private function requireCashDrawerPin(Request $request): void
+    {
+        $pin = trim((string) ($request->input('cash_drawer_pin') ?? $request->input('refund_pin') ?? ''));
+        if (! PosHelpers::verifyCashDrawerPin($pin)) {
+            throw new \InvalidArgumentException('Invalid or missing cash drawer PIN');
+        }
     }
 
     private function refundJoin(): string

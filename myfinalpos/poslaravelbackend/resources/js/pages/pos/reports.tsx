@@ -741,12 +741,20 @@ export default function PosReports() {
                             <div className="space-y-4">
                                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                                     <StatCard
-                                        label="Net Sales"
+                                        label="Gross Sales"
+                                        value={`₱${formatMoney(summary.gross_sales)}`}
+                                        hint={`${formatInt(summary.order_count)} orders · before refunds`}
+                                        icon={ShoppingBag}
+                                    />
+                                    <StatCard
+                                        label="Net Sales After Refunds"
                                         value={`₱${formatMoney(summary.net_sales)}`}
                                         hint={
-                                            (summary.tax_rate ?? 0) > 0
-                                                ? `${formatInt(summary.order_count)} orders · incl. VAT, after refunds`
-                                                : `${formatInt(summary.order_count)} orders · VAT 0%, after refunds`
+                                            summary.refunded_amount > 0
+                                                ? `Gross less ₱${formatMoney(summary.refunded_amount)} refunds`
+                                                : (summary.tax_rate ?? 0) > 0
+                                                  ? `${formatInt(summary.order_count)} orders · incl. VAT`
+                                                  : `${formatInt(summary.order_count)} orders · VAT 0%`
                                         }
                                         icon={ShoppingBag}
                                     />
@@ -765,12 +773,12 @@ export default function PosReports() {
                                         tone="positive"
                                     />
                                     <StatCard
-                                        label="Refunds"
+                                        label="Refunds Deducted"
                                         value={`₱${formatMoney(summary.refunded_amount)}`}
                                         hint={
                                             summary.total_discounts > 0
                                                 ? `₱${formatMoney(summary.total_discounts)} discounts`
-                                                : 'After refunds'
+                                                : 'Already deducted from net sales'
                                         }
                                         icon={BarChart3}
                                         tone={summary.refunded_amount > 0 ? 'warning' : 'default'}

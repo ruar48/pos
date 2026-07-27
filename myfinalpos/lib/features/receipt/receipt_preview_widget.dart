@@ -159,6 +159,8 @@ class ThermalReceiptPreview extends StatelessWidget {
     if (trimmed == receipt.store.storeName ||
         trimmed == 'INVOICE' ||
         trimmed.startsWith('TOTAL') ||
+        trimmed.startsWith('REMAINING TOTAL') ||
+        trimmed.startsWith('ORIGINAL TOTAL') ||
         trimmed == kReceiptFooterThanks) {
       return boldMono;
     }

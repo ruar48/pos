@@ -472,57 +472,58 @@ export default function Dashboard() {
                             {/* KPI row 1 — 5 cards */}
                             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
                                 <KpiCard
-                                    label="Total Net Sales"
-                                    value={formatMoney(metrics.net_sales)}
+                                    label="Gross Sales"
+                                    value={formatMoney(metrics.gross_sales)}
                                     tone="orange"
+                                />
+                                <KpiCard
+                                    label="Net Sales After Refunds"
+                                    value={formatMoney(metrics.net_sales)}
+                                    tone="teal"
                                 />
                                 <KpiCard
                                     label="Total Discounts"
                                     value={formatMoney(metrics.total_discounts)}
-                                    tone="teal"
+                                    tone="green"
                                 />
                                 <KpiCard
                                     label="No. of Transactions"
                                     value={metrics.order_count.toLocaleString()}
-                                    tone="green"
+                                    tone="orange"
                                 />
                                 <KpiCard
                                     label="Cost of Goods"
                                     value={formatMoney(metrics.cogs, false)}
-                                    tone="orange"
-                                />
-                                <KpiCard
-                                    label="No. of Items"
-                                    value={formatItems(metrics.items_sold)}
                                     tone="teal"
                                 />
                             </div>
 
-                            {/* KPI row 2 — 4 cards */}
-                            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:max-w-[80%]">
+                            {/* KPI row 2 — 5 cards */}
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+                                <KpiCard
+                                    label="No. of Items"
+                                    value={formatItems(metrics.items_sold)}
+                                    tone="green"
+                                />
                                 <KpiCard
                                     label="Profit"
                                     value={formatMoney(metrics.profit)}
                                     tone="orange"
                                 />
                                 <KpiCard
-                                    label="Total Refunds"
-                                    value={
-                                        metrics.refunded_amount > 0
-                                            ? `-${formatMoney(metrics.refunded_amount)}`
-                                            : formatMoney(0)
-                                    }
-                                    tone="orange"
+                                    label="Refunds Deducted"
+                                    value={formatMoney(metrics.refunded_amount)}
+                                    tone="coral"
                                 />
                                 <KpiCard
                                     label="Total Unpaid Orders"
                                     value={formatMoney(metrics.unpaid_orders)}
-                                    tone="green"
+                                    tone="teal"
                                 />
                                 <KpiCard
                                     label="No. of Online Orders"
                                     value={metrics.online_orders.toLocaleString()}
-                                    tone="orange"
+                                    tone="green"
                                 />
                             </div>
 

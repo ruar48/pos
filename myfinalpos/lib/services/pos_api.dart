@@ -1000,7 +1000,6 @@ class PosApi {
   Future<Map<String, dynamic>> refundOrderAll({
     required int orderId,
     required String reason,
-    required String refundPin,
     int? actorUserId,
   }) async {
     return _postRefund(
@@ -1008,7 +1007,6 @@ class PosApi {
       reason: reason,
       refundType: 'all',
       items: const [],
-      refundPin: refundPin,
       actorUserId: actorUserId,
     );
   }
@@ -1017,7 +1015,6 @@ class PosApi {
     required int orderId,
     required String reason,
     required List<RefundItemRequest> items,
-    required String refundPin,
     int? actorUserId,
   }) async {
     return _postRefund(
@@ -1025,7 +1022,6 @@ class PosApi {
       reason: reason,
       refundType: 'items',
       items: items,
-      refundPin: refundPin,
       actorUserId: actorUserId,
     );
   }
@@ -1035,7 +1031,6 @@ class PosApi {
     required String reason,
     required String refundType,
     required List<RefundItemRequest> items,
-    required String refundPin,
     int? actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/process_refund.php');
@@ -1047,7 +1042,6 @@ class PosApi {
         'refund_type': refundType,
         'reason': reason,
         'items': items.map((item) => item.toJson()).toList(),
-        'refund_pin': refundPin,
         'actor_user_id': actorUserId,
       }),
     );
@@ -1309,7 +1303,7 @@ class PosApi {
     int? actorUserId,
     Map<String, dynamic>? receiptStore,
     int? defaultBranchId,
-    String? refundPin,
+    String? cashDrawerPin,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/settings.php');
     final payload = <String, dynamic>{
@@ -1356,8 +1350,8 @@ class PosApi {
     if (defaultBranchId != null && defaultBranchId > 0) {
       payload['default_branch_id'] = defaultBranchId;
     }
-    if (refundPin != null && refundPin.isNotEmpty) {
-      payload['refund_pin'] = refundPin;
+    if (cashDrawerPin != null && cashDrawerPin.isNotEmpty) {
+      payload['cash_drawer_pin'] = cashDrawerPin;
     }
 
     final response = await http.post(

@@ -221,6 +221,18 @@ class ReceiptStoreConfig {
   }
 }
 
+class ReceiptRefundLineItem {
+  const ReceiptRefundLineItem({
+    required this.name,
+    required this.quantity,
+    required this.amount,
+  });
+
+  final String name;
+  final int quantity;
+  final double amount;
+}
+
 class ReceiptLineItem {
   const ReceiptLineItem({
     required this.name,
@@ -265,6 +277,8 @@ class ReceiptData {
     this.isVatRegistered = false,
     this.store = const ReceiptStoreConfig(),
     this.splitPayments,
+    this.refundedAmount = 0,
+    this.refundItems = const [],
     DateTime? dateTime,
   }) : dateTime = dateTime ?? DateTime.now();
 
@@ -296,7 +310,16 @@ class ReceiptData {
   final bool isVatRegistered;
   final ReceiptStoreConfig store;
   final List<ReceiptPaymentLine>? splitPayments;
+  final double refundedAmount;
+  final List<ReceiptRefundLineItem> refundItems;
   final DateTime dateTime;
+
+  bool get hasRefunds => refundedAmount > 0.009;
+
+  double get remainingTotal {
+    final remaining = total - refundedAmount;
+    return remaining < 0 ? 0 : remaining;
+  }
 
   bool get hasSplitPayments =>
       splitPayments != null && splitPayments!.isNotEmpty;
@@ -419,8 +442,14 @@ class ThermalReceiptLayout {
     if (data.vat > 0) {
       add(_amountRow('VAT', _money(data.vat)));
     }
+    _addRefundSection(add, _money);
     add(_shortDivider());
-    add(_amountRow('TOTAL', _money(data.total), emphasize: true));
+    if (data.hasRefunds) {
+      add(_amountRow('ORIGINAL TOTAL', _money(data.total)));
+      add(_amountRow('REMAINING TOTAL', _money(data.remainingTotal), emphasize: true));
+    } else {
+      add(_amountRow('TOTAL', _money(data.total), emphasize: true));
+    }
     add(_shortDivider());
     if (data.hasSplitPayments) {
       for (final payment in data.splitPayments!) {
@@ -505,8 +534,14 @@ class ThermalReceiptLayout {
     if (data.vat > 0) {
       add(previewLabelValue('VAT', previewMoney(data.vat)));
     }
+    _addRefundSection(add, previewMoney);
     add(_doubleDivider());
-    add(previewLabelValue('TOTAL', previewMoney(data.total)));
+    if (data.hasRefunds) {
+      add(previewLabelValue('ORIGINAL TOTAL', previewMoney(data.total)));
+      add(previewLabelValue('REMAINING TOTAL', previewMoney(data.remainingTotal)));
+    } else {
+      add(previewLabelValue('TOTAL', previewMoney(data.total)));
+    }
     add(_shortDivider());
     if (data.hasSplitPayments) {
       for (final payment in data.splitPayments!) {
@@ -555,10 +590,15 @@ class ThermalReceiptLayout {
 
   static bool _isGrandTotalLine(String line, String totalText) {
     final trimmed = line.trim();
-    return trimmed.startsWith('TOTAL') &&
+    final isTotalLine = trimmed.startsWith('TOTAL') ||
+        trimmed.startsWith('REMAINING TOTAL') ||
+        trimmed.startsWith('ORIGINAL TOTAL');
+    return isTotalLine &&
         !trimmed.startsWith('TOTAL POINTS') &&
         !trimmed.startsWith('Total Qty') &&
-        trimmed.contains(totalText);
+        (trimmed.startsWith('REMAINING TOTAL') ||
+            trimmed.startsWith('ORIGINAL TOTAL') ||
+            trimmed.contains(totalText));
   }
 
   String formatMoney(double value) => _money(value);
@@ -743,6 +783,20 @@ class ThermalReceiptLayout {
     }
 
     return result;
+  }
+
+  void _addRefundSection(
+    void Function(String? line) add,
+    String Function(double amount) money,
+  ) {
+    if (!data.hasRefunds) return;
+
+    add('');
+    add(_center('REFUNDED ITEMS'));
+    for (final item in data.refundItems) {
+      add(_amountRow('${item.name} x${item.quantity}', money(-item.amount)));
+    }
+    add(_amountRow('REFUNDED', money(-data.refundedAmount)));
   }
 
   static String _formatDate(DateTime dt) {
@@ -950,7 +1004,9 @@ class PosReceiptService {
         builder.text('INVOICE', center: true, bold: true);
         continue;
       }
-      if (ThermalReceiptLayout._isGrandTotalLine(line, totalText)) {
+      final remainingText = layout.formatMoney(receipt.remainingTotal);
+      if (ThermalReceiptLayout._isGrandTotalLine(line, totalText) ||
+          (receipt.hasRefunds && line.contains('REMAINING TOTAL $remainingText'))) {
         builder.text(line, bold: true);
         continue;
       }

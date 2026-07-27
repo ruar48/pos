@@ -107,7 +107,7 @@ class _RefundDialogState extends State<RefundDialog> {
   }
 
   void _submitFullRefund() {
-    if (reasonController.text.trim().isEmpty) return;
+    if (!hasReason) return;
     Navigator.pop(
       context,
       RefundDialogResult(
@@ -120,7 +120,7 @@ class _RefundDialogState extends State<RefundDialog> {
 
   void _submitItemRefund() {
     final item = selectedItem;
-    if (item == null || reasonController.text.trim().isEmpty) return;
+    if (item == null || !hasReason) return;
 
     Navigator.pop(
       context,

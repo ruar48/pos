@@ -893,7 +893,7 @@ class PosHelpers
         return $actor;
     }
 
-    public static function verifyRefundPin(string $pin): bool
+    public static function verifyCashDrawerPin(string $pin): bool
     {
         if (! self::tableExists('app_settings') || ! self::columnExists('app_settings', 'refund_pin_hash')) {
             return false;

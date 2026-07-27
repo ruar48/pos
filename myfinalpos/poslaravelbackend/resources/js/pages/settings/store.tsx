@@ -287,12 +287,15 @@ export default function StoreSettingsPage() {
         try {
             const saved = await saveStoreSettings({
                 ...savedSettings,
-                refund_pin: pinValue,
+                cash_drawer_pin: pinValue,
             });
-            setForm((prev) => ({ ...prev, has_refund_pin: saved.has_refund_pin }));
+            setForm((prev) => ({
+                ...prev,
+                has_cash_drawer_pin: saved.has_cash_drawer_pin,
+            }));
             setSavedSettings(saved);
             setPinDialogOpen(false);
-            toast.success('Refund PIN updated');
+            toast.success('Cash drawer PIN updated');
         } catch (e) {
             setPinError(
                 e instanceof Error ? e.message : 'Could not save PIN',
@@ -560,30 +563,32 @@ export default function StoreSettingsPage() {
 
             <SettingsSection
                 title="Security"
-                subtitle="Require a PIN to approve refunds"
+                subtitle="Require a PIN for cash drawer changes"
                 icon={Shield}
             >
                 <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-secondary/20 px-4 py-3">
                     <ShieldCheck
                         className={`mt-0.5 size-5 shrink-0 ${
-                            form.has_refund_pin
+                            form.has_cash_drawer_pin
                                 ? 'text-primary'
                                 : 'text-muted-foreground'
                         }`}
                     />
                     <p className="text-sm text-muted-foreground">
-                        {form.has_refund_pin
-                            ? 'Refund PIN is set. Cashiers need this PIN to process a refund.'
-                            : 'No refund PIN set yet. Refunds cannot be processed until you set one.'}
+                        {form.has_cash_drawer_pin
+                            ? 'Cash drawer PIN is set. Staff need this PIN to add cash, record expenses, or edit drawer entries.'
+                            : 'No cash drawer PIN set yet. Cash drawer changes cannot be made until you set one.'}
                     </p>
                 </div>
                 {isAdmin ? (
                     <Button type="button" variant="outline" onClick={openPinDialog}>
-                        {form.has_refund_pin ? 'Change Refund PIN' : 'Set Refund PIN'}
+                        {form.has_cash_drawer_pin
+                            ? 'Change Cash Drawer PIN'
+                            : 'Set Cash Drawer PIN'}
                     </Button>
                 ) : (
                     <p className="text-xs text-muted-foreground">
-                        Only an admin can set or change the refund PIN.
+                        Only an admin can set or change the cash drawer PIN.
                     </p>
                 )}
             </SettingsSection>
@@ -925,13 +930,14 @@ export default function StoreSettingsPage() {
                 <DialogContent className="sm:max-w-sm">
                     <DialogHeader>
                         <DialogTitle>
-                            {form.has_refund_pin
-                                ? 'Change Refund PIN'
-                                : 'Set Refund PIN'}
+                            {form.has_cash_drawer_pin
+                                ? 'Change Cash Drawer PIN'
+                                : 'Set Cash Drawer PIN'}
                         </DialogTitle>
                     </DialogHeader>
                     <p className="text-sm text-muted-foreground">
-                        Cashiers will need this PIN to process any refund.
+                        Staff will need this PIN to add cash, record expenses, or
+                        edit cash drawer entries.
                     </p>
                     <div className="grid gap-2">
                         <Label>New PIN (4-6 digits)</Label>

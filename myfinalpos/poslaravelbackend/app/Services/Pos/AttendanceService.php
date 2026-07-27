@@ -16,11 +16,15 @@ use Illuminate\Support\Facades\DB;
 
 use Illuminate\Support\Facades\Schema;
 
+use Illuminate\Database\Schema\Blueprint;
+
 
 
 class AttendanceService
 
 {
+
+    private static bool $photoUrlColumnReady = false;
 
     public static function requiresGps(): bool
 
@@ -654,7 +658,8 @@ class AttendanceService
             'created_at' => Carbon::now('UTC'),
         ];
 
-        if ($photoUrl !== null && $photoUrl !== '' && PosHelpers::columnExists('staff_attendance', 'photo_url')) {
+        if ($photoUrl !== null && $photoUrl !== '') {
+            $this->ensurePhotoUrlColumn();
             $payload['photo_url'] = $photoUrl;
         }
 
@@ -842,6 +847,19 @@ class AttendanceService
         $isClockedIn = $openIn !== null;
 
         $punchState = $this->analyzePunchState($punchTimes, $date, $isClockedIn);
+
+        if (
+            $totalMinutes === 0
+            && $punchState['morning_in_at'] !== null
+            && $punchState['day_out_at'] !== null
+        ) {
+            $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
+                ->diffInMinutes(Carbon::parse($punchState['day_out_at']));
+        } elseif ($isClockedIn && $punchState['morning_in_at'] !== null) {
+            $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
+                ->diffInMinutes(Carbon::now('UTC'));
+        }
+
         $sessionAttendance = $this->evaluateSessionAttendance(
             $punchState['morning_in_at'],
             $punchState['afternoon_in_at'],
@@ -943,214 +961,62 @@ class AttendanceService
      */
 
     private function analyzePunchState(array $punches, string $date, bool $isClockedIn): array
-
     {
-
-        $schedule = $this->schedule();
-
         $count = count($punches);
 
-        $isToday = Carbon::parse($date, self::DISPLAY_TIMEZONE)->isToday();
-
-        $now = $this->nowLocal();
-
-
-
         $morningIn = null;
-
         $lunchOut = null;
-
         $afternoonIn = null;
-
         $dayOut = null;
-
         $morningInPhoto = null;
-
         $lunchOutPhoto = null;
-
         $afternoonInPhoto = null;
-
         $dayOutPhoto = null;
 
-
-
+        // Simple Time In / Time Out: first clock_in = morning_in, first clock_out = day_out.
         foreach ($punches as $punch) {
-            $slot = $this->classifyPunchSlot($punch['type'], $punch['at'], $date, $schedule);
-            if ($slot === null) {
-                continue;
-            }
-
             $photo = isset($punch['photo_url']) && is_string($punch['photo_url']) && $punch['photo_url'] !== ''
                 ? $punch['photo_url']
                 : null;
 
-            if ($slot === 'morning_in' && $morningIn === null) {
+            if (($punch['type'] ?? '') === 'clock_in' && $morningIn === null) {
                 $morningIn = $punch['at'];
                 $morningInPhoto = $photo;
-            } elseif ($slot === 'lunch_out' && $lunchOut === null) {
-                $lunchOut = $punch['at'];
-                $lunchOutPhoto = $photo;
-            } elseif ($slot === 'afternoon_in' && $afternoonIn === null) {
-                $afternoonIn = $punch['at'];
-                $afternoonInPhoto = $photo;
-            } elseif ($slot === 'day_out' && $dayOut === null) {
+            } elseif (($punch['type'] ?? '') === 'clock_out' && $dayOut === null) {
                 $dayOut = $punch['at'];
                 $dayOutPhoto = $photo;
             }
         }
 
-        $hasFullDay = $morningIn !== null
-            && $lunchOut !== null
-            && $afternoonIn !== null
-            && $dayOut !== null;
-        $isAfternoonOnlyHalf = $morningIn === null
-            && $afternoonIn !== null
-            && $dayOut !== null
-            && ! $isClockedIn;
-        $isMorningOnlyHalf = $morningIn !== null
-            && $lunchOut !== null
-            && $afternoonIn === null
-            && $dayOut === null
-            && ! $isClockedIn;
-
-        $dayComplete = false;
-
+        $dayComplete = $morningIn !== null && $dayOut !== null && ! $isClockedIn;
         $dayType = 'none';
-
-        $nextActionNote = null;
-
-        if ($hasFullDay) {
-            $dayComplete = true;
+        if ($dayComplete) {
             $dayType = 'full';
-        } elseif ($isAfternoonOnlyHalf) {
-            $dayComplete = true;
-            $dayType = 'half';
-        } elseif ($isMorningOnlyHalf) {
-            if ($isToday) {
-                $afternoonCutoff = $this->scheduleAt($date, $schedule['afternoon_cutoff']);
-
-                if ($now->gte($afternoonCutoff)) {
-                    $dayComplete = true;
-                    $dayType = 'half';
-                } else {
-                    $dayType = 'in_progress';
-                }
-            } else {
-                $dayComplete = true;
-                $dayType = 'half';
-            }
         } elseif ($count > 0) {
             $dayType = 'in_progress';
         }
 
-
-
         $nextAction = null;
-
         $nextActionNote = null;
-
-        if ($count === 0 && $isToday && $this->isPastAllClockInWindows($date)) {
-
-            $dayComplete = true;
-
-            $dayType = 'none';
-
-            $nextActionNote = 'Absent for today.';
-
-        } elseif (! $dayComplete) {
-
-            if ($count === 0) {
-
-                if ($isToday) {
-
-                    $blocked = $this->punchWindowBlockedMessage(0, 'clock_in', false, $date);
-
-                    if ($blocked !== null) {
-
-                        $nextAction = null;
-
-                        $nextActionNote = $blocked;
-
-                    } else {
-
-                        $nextAction = 'clock_in';
-
-                    }
-
-                } else {
-
-                    $nextAction = 'clock_in';
-
-                }
-
-            } elseif ($isClockedIn) {
-
-                $blocked = $this->punchWindowBlockedMessage($count, 'clock_out', true, $date);
-
-                if ($blocked !== null) {
-
-                    $nextAction = null;
-
-                    $nextActionNote = $blocked;
-
-                } else {
-
-                    $nextAction = 'clock_out';
-
-                }
-
-            } elseif ($count < 4) {
-
-                $blocked = $this->punchWindowBlockedMessage($count, 'clock_in', false, $date);
-
-                if ($blocked !== null) {
-
-                    $nextAction = null;
-
-                    $nextActionNote = $blocked;
-
-                } else {
-
-                    $nextAction = 'clock_in';
-
-                }
-
-            }
-
+        if (! $dayComplete) {
+            $nextAction = $isClockedIn ? 'clock_out' : 'clock_in';
         }
 
-
-
         return [
-
             'punch_count' => $count,
-
             'next_action' => $nextAction,
-
             'next_action_note' => $nextActionNote,
-
             'day_complete' => $dayComplete,
-
             'day_type' => $dayType,
-
             'morning_in_at' => $morningIn,
-
             'lunch_out_at' => $lunchOut,
-
             'afternoon_in_at' => $afternoonIn,
-
             'day_out_at' => $dayOut,
-
             'morning_in_photo_url' => $morningInPhoto,
-
             'lunch_out_photo_url' => $lunchOutPhoto,
-
             'afternoon_in_photo_url' => $afternoonInPhoto,
-
             'day_out_photo_url' => $dayOutPhoto,
-
         ];
-
     }
 
 
@@ -1162,170 +1028,41 @@ class AttendanceService
      */
 
     private function assertValidPunch(string $eventType, array $status, string $date): void
-
     {
-
         if (! empty($status['day_complete'])) {
-
-            if (
-                (int) ($status['punch_count'] ?? 0) === 0
-                && ($status['punctuality_status'] ?? '') === 'absent'
-            ) {
-
-                throw new \RuntimeException(
-
-                    'Absent for today. No attendance was recorded.',
-
-                );
-
-            }
-
             throw new \RuntimeException(
-
                 'Attendance completed for today. You can clock in again tomorrow.',
-
             );
-
         }
 
+        $isClockedIn = (bool) ($status['is_clocked_in'] ?? false);
 
-
-        $nextAction = $status['next_action'] ?? null;
-
-        if ($nextAction === null) {
-
-            if (! empty($status['day_complete'])) {
-
-                throw new \RuntimeException(
-
-                    'Attendance completed for today. You can clock in again tomorrow.',
-
-                );
-
-            }
-
-            $note = $status['next_action_note'] ?? null;
-
-            if (is_string($note) && $note !== '') {
-
-                throw new \RuntimeException($note);
-
-            }
-
-            $schedule = $this->schedule();
-
-            $afternoonStart = $this->scheduleAt($date, $schedule['afternoon_accept_start']);
-
-            if (
-                $eventType === 'clock_in'
-                && (int) ($status['punch_count'] ?? 0) === 0
-                && Carbon::parse($date, self::DISPLAY_TIMEZONE)->isToday()
-                && $this->nowLocal()->gte($this->scheduleAt($date, $schedule['morning_cutoff']))
-                && $this->nowLocal()->lt($afternoonStart)
-            ) {
-                throw new \RuntimeException(sprintf(
-                    'Morning absent — you missed the morning window. Afternoon in opens at %s.',
-                    $this->formatClockLabel($schedule['afternoon_accept_start']),
-                ));
-            }
-
-            throw new \RuntimeException(
-
-                'Cannot punch right now. Wait for the next scheduled time.',
-
-            );
-
+        if ($eventType === 'clock_in' && $isClockedIn) {
+            throw new \RuntimeException('You must clock out first.');
         }
 
-
-
-        if ($eventType !== $nextAction) {
-
-            if ($nextAction === 'clock_out') {
-
-                throw new \RuntimeException('You must clock out first.');
-
-            }
-
+        if ($eventType === 'clock_out' && ! $isClockedIn) {
             throw new \RuntimeException('You must clock in first.');
-
         }
-
-
-
-        $blocked = $this->punchWindowBlockedMessage(
-            (int) ($status['punch_count'] ?? 0),
-            $eventType,
-            (bool) ($status['is_clocked_in'] ?? false),
-            $date,
-        );
-
-        if ($blocked !== null) {
-
-            throw new \RuntimeException($blocked);
-
-        }
-
-
-
-        $punchCount = (int) ($status['punch_count'] ?? 0);
-
-        if ($punchCount >= 4) {
-
-            throw new \RuntimeException(
-
-                'Maximum punches for today reached. Come back tomorrow.',
-
-            );
-
-        }
-
     }
 
-
-
-    /**
-     * @param  array<string, mixed>  $schedule
-     */
-    private function classifyPunchSlot(string $type, string $at, string $date, array $schedule): ?string
+    private function ensurePhotoUrlColumn(): void
     {
-        $local = Carbon::parse($at, 'UTC')->timezone(self::DISPLAY_TIMEZONE);
-        $time = $local->format('H:i');
-
-        if ($type === 'clock_in') {
-            $morningAcceptStart = $schedule['morning_accept_start'];
-            $morningCutoff = $schedule['morning_cutoff'];
-            $afternoonAcceptStart = $schedule['afternoon_accept_start'];
-            $afternoonCutoff = $schedule['afternoon_cutoff'];
-
-            if ($time < $morningAcceptStart || ($time >= $morningAcceptStart && $time < $morningCutoff)) {
-                return 'morning_in';
-            }
-
-            if ($time >= $afternoonAcceptStart && $time < $afternoonCutoff) {
-                return 'afternoon_in';
-            }
-
-            return null;
+        if (self::$photoUrlColumnReady) {
+            return;
         }
 
-        if ($type === 'clock_out') {
-            $breakOutStart = $schedule['break_out_start'];
-            $breakOutEnd = $schedule['break_out_end'];
-            $timeoutStart = $schedule['timeout_start'];
-
-            if ($time >= $breakOutStart && $time <= $breakOutEnd) {
-                return 'lunch_out';
-            }
-
-            if ($time >= $timeoutStart) {
-                return 'day_out';
-            }
-
-            return null;
+        if (! Schema::hasTable('staff_attendance')) {
+            return;
         }
 
-        return null;
+        if (! Schema::hasColumn('staff_attendance', 'photo_url')) {
+            Schema::table('staff_attendance', function (Blueprint $table) {
+                $table->string('photo_url', 500)->nullable();
+            });
+        }
+
+        self::$photoUrlColumnReady = true;
     }
 
     private function nowLocal(): Carbon
@@ -1337,129 +1074,6 @@ class AttendanceService
     {
         return Carbon::parse($date.' '.$time, self::DISPLAY_TIMEZONE);
     }
-
-    private function punchWindowBlockedMessage(
-        int $punchCount,
-        string $eventType,
-        bool $isClockedIn,
-        string $date,
-    ): ?string {
-        if (! Carbon::parse($date, self::DISPLAY_TIMEZONE)->isToday()) {
-            return null;
-        }
-
-        $schedule = $this->schedule();
-        $now = $this->nowLocal();
-
-        $morningAcceptStart = $this->scheduleAt($date, $schedule['morning_accept_start']);
-        $morningCutoff = $this->scheduleAt($date, $schedule['morning_cutoff']);
-        $breakOutStart = $this->scheduleAt($date, $schedule['break_out_start']);
-        $breakOutEnd = $this->scheduleAt($date, $schedule['break_out_end']);
-        $afternoonAcceptStart = $this->scheduleAt($date, $schedule['afternoon_accept_start']);
-        $afternoonCutoff = $this->scheduleAt($date, $schedule['afternoon_cutoff']);
-        $timeoutStart = $this->scheduleAt($date, $schedule['timeout_start']);
-
-        if ($eventType === 'clock_in' && $punchCount === 0) {
-            if ($now->lt($morningAcceptStart)) {
-                return sprintf(
-                    'Too early for morning in. Opens at %s.',
-                    $this->formatClockLabel($schedule['morning_accept_start']),
-                );
-            }
-
-            if ($now->lt($morningCutoff)) {
-                return null;
-            }
-
-            if ($now->lt($afternoonAcceptStart)) {
-                return sprintf(
-                    'Morning window closed (%s–%s). Afternoon in opens at %s.',
-                    $this->formatClockLabel($schedule['morning_accept_start']),
-                    $this->formatClockLabel($schedule['morning_cutoff']),
-                    $this->formatClockLabel($schedule['afternoon_accept_start']),
-                );
-            }
-
-            if ($now->gt($afternoonCutoff)) {
-                return 'Absent for today. All clock-in windows have closed.';
-            }
-
-            return null;
-        }
-
-        if ($eventType === 'clock_out' && $punchCount === 1 && $isClockedIn) {
-            if ($now->lt($breakOutStart)) {
-                return sprintf(
-                    'Too early for lunch out. Opens at %s.',
-                    $this->formatClockLabel($schedule['break_out_start']),
-                );
-            }
-
-            if ($now->gt($breakOutEnd)) {
-                return sprintf(
-                    'Lunch out window closed (%s–%s).',
-                    $this->formatClockLabel($schedule['break_out_start']),
-                    $this->formatClockLabel($schedule['break_out_end']),
-                );
-            }
-
-            return null;
-        }
-
-        if ($eventType === 'clock_in' && $punchCount === 2 && ! $isClockedIn) {
-            if ($now->lt($afternoonAcceptStart)) {
-                return sprintf(
-                    'Too early for afternoon in. Opens at %s.',
-                    $this->formatClockLabel($schedule['afternoon_accept_start']),
-                );
-            }
-
-            if ($now->gt($afternoonCutoff)) {
-                return 'Missed afternoon in window for today.';
-            }
-
-            return null;
-        }
-
-        if ($eventType === 'clock_out' && $punchCount === 3 && $isClockedIn) {
-            if ($now->lt($timeoutStart)) {
-                return sprintf(
-                    'Too early for end-of-day out. Day out opens at %s.',
-                    $this->formatClockLabel($schedule['timeout_start']),
-                );
-            }
-
-            return null;
-        }
-
-        return null;
-    }
-
-    private function isPastAllClockInWindows(string $date): bool
-    {
-        if (! Carbon::parse($date, self::DISPLAY_TIMEZONE)->isToday()) {
-            return false;
-        }
-
-        $schedule = $this->schedule();
-        $afternoonCutoff = $this->scheduleAt($date, $schedule['afternoon_cutoff']);
-
-        return $this->nowLocal()->gte($afternoonCutoff);
-    }
-
-    private function formatClockLabel(string $time): string
-
-    {
-
-        $parsed = Carbon::createFromFormat('H:i', $time);
-
-
-
-        return $parsed->format('g:i A');
-
-    }
-
-
 
     /**
      * @return array{

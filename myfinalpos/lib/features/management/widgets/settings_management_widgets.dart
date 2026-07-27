@@ -53,7 +53,7 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
   String? logoImagePath;
   late int selectedBranchId;
   bool saving = false;
-  bool settingRefundPin = false;
+  bool settingCashDrawerPin = false;
 
   @override
   void initState() {
@@ -278,24 +278,24 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
     }
   }
 
-  Future<void> _setRefundPin() async {
+  Future<void> _setCashDrawerPin() async {
     final pin = await showDialog<String>(
       context: context,
-      builder: (_) => const _SetRefundPinDialog(),
+      builder: (_) => const _SetCashDrawerPinDialog(),
     );
     if (pin == null) return;
 
-    setState(() => settingRefundPin = true);
+    setState(() => settingCashDrawerPin = true);
     try {
-      await widget.pageState.updateSettings(settings, refundPin: pin);
+      await widget.pageState.updateSettings(settings, cashDrawerPin: pin);
       if (!mounted) return;
       setState(() => settings = widget.pageState.settings);
-      showTopSuccess(context, 'Refund PIN updated');
+      showTopSuccess(context, 'Cash drawer PIN updated');
     } catch (error) {
       if (!mounted) return;
       showTopError(context, error.toString());
     } finally {
-      if (mounted) setState(() => settingRefundPin = false);
+      if (mounted) setState(() => settingCashDrawerPin = false);
     }
   }
 
@@ -610,33 +610,33 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
         const SizedBox(height: 16),
         _SettingsSection(
           title: 'Security',
-          subtitle: 'Require a PIN to approve refunds',
+          subtitle: 'Require a PIN for cash drawer changes',
           icon: Icons.lock_outline,
           children: [
             Row(
               children: [
                 Icon(
-                  settings.hasRefundPin
+                  settings.hasCashDrawerPin
                       ? Icons.verified_user_outlined
                       : Icons.warning_amber_outlined,
-                  color: settings.hasRefundPin
+                  color: settings.hasCashDrawerPin
                       ? AppColors.green
                       : AppColors.amber,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    settings.hasRefundPin
-                        ? 'Refund PIN is set. Cashiers need this PIN to process a refund.'
-                        : 'No refund PIN set yet. Refunds cannot be processed until you set one.',
+                    settings.hasCashDrawerPin
+                        ? 'Cash drawer PIN is set. Staff need this PIN to add cash, record expenses, or edit drawer entries.'
+                        : 'No cash drawer PIN set yet. Cash drawer changes cannot be made until you set one.',
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
-              onPressed: settingRefundPin ? null : _setRefundPin,
-              icon: settingRefundPin
+              onPressed: settingCashDrawerPin ? null : _setCashDrawerPin,
+              icon: settingCashDrawerPin
                   ? const SizedBox(
                       width: 16,
                       height: 16,
@@ -644,7 +644,9 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
                     )
                   : const Icon(Icons.pin_outlined),
               label: Text(
-                settings.hasRefundPin ? 'Change Refund PIN' : 'Set Refund PIN',
+                settings.hasCashDrawerPin
+                    ? 'Change Cash Drawer PIN'
+                    : 'Set Cash Drawer PIN',
               ),
             ),
           ],
@@ -1209,14 +1211,15 @@ class _TimeSettingField extends StatelessWidget {
   }
 }
 
-class _SetRefundPinDialog extends StatefulWidget {
-  const _SetRefundPinDialog();
+class _SetCashDrawerPinDialog extends StatefulWidget {
+  const _SetCashDrawerPinDialog();
 
   @override
-  State<_SetRefundPinDialog> createState() => _SetRefundPinDialogState();
+  State<_SetCashDrawerPinDialog> createState() =>
+      _SetCashDrawerPinDialogState();
 }
 
-class _SetRefundPinDialogState extends State<_SetRefundPinDialog> {
+class _SetCashDrawerPinDialogState extends State<_SetCashDrawerPinDialog> {
   final _pinController = TextEditingController();
   final _confirmController = TextEditingController();
   String? _error;
@@ -1247,7 +1250,7 @@ class _SetRefundPinDialogState extends State<_SetRefundPinDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Set Refund PIN'),
+      title: const Text('Set Cash Drawer PIN'),
       content: SizedBox(
         width: 320,
         child: Column(
@@ -1255,7 +1258,7 @@ class _SetRefundPinDialogState extends State<_SetRefundPinDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'Cashiers will need this PIN to process any refund.',
+              'Staff will need this PIN to add cash, record expenses, or edit cash drawer entries.',
               style: TextStyle(color: AppColors.muted),
             ),
             const SizedBox(height: 16),

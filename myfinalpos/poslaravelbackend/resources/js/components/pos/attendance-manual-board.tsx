@@ -17,17 +17,16 @@ import {
 
 function punchButtonLabel(row: AttendanceRow): string {
     if (row.day_complete) return 'DONE';
-    if (row.next_action === 'clock_in') return 'IN';
-    if (row.next_action === 'clock_out') {
-        if ((row.punch_count ?? 0) === 1) return 'START BREAK';
-        return 'OUT';
-    }
-    return 'WAIT';
+    return row.is_clocked_in ? 'OUT' : 'IN';
 }
 
 function canPunch(row: AttendanceRow): boolean {
-    if (row.day_complete) return false;
-    return row.next_action === 'clock_in' || row.next_action === 'clock_out';
+    return !row.day_complete;
+}
+
+function punchAction(row: AttendanceRow): 'clock_in' | 'clock_out' | null {
+    if (row.day_complete) return null;
+    return row.is_clocked_in ? 'clock_out' : 'clock_in';
 }
 
 function resolvePhotoUrl(url: string | null | undefined): string | null {
@@ -37,37 +36,26 @@ function resolvePhotoUrl(url: string | null | undefined): string | null {
 }
 
 function selfieInUrl(row: AttendanceRow): string | null {
-    return resolvePhotoUrl(
-        row.afternoon_in_photo_url || row.morning_in_photo_url,
-    );
+    return resolvePhotoUrl(row.morning_in_photo_url);
 }
 
 function selfieOutUrl(row: AttendanceRow): string | null {
-    return resolvePhotoUrl(row.day_out_photo_url || row.lunch_out_photo_url);
+    return resolvePhotoUrl(row.day_out_photo_url);
 }
 
 function selfieInTime(row: AttendanceRow): string {
-    if (row.afternoon_in_at) {
-        return row.afternoon_in_display || '—';
-    }
     return row.morning_in_display || '—';
 }
 
 function selfieOutTime(row: AttendanceRow): string {
-    if (row.day_out_at) {
-        return row.day_out_display || '—';
-    }
-    return row.lunch_out_display || '—';
+    return row.day_out_display || '—';
 }
 
 function actionClass(label: string): string {
     switch (label) {
         case 'OUT':
             return 'bg-orange-500 hover:bg-orange-600 text-white';
-        case 'START BREAK':
-            return 'bg-sky-400 hover:bg-sky-500 text-white';
         case 'DONE':
-        case 'WAIT':
             return 'bg-muted text-muted-foreground';
         default:
             return 'bg-emerald-600 hover:bg-emerald-700 text-white';
@@ -78,12 +66,8 @@ function actionCaption(label: string): string {
     switch (label) {
         case 'OUT':
             return 'Time Out';
-        case 'START BREAK':
-            return 'Break';
         case 'DONE':
             return 'Done';
-        case 'WAIT':
-            return 'Wait';
         default:
             return 'Time In';
     }
@@ -151,11 +135,7 @@ export function AttendanceManualBoard({
             return;
         }
         if (!canPunch(row)) {
-            toast.error(
-                row.day_complete
-                    ? `${row.full_name} is done for today.`
-                    : `No punch available right now for ${row.full_name}.`,
-            );
+            toast.error(`${row.full_name} is done for today.`);
             return;
         }
         setTarget(row);
@@ -194,7 +174,7 @@ export function AttendanceManualBoard({
 
     const confirmPunch = async () => {
         if (!target || !preview) return;
-        const action = target.next_action;
+        const action = punchAction(target);
         if (action !== 'clock_in' && action !== 'clock_out') return;
 
         const base64 = preview.includes(',')
@@ -373,7 +353,6 @@ function ManualAttendanceRow({
     const outUrl = selfieOutUrl(row);
     const inTime = selfieInTime(row);
     const outTime = selfieOutTime(row);
-    const isBreak = label === 'START BREAK';
 
     return (
         <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap">
@@ -397,8 +376,7 @@ function ManualAttendanceRow({
                     disabled={!enabled}
                     onClick={onPunch}
                     className={cn(
-                        'inline-flex items-center justify-center rounded-full text-center text-xs font-extrabold leading-tight shadow-sm transition disabled:cursor-not-allowed',
-                        isBreak ? 'size-20 px-2' : 'size-16',
+                        'inline-flex size-16 items-center justify-center rounded-full text-center text-xs font-extrabold leading-tight shadow-sm transition disabled:cursor-not-allowed',
                         actionClass(label),
                     )}
                 >

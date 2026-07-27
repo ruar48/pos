@@ -109,7 +109,11 @@ export async function watchCashDrawer(
     );
 }
 
-export async function updateStartingCash(date: string, startingCash: number) {
+export async function updateStartingCash(
+    date: string,
+    startingCash: number,
+    cashDrawerPin: string,
+) {
     return laravelFetch<{ data: CashDrawerMutation }>(
         '/pos/cash-drawer/starting-cash',
         {
@@ -117,6 +121,7 @@ export async function updateStartingCash(date: string, startingCash: number) {
             body: JSON.stringify({
                 date,
                 starting_cash: startingCash,
+                cash_drawer_pin: cashDrawerPin,
             }),
         },
     );
@@ -126,12 +131,18 @@ export async function addCashAddition(
     date: string,
     amount: number,
     remarks: string,
+    cashDrawerPin: string,
 ) {
     return laravelFetch<{ data: CashDrawerMutation }>(
         '/pos/cash-drawer/cash-additions',
         {
             method: 'POST',
-            body: JSON.stringify({ date, amount, remarks }),
+            body: JSON.stringify({
+                date,
+                amount,
+                remarks,
+                cash_drawer_pin: cashDrawerPin,
+            }),
         },
     );
 }
@@ -140,20 +151,31 @@ export async function updateCashAddition(
     additionId: number,
     amount: number,
     remarks: string,
+    cashDrawerPin: string,
 ) {
     return laravelFetch<{ data: CashDrawerMutation }>(
         `/pos/cash-drawer/cash-additions/${additionId}`,
         {
             method: 'PUT',
-            body: JSON.stringify({ amount, remarks }),
+            body: JSON.stringify({
+                amount,
+                remarks,
+                cash_drawer_pin: cashDrawerPin,
+            }),
         },
     );
 }
 
-export async function deleteCashAddition(additionId: number) {
+export async function deleteCashAddition(
+    additionId: number,
+    cashDrawerPin: string,
+) {
     return laravelFetch<{ data: CashDrawerMutation }>(
         `/pos/cash-drawer/cash-additions/${additionId}`,
-        { method: 'DELETE' },
+        {
+            method: 'DELETE',
+            body: JSON.stringify({ cash_drawer_pin: cashDrawerPin }),
+        },
     );
 }
 
@@ -162,6 +184,7 @@ export async function addDrawerExpense(
     name: string,
     amount: number,
     paymentType: DrawerExpensePaymentType,
+    cashDrawerPin: string,
     seriesNo?: string,
 ) {
     return laravelFetch<{ data: CashDrawerMutation }>(
@@ -174,6 +197,7 @@ export async function addDrawerExpense(
                 amount,
                 payment_type: paymentType,
                 series_no: seriesNo?.trim() || null,
+                cash_drawer_pin: cashDrawerPin,
             }),
         },
     );
@@ -184,6 +208,7 @@ export async function updateDrawerExpense(
     name: string,
     amount: number,
     paymentType: DrawerExpensePaymentType,
+    cashDrawerPin: string,
     seriesNo?: string | null,
 ) {
     return laravelFetch<{ data: CashDrawerMutation }>(
@@ -195,15 +220,22 @@ export async function updateDrawerExpense(
                 amount,
                 payment_type: paymentType,
                 series_no: seriesNo?.trim() || null,
+                cash_drawer_pin: cashDrawerPin,
             }),
         },
     );
 }
 
-export async function deleteDrawerExpense(expenseId: number) {
+export async function deleteDrawerExpense(
+    expenseId: number,
+    cashDrawerPin: string,
+) {
     return laravelFetch<{ data: CashDrawerMutation }>(
         `/pos/cash-drawer/expenses/${expenseId}`,
-        { method: 'DELETE' },
+        {
+            method: 'DELETE',
+            body: JSON.stringify({ cash_drawer_pin: cashDrawerPin }),
+        },
     );
 }
 

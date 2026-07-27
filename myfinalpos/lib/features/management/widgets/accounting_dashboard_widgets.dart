@@ -237,10 +237,19 @@ class _SummaryCards extends StatelessWidget {
 
         final cards = [
           SummaryCard(
-            label: 'Net Sales',
+            label: 'Gross Sales',
+            value: formatMoney(currency, data.grossSales),
+            icon: Icons.receipt_long_outlined,
+            color: AppColors.blue,
+            subtitle: 'Before refunds and deductions',
+          ),
+          SummaryCard(
+            label: 'Net Sales After Refunds',
             value: formatMoney(currency, data.netSales),
             icon: Icons.payments_outlined,
-            subtitle: 'Gross ${formatMoney(currency, data.grossSales)}',
+            subtitle: data.refundedAmount > 0
+                ? 'Gross ${formatMoney(currency, data.grossSales)} less refunds'
+                : 'No refunds deducted',
           ),
           SummaryCard(
             label: 'VAT Collected',
@@ -263,14 +272,15 @@ class _SummaryCards extends StatelessWidget {
             color: AppColors.darkGreen,
             subtitle: '${data.orderCount} orders',
           ),
-          if (data.refundedAmount > 0)
-            SummaryCard(
-              label: 'Refunded',
-              value: formatMoney(currency, data.refundedAmount),
-              icon: Icons.undo_outlined,
-              color: AppColors.danger,
-              subtitle: '${data.refundCount} refunds',
-            ),
+          SummaryCard(
+            label: 'Refunds Deducted',
+            value: formatMoney(currency, data.refundedAmount),
+            icon: Icons.undo_outlined,
+            color: AppColors.danger,
+            subtitle: data.refundCount > 0
+                ? '${data.refundCount} refunds'
+                : 'No refunds in this period',
+          ),
         ];
 
         return Wrap(

@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/top_toast.dart';
 import '../../models/attendance_board.dart';
+import '../../models/attendance_status.dart';
+import '../../services/attendance_photo_cache.dart';
 import '../../services/pos_api.dart';
 import '../management/widgets/management_widgets.dart';
 import '../management/widgets/super_admin_widgets.dart';
@@ -37,6 +40,10 @@ class _AttendancePageState extends State<AttendancePage> {
   String? _error;
   String? _lastPunchSummary;
   String _searchQuery = '';
+  final Map<int, String> _pendingInPhotos = {};
+  final Map<int, String> _pendingOutPhotos = {};
+  final Map<int, DateTime> _pendingInTimes = {};
+  final Map<int, DateTime> _pendingOutTimes = {};
 
   int get _userId => widget.pageState.widget.currentUser.id;
   int get _branchId => widget.pageState.activeBranchId;
@@ -69,8 +76,10 @@ class _AttendancePageState extends State<AttendancePage> {
         branchId: _branchId,
       );
       if (!mounted) return;
+      final mergedRows = await _mergeBoardRows(board.rows);
+      if (!mounted) return;
       setState(() {
-        _boardRows = board.rows;
+        _boardRows = mergedRows;
         _schedule = board.schedule;
         _loading = false;
       });
@@ -115,9 +124,7 @@ class _AttendancePageState extends State<AttendancePage> {
   Future<void> _punchStaff({
     required int targetUserId,
     required String staffName,
-    required String? nextAction,
-    required int punchCount,
-    required bool dayComplete,
+    required String action,
     required int branchId,
   }) async {
     if (_submitting || !mounted) return;
@@ -127,21 +134,7 @@ class _AttendancePageState extends State<AttendancePage> {
       return;
     }
 
-    if (!attendanceCanPunch(dayComplete: dayComplete, nextAction: nextAction)) {
-      showAppTopError(
-        dayComplete
-            ? '$staffName is done for today.'
-            : 'No punch available right now for $staffName.',
-      );
-      return;
-    }
-
-    final action = nextAction!;
-    final actionLabel = attendancePunchButtonLabel(
-      dayComplete: dayComplete,
-      nextAction: nextAction,
-      punchCount: punchCount,
-    );
+    final actionLabel = action == 'clock_in' ? 'Time In' : 'Time Out';
 
     final selfie = await showAttendanceSelfieSheet(
       context,
@@ -156,7 +149,7 @@ class _AttendancePageState extends State<AttendancePage> {
     });
 
     try {
-      final clockResult = await _api.clockAttendance(
+      final result = await _api.clockAttendance(
         action: action,
         userId: targetUserId,
         actorUserId: _userId,
@@ -176,32 +169,52 @@ class _AttendancePageState extends State<AttendancePage> {
       );
 
       if (!mounted) return;
-      await _load();
 
-      final punctuality = clockResult.status?.punctualityLabel;
-      final lateSuffix =
-          action == 'clock_in' && clockResult.status?.isLate == true
-              ? ' · Late (${clockResult.status!.minutesLate}m)'
-              : action == 'clock_in' && punctuality != null
-                  ? ' · $punctuality'
-                  : '';
-      final summary = action == 'clock_in'
-          ? '$staffName · $actionLabel$lateSuffix'
-          : '$staffName · $actionLabel';
+      final photoUrl = result.photoUrl;
+      final punchedAt = DateTime.now();
+      final punchTime = action == 'clock_in'
+          ? (result.status?.clockInAt ?? punchedAt)
+          : (result.status?.clockOutAt ?? punchedAt);
+
+      await AttendancePhotoCache.saveTime(
+        date: _boardDate,
+        userId: targetUserId,
+        type: action == 'clock_in' ? 'in' : 'out',
+        at: punchTime,
+      );
+
+      if (action == 'clock_in') {
+        _pendingInTimes[targetUserId] = punchTime;
+      } else {
+        _pendingOutTimes[targetUserId] = punchTime;
+      }
+
+      if (photoUrl != null && photoUrl.isNotEmpty) {
+        await AttendancePhotoCache.save(
+          date: _boardDate,
+          userId: targetUserId,
+          type: action == 'clock_in' ? 'in' : 'out',
+          photoUrl: photoUrl,
+        );
+      }
+
+      setState(() {
+        _boardRows = _applyPunchResult(
+          rows: _boardRows,
+          userId: targetUserId,
+          action: action,
+          result: result,
+        );
+      });
+      await _load();
 
       setState(() {
         _submitting = false;
         _punchingUserId = null;
-        _lastPunchSummary = summary;
+        _lastPunchSummary = '$staffName · $actionLabel';
       });
 
-      if (action == 'clock_in' && clockResult.status?.isLate == true) {
-        showAppTopError(
-          'Clocked in late: $staffName (${clockResult.status!.minutesLate} min)',
-        );
-      } else {
-        showAppTopSuccess('$actionLabel · $staffName');
-      }
+      showAppTopSuccess('$actionLabel · $staffName');
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -212,13 +225,220 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
-  Future<void> _punchBoardRow(AttendanceBoardRow row) {
+  List<AttendanceBoardRow> _applyPunchResult({
+    required List<AttendanceBoardRow> rows,
+    required int userId,
+    required String action,
+    required AttendanceClockResult result,
+  }) {
+    final photoUrl = result.photoUrl;
+    final status = result.status;
+    final punchedAt = DateTime.now();
+
+    if (photoUrl != null && photoUrl.isNotEmpty) {
+      if (action == 'clock_in') {
+        _pendingInPhotos[userId] = photoUrl;
+      } else {
+        _pendingOutPhotos[userId] = photoUrl;
+      }
+    }
+
+    return rows.map((row) {
+      if (row.userId != userId) return attendanceNormalizeRow(row);
+
+      if (action == 'clock_in') {
+        final clockInAt = status?.clockInAt ?? punchedAt;
+        _pendingInTimes[userId] = clockInAt;
+        return attendanceNormalizeRow(
+          row.copyWith(
+            isClockedIn: true,
+            punchCount: row.punchCount + 1,
+            morningInPhotoUrl: photoUrl ?? row.morningInPhotoUrl,
+            morningInAt: clockInAt,
+            clockInAt: clockInAt,
+            nextAction: 'clock_out',
+            dayComplete: false,
+          ),
+        );
+      }
+
+      final clockOutAt = status?.clockOutAt ?? punchedAt;
+      _pendingOutTimes[userId] = clockOutAt;
+      final normalized = attendanceNormalizeRow(
+        row.copyWith(
+          isClockedIn: false,
+          punchCount: row.punchCount + 1,
+          dayOutPhotoUrl: photoUrl ?? row.dayOutPhotoUrl,
+          dayOutAt: clockOutAt,
+          clockOutAt: clockOutAt,
+          nextAction: null,
+          dayComplete: true,
+        ),
+      );
+      final minutes = attendanceDutyMinutes(normalized);
+      if (minutes != null && minutes > 0) {
+        unawaited(
+          AttendancePhotoCache.saveDuration(
+            date: _boardDate,
+            userId: userId,
+            minutes: minutes,
+          ),
+        );
+      }
+      return normalized;
+    }).toList();
+  }
+
+  Future<List<AttendanceBoardRow>> _mergeBoardRows(
+    List<AttendanceBoardRow> rows,
+  ) async {
+    final merged = <AttendanceBoardRow>[];
+
+    for (final row in rows) {
+      var patched = row;
+
+      final pendingIn = _pendingInPhotos[row.userId];
+      if (pendingIn != null &&
+          (row.morningInPhotoUrl == null || row.morningInPhotoUrl!.isEmpty)) {
+        patched = patched.copyWith(morningInPhotoUrl: pendingIn);
+      } else if (row.morningInPhotoUrl != null &&
+          row.morningInPhotoUrl!.isNotEmpty) {
+        _pendingInPhotos.remove(row.userId);
+        await AttendancePhotoCache.save(
+          date: _boardDate,
+          userId: row.userId,
+          type: 'in',
+          photoUrl: row.morningInPhotoUrl!,
+        );
+      } else {
+        final cachedIn = await AttendancePhotoCache.load(
+          date: _boardDate,
+          userId: row.userId,
+          type: 'in',
+        );
+        if (cachedIn != null) {
+          patched = patched.copyWith(morningInPhotoUrl: cachedIn);
+        }
+      }
+
+      final pendingOut = _pendingOutPhotos[row.userId];
+      if (pendingOut != null &&
+          (patched.dayOutPhotoUrl == null || patched.dayOutPhotoUrl!.isEmpty)) {
+        patched = patched.copyWith(dayOutPhotoUrl: pendingOut);
+      } else if (patched.dayOutPhotoUrl != null &&
+          patched.dayOutPhotoUrl!.isNotEmpty) {
+        _pendingOutPhotos.remove(row.userId);
+        await AttendancePhotoCache.save(
+          date: _boardDate,
+          userId: row.userId,
+          type: 'out',
+          photoUrl: patched.dayOutPhotoUrl!,
+        );
+      } else {
+        final cachedOut = await AttendancePhotoCache.load(
+          date: _boardDate,
+          userId: row.userId,
+          type: 'out',
+        );
+        if (cachedOut != null) {
+          patched = patched.copyWith(dayOutPhotoUrl: cachedOut);
+        }
+      }
+
+      patched = await _patchCachedPunchTimes(patched);
+
+      merged.add(attendanceNormalizeRow(patched));
+    }
+
+    return merged;
+  }
+
+  Future<AttendanceBoardRow> _patchCachedPunchTimes(AttendanceBoardRow row) async {
+    var patched = row;
+
+    final pendingIn = _pendingInTimes[row.userId];
+    final timeIn = row.morningInAt ?? row.clockInAt;
+    if (timeIn != null) {
+      await AttendancePhotoCache.saveTime(
+        date: _boardDate,
+        userId: row.userId,
+        type: 'in',
+        at: timeIn,
+      );
+    } else if (pendingIn != null) {
+      patched = patched.copyWith(morningInAt: pendingIn, clockInAt: pendingIn);
+    } else {
+      final cachedIn = await AttendancePhotoCache.loadTime(
+        date: _boardDate,
+        userId: row.userId,
+        type: 'in',
+      );
+      if (cachedIn != null) {
+        patched = patched.copyWith(morningInAt: cachedIn, clockInAt: cachedIn);
+      }
+    }
+
+    final pendingOut = _pendingOutTimes[row.userId];
+    final timeOut = patched.dayOutAt ?? patched.clockOutAt;
+    if (timeOut != null) {
+      await AttendancePhotoCache.saveTime(
+        date: _boardDate,
+        userId: row.userId,
+        type: 'out',
+        at: timeOut,
+      );
+    } else if (pendingOut != null) {
+      patched = patched.copyWith(dayOutAt: pendingOut, clockOutAt: pendingOut);
+    } else {
+      final cachedOut = await AttendancePhotoCache.loadTime(
+        date: _boardDate,
+        userId: row.userId,
+        type: 'out',
+      );
+      if (cachedOut != null) {
+        patched = patched.copyWith(dayOutAt: cachedOut, clockOutAt: cachedOut);
+      }
+    }
+
+    patched = attendanceWithDutyTotals(patched);
+    if (patched.totalMinutes > 0) {
+      await AttendancePhotoCache.saveDuration(
+        date: _boardDate,
+        userId: row.userId,
+        minutes: patched.totalMinutes,
+      );
+    } else {
+      final cachedDuration = await AttendancePhotoCache.loadDuration(
+        date: _boardDate,
+        userId: row.userId,
+      );
+      if (cachedDuration != null && cachedDuration > 0) {
+        patched = patched.copyWith(
+          totalMinutes: cachedDuration,
+          totalHoursLabel: formatDutyDuration(cachedDuration),
+        );
+      }
+    }
+
+    return patched;
+  }
+
+  Future<void> _timeInRow(AttendanceBoardRow row) {
     return _punchStaff(
       targetUserId: row.userId,
       staffName: row.fullName,
-      nextAction: row.nextAction,
-      punchCount: row.punchCount,
-      dayComplete: row.dayComplete,
+      action: 'clock_in',
+      branchId: (row.branchId != null && row.branchId! > 0)
+          ? row.branchId!
+          : _branchId,
+    );
+  }
+
+  Future<void> _timeOutRow(AttendanceBoardRow row) {
+    return _punchStaff(
+      targetUserId: row.userId,
+      staffName: row.fullName,
+      action: 'clock_out',
       branchId: (row.branchId != null && row.branchId! > 0)
           ? row.branchId!
           : _branchId,
@@ -244,7 +464,7 @@ class _AttendancePageState extends State<AttendancePage> {
       pageState: widget.pageState,
       activeSection: AppDrawerSection.attendance,
       title: 'Staff',
-      subtitle: 'Tap IN / OUT, take a selfie — no face recognition',
+      subtitle: 'Tap Time In or Time Out, then take a selfie',
       scrollBody: false,
       actions: [
         if (_canAddEmployee)
@@ -276,7 +496,8 @@ class _AttendancePageState extends State<AttendancePage> {
                   onSelectDate: _selectBoardDate,
                   onSearchChanged: (value) =>
                       setState(() => _searchQuery = value),
-                  onPunch: _punchBoardRow,
+                  onTimeIn: _timeInRow,
+                  onTimeOut: _timeOutRow,
                   onAddEmployee: _canAddEmployee ? _addEmployee : null,
                 ),
     );
@@ -296,7 +517,8 @@ class _AdminBoardView extends StatelessWidget {
     required this.onPickDate,
     required this.onSelectDate,
     required this.onSearchChanged,
-    required this.onPunch,
+    required this.onTimeIn,
+    required this.onTimeOut,
     this.onAddEmployee,
   });
 
@@ -311,7 +533,8 @@ class _AdminBoardView extends StatelessWidget {
   final VoidCallback onPickDate;
   final Future<void> Function(DateTime date) onSelectDate;
   final ValueChanged<String> onSearchChanged;
-  final Future<void> Function(AttendanceBoardRow) onPunch;
+  final Future<void> Function(AttendanceBoardRow) onTimeIn;
+  final Future<void> Function(AttendanceBoardRow) onTimeOut;
   final VoidCallback? onAddEmployee;
 
   @override
@@ -477,11 +700,11 @@ class _AdminBoardView extends StatelessWidget {
                             final row = filteredRows[index];
                             return AttendanceStaffCard(
                               row: row,
-                              schedule: schedule,
                               punchEnabled: clockEnabled,
                               punchBusy: submitting &&
                                   punchingUserId == row.userId,
-                              onPunch: () => onPunch(row),
+                              onTimeIn: () => onTimeIn(row),
+                              onTimeOut: () => onTimeOut(row),
                             );
                           },
                         ),

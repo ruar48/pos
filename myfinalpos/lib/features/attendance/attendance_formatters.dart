@@ -68,66 +68,183 @@ String? attendanceNextActionLabel(
   return null;
 }
 
-/// Primary button label for manual Time In / Out (matches past tablet UI).
+/// Primary button label: Time In / Time Out only (no break / late windows).
 String attendancePunchButtonLabel({
   required bool dayComplete,
-  required String? nextAction,
-  int punchCount = 0,
+  required bool isClockedIn,
 }) {
   if (dayComplete) return 'DONE';
-  if (nextAction == 'clock_in') return 'IN';
-  if (nextAction == 'clock_out') {
-    if (punchCount == 1) return 'START BREAK';
-    return 'OUT';
-  }
-  return 'WAIT';
+  return isClockedIn ? 'OUT' : 'IN';
 }
 
 bool attendanceCanPunch({
   required bool dayComplete,
-  required String? nextAction,
+  required bool isClockedIn,
 }) {
   if (dayComplete) return false;
-  return nextAction == 'clock_in' || nextAction == 'clock_out';
+  return true;
+}
+
+bool attendanceCanPunchRow(AttendanceBoardRow row, {required bool punchEnabled}) {
+  if (!punchEnabled) return false;
+  return !attendanceIsDayComplete(row);
+}
+
+String attendancePunchAction({
+  required bool dayComplete,
+  required bool isClockedIn,
+}) {
+  if (dayComplete) return '';
+  return isClockedIn ? 'clock_out' : 'clock_in';
 }
 
 String attendanceHoursLabel(String label) {
   return label
-      .replaceAll('hrs', 'hour')
-      .replaceAll('hr', 'hour')
-      .replaceAll('mins', 'minute')
-      .replaceAll('min', 'minute');
+      .replaceAll(RegExp(r'\bhrs\b'), 'hours')
+      .replaceAll(RegExp(r'\bhr\b'), 'hour')
+      .replaceAll(RegExp(r'\bmins\b'), 'minutes')
+      .replaceAll(RegExp(r'\bmin\b'), 'minute');
 }
 
-/// Latest “in” selfie for the past-system two-column display.
-String? attendanceSelfieInUrl(AttendanceBoardRow row) {
-  if (row.afternoonInPhotoUrl != null && row.afternoonInPhotoUrl!.isNotEmpty) {
-    return row.afternoonInPhotoUrl;
-  }
-  return row.morningInPhotoUrl;
+DateTime? attendanceTimeIn(AttendanceBoardRow row) =>
+    row.morningInAt ?? row.clockInAt;
+
+DateTime? attendanceTimeOut(AttendanceBoardRow row) =>
+    row.dayOutAt ?? row.clockOutAt;
+
+String formatDutyDuration(int minutes) {
+  final safeMinutes = minutes < 0 ? 0 : minutes;
+  final hours = safeMinutes ~/ 60;
+  final mins = safeMinutes % 60;
+  final hourLabel = hours == 1 ? 'hour' : 'hours';
+  final minLabel = mins == 1 ? 'minute' : 'minutes';
+
+  if (hours == 0 && mins == 0) return '0 hours 0 minutes';
+  if (hours == 0) return '$mins $minLabel';
+  if (mins == 0) return '$hours $hourLabel';
+  return '$hours $hourLabel $mins $minLabel';
 }
+
+String attendanceDutyHoursLabel(AttendanceBoardRow row) {
+  final timeIn = attendanceTimeIn(row);
+  final timeOut = attendanceTimeOut(row);
+
+  if (timeIn != null && timeOut != null) {
+    return formatDutyDuration(timeOut.difference(timeIn).inMinutes);
+  }
+
+  if (timeIn != null && attendanceIsClockedIn(row)) {
+    return '${formatDutyDuration(DateTime.now().difference(timeIn).inMinutes)} · on duty';
+  }
+
+  if (row.totalMinutes > 0) {
+    return formatDutyDuration(row.totalMinutes);
+  }
+
+  final backendLabel = row.totalHoursLabel.trim();
+  if (backendLabel.isNotEmpty && backendLabel != '0 hrs 0 mins') {
+    return attendanceHoursLabel(backendLabel);
+  }
+
+  return '0 hours 0 minutes';
+}
+
+int? attendanceDutyMinutes(AttendanceBoardRow row) {
+  final timeIn = attendanceTimeIn(row);
+  final timeOut = attendanceTimeOut(row);
+  if (timeIn != null && timeOut != null) {
+    return timeOut.difference(timeIn).inMinutes;
+  }
+  if (timeIn != null && attendanceIsClockedIn(row)) {
+    return DateTime.now().difference(timeIn).inMinutes;
+  }
+  if (row.totalMinutes > 0) return row.totalMinutes;
+  return null;
+}
+
+AttendanceBoardRow attendanceWithDutyTotals(AttendanceBoardRow row) {
+  final minutes = attendanceDutyMinutes(row);
+  if (minutes == null) return row;
+  return row.copyWith(
+    totalMinutes: minutes,
+    totalHoursLabel: formatDutyDuration(minutes),
+  );
+}
+
+String? attendanceSelfieInUrl(AttendanceBoardRow row) => row.morningInPhotoUrl;
 
 String attendanceSelfieInTime(AttendanceBoardRow row) {
-  if (row.afternoonInAt != null) {
-    return row.afternoonInDisplay ?? formatAttendanceIsoTime(row.afternoonInAt);
-  }
-  return row.morningInDisplay ??
-      formatAttendanceIsoTime(row.morningInAt ?? row.clockInAt);
+  final display = row.morningInDisplay;
+  if (display != null && display.isNotEmpty) return display;
+  return formatAttendanceIsoTime(row.morningInAt ?? row.clockInAt);
 }
 
-/// Latest “out” selfie for the past-system two-column display.
-String? attendanceSelfieOutUrl(AttendanceBoardRow row) {
-  if (row.dayOutPhotoUrl != null && row.dayOutPhotoUrl!.isNotEmpty) {
-    return row.dayOutPhotoUrl;
-  }
-  return row.lunchOutPhotoUrl;
+bool attendanceHasTimedIn(AttendanceBoardRow row) {
+  return row.morningInAt != null ||
+      row.clockInAt != null ||
+      (row.morningInPhotoUrl != null && row.morningInPhotoUrl!.isNotEmpty) ||
+      attendanceSelfieInTime(row) != '—' ||
+      row.isClockedIn;
 }
+
+bool attendanceHasTimedOut(AttendanceBoardRow row) {
+  return row.dayOutAt != null ||
+      row.clockOutAt != null ||
+      (row.dayOutPhotoUrl != null && row.dayOutPhotoUrl!.isNotEmpty) ||
+      attendanceSelfieOutTime(row) != '—';
+}
+
+bool attendanceIsDayComplete(AttendanceBoardRow row) {
+  return row.dayComplete || attendanceHasTimedOut(row);
+}
+
+bool attendanceIsClockedIn(AttendanceBoardRow row) {
+  if (attendanceIsDayComplete(row)) return false;
+  if (row.isClockedIn) return true;
+  return attendanceHasTimedIn(row);
+}
+
+bool attendanceCanTimeIn(AttendanceBoardRow row, {required bool punchEnabled}) {
+  if (!punchEnabled) return false;
+  if (attendanceIsDayComplete(row)) return false;
+  return !attendanceIsClockedIn(row);
+}
+
+bool attendanceCanTimeOut(AttendanceBoardRow row, {required bool punchEnabled}) {
+  if (!punchEnabled) return false;
+  if (attendanceIsDayComplete(row)) return false;
+  return attendanceIsClockedIn(row);
+}
+
+AttendanceBoardRow attendanceNormalizeRow(AttendanceBoardRow row) {
+  final dayComplete = attendanceIsDayComplete(row);
+  final isClockedIn = attendanceIsClockedIn(row);
+  return attendanceWithDutyTotals(
+    row.copyWith(
+      dayComplete: dayComplete,
+      isClockedIn: isClockedIn,
+      nextAction: dayComplete ? null : (isClockedIn ? 'clock_out' : 'clock_in'),
+    ),
+  );
+}
+
+bool attendanceHasSelfieIn(AttendanceBoardRow row) {
+  return attendanceSelfieInTime(row) != '—' ||
+      attendanceSelfieInUrl(row) != null ||
+      attendanceHasTimedIn(row);
+}
+
+String? attendanceSelfieOutUrl(AttendanceBoardRow row) => row.dayOutPhotoUrl;
 
 String attendanceSelfieOutTime(AttendanceBoardRow row) {
-  if (row.dayOutAt != null) {
-    return row.dayOutDisplay ?? formatAttendanceIsoTime(row.dayOutAt);
-  }
-  return row.lunchOutDisplay ?? formatAttendanceIsoTime(row.lunchOutAt);
+  final display = row.dayOutDisplay;
+  if (display != null && display.isNotEmpty) return display;
+  return formatAttendanceIsoTime(row.dayOutAt ?? row.clockOutAt);
+}
+
+bool attendanceHasSelfieOut(AttendanceBoardRow row) {
+  return attendanceSelfieOutTime(row) != '—' ||
+      attendanceSelfieOutUrl(row) != null;
 }
 
 List<DateTime> attendanceRecentDates({int days = 7}) {

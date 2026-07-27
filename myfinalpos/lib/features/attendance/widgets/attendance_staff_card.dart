@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../config/api_config.dart';
@@ -20,36 +22,32 @@ class AttendanceStaffCard extends StatelessWidget {
   const AttendanceStaffCard({
     super.key,
     required this.row,
-    this.schedule,
     this.punchEnabled = true,
     this.punchBusy = false,
-    this.onPunch,
+    this.onTimeIn,
+    this.onTimeOut,
   });
 
   final AttendanceBoardRow row;
-  final AttendanceSchedule? schedule;
   final bool punchEnabled;
   final bool punchBusy;
-  final VoidCallback? onPunch;
+  final VoidCallback? onTimeIn;
+  final VoidCallback? onTimeOut;
 
   @override
   Widget build(BuildContext context) {
-    final buttonLabel = attendancePunchButtonLabel(
-      dayComplete: row.dayComplete,
-      nextAction: row.nextAction,
-      punchCount: row.punchCount,
-    );
-    final canPunch = punchEnabled &&
-        onPunch != null &&
-        attendanceCanPunch(
-          dayComplete: row.dayComplete,
-          nextAction: row.nextAction,
-        );
     final inUrl = resolveAttendancePhotoUrl(attendanceSelfieInUrl(row));
     final outUrl = resolveAttendancePhotoUrl(attendanceSelfieOutUrl(row));
     final inTime = attendanceSelfieInTime(row);
     final outTime = attendanceSelfieOutTime(row);
-    final actionColor = _actionColor(buttonLabel);
+    final hasIn = attendanceHasSelfieIn(row);
+    final hasOut = attendanceHasSelfieOut(row);
+    final isClockedIn = attendanceIsClockedIn(row);
+    final isDayDone = attendanceIsDayComplete(row);
+    final canTimeIn = attendanceCanTimeIn(row, punchEnabled: punchEnabled);
+    final canTimeOut = attendanceCanTimeOut(row, punchEnabled: punchEnabled);
+    final inDone = isClockedIn || isDayDone;
+    final outDone = isDayDone;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -77,27 +75,29 @@ class AttendanceStaffCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  attendanceHoursLabel(row.totalHoursLabel),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.muted,
-                  ),
-                ),
+                _DutyHoursText(row: row),
               ],
             ),
           ),
-          _PhotoCircle(url: inUrl, emptyIcon: Icons.login_rounded),
-          const SizedBox(width: 8),
-          _PhotoCircle(url: outUrl, emptyIcon: Icons.logout_rounded),
-          const SizedBox(width: 12),
           _ActionCircle(
-            label: buttonLabel,
-            caption: _actionCaption(buttonLabel),
-            color: actionColor,
-            enabled: canPunch,
+            label: 'IN',
+            caption: 'Time In',
+            color: AppColors.green,
+            enabled: canTimeIn,
+            done: inDone && !canTimeIn,
             busy: punchBusy,
-            onTap: canPunch && !punchBusy ? onPunch : null,
+            onTap: canTimeIn && !punchBusy && onTimeIn != null ? onTimeIn : null,
+          ),
+          const SizedBox(width: 8),
+          _ActionCircle(
+            label: 'OUT',
+            caption: 'Time Out',
+            color: AppColors.orange,
+            enabled: canTimeOut,
+            done: outDone && !canTimeOut,
+            busy: punchBusy,
+            onTap:
+                canTimeOut && !punchBusy && onTimeOut != null ? onTimeOut : null,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -109,6 +109,9 @@ class AttendanceStaffCard extends StatelessWidget {
                     label: 'Selfie-In',
                     time: inTime,
                     color: const Color(0xFF0D9488),
+                    photoUrl: inUrl,
+                    hasRecord: hasIn,
+                    emptyIcon: Icons.login_rounded,
                   ),
                 ),
                 Expanded(
@@ -116,6 +119,9 @@ class AttendanceStaffCard extends StatelessWidget {
                     label: 'Selfie-Out',
                     time: outTime,
                     color: AppColors.orange,
+                    photoUrl: outUrl,
+                    hasRecord: hasOut,
+                    emptyIcon: Icons.logout_rounded,
                   ),
                 ),
               ],
@@ -125,65 +131,56 @@ class AttendanceStaffCard extends StatelessWidget {
       ),
     );
   }
-
-  Color _actionColor(String label) {
-    switch (label) {
-      case 'OUT':
-        return AppColors.orange;
-      case 'START BREAK':
-        return const Color(0xFF38BDF8);
-      case 'DONE':
-      case 'WAIT':
-        return AppColors.border;
-      default:
-        return AppColors.green;
-    }
-  }
-
-  String _actionCaption(String label) {
-    switch (label) {
-      case 'OUT':
-        return 'Time Out';
-      case 'START BREAK':
-        return 'Break';
-      case 'DONE':
-        return 'Done';
-      case 'WAIT':
-        return 'Wait';
-      default:
-        return 'Time In';
-    }
-  }
 }
 
-class _PhotoCircle extends StatelessWidget {
-  const _PhotoCircle({required this.url, required this.emptyIcon});
+class _DutyHoursText extends StatefulWidget {
+  const _DutyHoursText({required this.row});
 
-  final String? url;
-  final IconData emptyIcon;
+  final AttendanceBoardRow row;
+
+  @override
+  State<_DutyHoursText> createState() => _DutyHoursTextState();
+}
+
+class _DutyHoursTextState extends State<_DutyHoursText> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DutyHoursText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncTimer();
+  }
+
+  void _syncTimer() {
+    _timer?.cancel();
+    final timeIn = attendanceTimeIn(widget.row);
+    if (timeIn != null && attendanceIsClockedIn(widget.row)) {
+      _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 52,
-      height: 52,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: AppColors.softSurface,
-        border: Border.all(color: AppColors.border, width: 2),
+    return Text(
+      attendanceDutyHoursLabel(widget.row),
+      style: const TextStyle(
+        fontSize: 12,
+        color: AppColors.muted,
       ),
-      clipBehavior: Clip.antiAlias,
-      child: url != null
-          ? Image.network(
-              url!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Icon(
-                emptyIcon,
-                color: AppColors.muted,
-                size: 22,
-              ),
-            )
-          : Icon(emptyIcon, color: AppColors.muted, size: 22),
     );
   }
 }
@@ -194,6 +191,7 @@ class _ActionCircle extends StatelessWidget {
     required this.caption,
     required this.color,
     required this.enabled,
+    required this.done,
     required this.busy,
     this.onTap,
   });
@@ -202,45 +200,62 @@ class _ActionCircle extends StatelessWidget {
   final String caption;
   final Color color;
   final bool enabled;
+  final bool done;
   final bool busy;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final isBreak = label == 'START BREAK';
+    final background = enabled
+        ? color
+        : done
+            ? color.withValues(alpha: 0.14)
+            : AppColors.softSurface;
+    final borderColor = enabled
+        ? color
+        : done
+            ? color.withValues(alpha: 0.45)
+            : AppColors.border;
+    final textColor = enabled
+        ? Colors.white
+        : done
+            ? color
+            : AppColors.muted;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Material(
-          color: enabled ? color : AppColors.softSurface,
+          color: background,
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: onTap,
-            child: SizedBox(
-              width: isBreak ? 88 : 72,
-              height: isBreak ? 88 : 72,
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: borderColor, width: 2),
+              ),
               child: Center(
                 child: busy
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 22,
                         height: 22,
                         child: CircularProgressIndicator(
                           strokeWidth: 2.4,
-                          color: Colors.white,
+                          color: enabled ? Colors.white : color,
                         ),
                       )
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: Text(
-                          label,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: enabled ? Colors.white : AppColors.muted,
-                            fontWeight: FontWeight.w800,
-                            fontSize: isBreak ? 11 : 14,
-                            height: 1.1,
-                          ),
+                    : Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          height: 1.1,
                         ),
                       ),
               ),
@@ -253,7 +268,7 @@ class _ActionCircle extends StatelessWidget {
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
-            color: enabled ? color : AppColors.muted,
+            color: enabled || done ? color : AppColors.muted,
           ),
         ),
       ],
@@ -266,15 +281,22 @@ class _SelfieMeta extends StatelessWidget {
     required this.label,
     required this.time,
     required this.color,
+    required this.hasRecord,
+    required this.emptyIcon,
+    this.photoUrl,
   });
 
   final String label;
   final String time;
   final Color color;
+  final bool hasRecord;
+  final IconData emptyIcon;
+  final String? photoUrl;
 
   @override
   Widget build(BuildContext context) {
     final hasTime = time != '—';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -284,7 +306,7 @@ class _SelfieMeta extends StatelessWidget {
               width: 8,
               height: 8,
               decoration: BoxDecoration(
-                color: hasTime ? color : AppColors.border,
+                color: hasRecord ? color : AppColors.border,
                 shape: BoxShape.circle,
               ),
             ),
@@ -298,6 +320,13 @@ class _SelfieMeta extends StatelessWidget {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 6),
+        _SelfieThumb(
+          photoUrl: photoUrl,
+          hasRecord: hasRecord,
+          emptyIcon: emptyIcon,
+          accent: color,
         ),
         const SizedBox(height: 4),
         Text(
@@ -318,6 +347,52 @@ class _SelfieMeta extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _SelfieThumb extends StatelessWidget {
+  const _SelfieThumb({
+    required this.photoUrl,
+    required this.hasRecord,
+    required this.emptyIcon,
+    required this.accent,
+  });
+
+  final String? photoUrl;
+  final bool hasRecord;
+  final IconData emptyIcon;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.softSurface,
+        border: Border.all(
+          color: hasRecord ? accent.withValues(alpha: 0.45) : AppColors.border,
+          width: 2,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: photoUrl != null
+          ? Image.network(
+              photoUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Icon(
+                emptyIcon,
+                color: AppColors.muted,
+                size: 22,
+              ),
+            )
+          : Icon(
+              emptyIcon,
+              color: hasRecord ? accent : AppColors.muted,
+              size: 22,
+            ),
     );
   }
 }

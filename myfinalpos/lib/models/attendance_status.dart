@@ -55,9 +55,14 @@ class AttendanceStatus {
   }
 
   factory AttendanceStatus.fromJson(Map<String, dynamic> json) {
+    final morningIn = parseServerDateTime(json['morning_in_at']?.toString());
+    final dayOut = parseServerDateTime(json['day_out_at']?.toString());
+    final clockIn = parseServerDateTime(json['clock_in_at']?.toString()) ?? morningIn;
+    final clockOut = parseServerDateTime(json['clock_out_at']?.toString()) ?? dayOut;
+
     return AttendanceStatus(
-      clockInAt: parseServerDateTime(json['clock_in_at']?.toString()),
-      clockOutAt: parseServerDateTime(json['clock_out_at']?.toString()),
+      clockInAt: clockIn,
+      clockOutAt: clockOut,
       totalMinutes: toInt(json['total_minutes']),
       totalHoursLabel: (json['total_hours_label'] ?? '0 hrs 0 mins').toString(),
       isClockedIn: json['is_clocked_in'] == true ||
@@ -91,6 +96,7 @@ class AttendanceClockResult {
     required this.withinGeofence,
     this.distanceKm,
     this.geofenceSkipped = false,
+    this.photoUrl,
     this.status,
   });
 
@@ -99,6 +105,7 @@ class AttendanceClockResult {
   final bool withinGeofence;
   final double? distanceKm;
   final bool geofenceSkipped;
+  final String? photoUrl;
   final AttendanceStatus? status;
 
   factory AttendanceClockResult.fromJson(Map<String, dynamic> json) {
@@ -110,6 +117,7 @@ class AttendanceClockResult {
       distanceKm:
           json['distance_km'] == null ? null : toDouble(json['distance_km']),
       geofenceSkipped: json['geofence_skipped'] == true,
+      photoUrl: json['photo_url']?.toString(),
       status: json['status'] is Map<String, dynamic>
           ? AttendanceStatus.fromJson(json['status'] as Map<String, dynamic>)
           : null,

@@ -70,6 +70,16 @@ class TransactionItem {
   }
 
   bool get hasRefundableQuantity => quantity - refundedQuantity > 0;
+
+  int get remainingQuantity =>
+      quantity - refundedQuantity < 0 ? 0 : quantity - refundedQuantity;
+
+  double get refundedAmount {
+    if (refundedQuantity <= 0 || quantity <= 0) return 0;
+    return subtotal * refundedQuantity / quantity;
+  }
+
+  double get remainingSubtotal => subtotal - refundedAmount;
 }
 
 class TransactionRecord {
@@ -173,6 +183,16 @@ class TransactionRecord {
   String get receiptNumber => 'RCP-${id.toString().padLeft(6, '0')}';
 
   double get grandTotal => totalAmount;
+
+  bool get hasRefunds => refundedAmount > 0.009;
+
+  double get remainingTotal {
+    final remaining = grandTotal - refundedAmount;
+    return remaining < 0 ? 0 : remaining;
+  }
+
+  List<TransactionItem> get refundedItems =>
+      items.where((item) => item.refundedQuantity > 0).toList(growable: false);
 
   int get totalQuantity =>
       items.fold<int>(0, (sum, item) => sum + item.quantity);

@@ -8,7 +8,6 @@ import '../management/widgets/management_widgets.dart';
 import '../pos/pages/pos_home_page.dart';
 import '../pos/widgets/app_drawer_section.dart';
 import '../transactions/refund_dialog.dart';
-import '../transactions/refund_pin_dialog.dart';
 import '../transactions/transaction_model.dart';
 import '../transactions/transaction_service.dart';
 import 'transactions_report_models.dart';
@@ -214,6 +213,7 @@ class _TransactionsReportContentState extends State<TransactionsReportContent>
 
     final result = await showDialog<RefundDialogResult>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => RefundDialog(
         title: 'Refund Order',
         transactionId: row.id,
@@ -224,16 +224,11 @@ class _TransactionsReportContentState extends State<TransactionsReportContent>
     if (result == null) return;
     if (!mounted) return;
 
-    final pin = await showRefundPinDialog(context);
-    if (pin == null) return;
-    if (!mounted) return;
-
     final apiResult = await _refundService.processRefund(
       orderId: row.id,
       reason: result.reason,
       refundType: result.refundType,
       items: result.items,
-      refundPin: pin,
       actorUserId: widget.pageState.widget.currentUser.id,
     );
 

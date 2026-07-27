@@ -86,7 +86,6 @@ class TransactionService {
     required String reason,
     required String refundType,
     required List<RefundItemRequest> items,
-    required String refundPin,
     int? actorUserId,
   }) async {
     final uri = _buildUri('process_refund.php');
@@ -98,7 +97,6 @@ class TransactionService {
         'refund_type': refundType,
         'reason': reason,
         'items': items.map((item) => item.toJson()).toList(),
-        'refund_pin': refundPin,
         'actor_user_id': actorUserId,
       }),
     );
@@ -121,7 +119,7 @@ class TransactionService {
     ReceiptStoreConfig? store,
   }) async {
     try {
-      final receipt = _buildReceiptData(
+      final receipt = buildReceiptData(
         transaction,
         store: store,
       );
@@ -152,7 +150,7 @@ class TransactionService {
     }
   }
 
-  ReceiptData _buildReceiptData(
+  ReceiptData buildReceiptData(
     TransactionRecord transaction, {
     ReceiptStoreConfig? store,
   }) {
@@ -194,6 +192,16 @@ class TransactionService {
       isVatRegistered: transaction.vat > 0,
       dateTime: transaction.createdAt,
       store: store ?? const ReceiptStoreConfig(),
+      refundedAmount: transaction.refundedAmount,
+      refundItems: transaction.refundedItems
+          .map(
+            (item) => ReceiptRefundLineItem(
+              name: item.productName,
+              quantity: item.refundedQuantity,
+              amount: item.refundedAmount,
+            ),
+          )
+          .toList(),
     );
   }
 

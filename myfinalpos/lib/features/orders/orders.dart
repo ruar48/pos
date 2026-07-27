@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,8 +10,9 @@ import '../../core/utils/top_toast.dart';
 import '../pos/pages/pos_home_page.dart';
 import '../pos/widgets/app_drawer_section.dart';
 import '../pos/widgets/app_shell_scaffold.dart';
+import '../receipt/receipt_preview_widget.dart';
+import '../receipt/receipt_printer.dart';
 import '../transactions/refund_dialog.dart';
-import '../transactions/refund_pin_dialog.dart';
 import '../transactions/transaction_model.dart';
 import '../transactions/transaction_payment_summary.dart';
 import '../transactions/transaction_service.dart';
@@ -36,13 +39,27 @@ class OrdersPage extends StatelessWidget {
   }
 }
 
-class TabletOrdersScreen extends StatelessWidget {
+class TabletOrdersScreen extends StatefulWidget {
   const TabletOrdersScreen({super.key, required this.pageState});
 
   final PosHomePageState pageState;
 
   @override
+  State<TabletOrdersScreen> createState() => _TabletOrdersScreenState();
+}
+
+class _TabletOrdersScreenState extends State<TabletOrdersScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(widget.pageState.refreshAppSettings());
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final pageState = widget.pageState;
     return AppShellScaffold(
       pageState: pageState,
       activeSection: AppDrawerSection.orders,
@@ -637,6 +654,7 @@ class _OrderDetailPane extends StatelessWidget {
   ) async {
     final result = await showDialog<RefundDialogResult>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => RefundDialog(
         title: 'Refund Order',
         transactionId: transaction.id,
@@ -647,15 +665,10 @@ class _OrderDetailPane extends StatelessWidget {
     if (result == null) return;
     if (!context.mounted) return;
 
-    final pin = await showRefundPinDialog(context);
-    if (pin == null) return;
-    if (!context.mounted) return;
-
     final apiResult = await state.refundSelectedTransaction(
       reason: result.reason,
       refundType: result.refundType,
       items: result.items,
-      refundPin: pin,
     );
 
     if (!context.mounted) return;
@@ -856,6 +869,8 @@ class _OrderDetailPane extends StatelessWidget {
     TransactionRecord transaction,
     TransactionState state,
   ) {
+    final canRefund = transaction.items.any((item) => item.hasRefundableQuantity);
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 540;
@@ -870,18 +885,20 @@ class _OrderDetailPane extends StatelessWidget {
                     onTap: () => _showReceiptPreviewDialog(
                       context,
                       state,
-                      transaction,
+                      state.selectedTransaction ?? transaction,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  _ThemedActionButton(
-                    label: 'Refund',
-                    icon: Icons.undo,
-                    backgroundColor: AppColors.danger,
-                    onTap: () async {
-                      await _handleRefund(context, state, transaction);
-                    },
-                  ),
+                  if (canRefund) ...[
+                    const SizedBox(height: 10),
+                    _ThemedActionButton(
+                      label: 'Refund',
+                      icon: Icons.undo,
+                      backgroundColor: AppColors.danger,
+                      onTap: () async {
+                        await _handleRefund(context, state, transaction);
+                      },
+                    ),
+                  ],
                 ],
               )
             : Row(
@@ -894,21 +911,23 @@ class _OrderDetailPane extends StatelessWidget {
                       onTap: () => _showReceiptPreviewDialog(
                         context,
                         state,
-                        transaction,
+                        state.selectedTransaction ?? transaction,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _ThemedActionButton(
-                      label: 'Refund',
-                      icon: Icons.undo,
-                      backgroundColor: AppColors.danger,
-                      onTap: () async {
-                        await _handleRefund(context, state, transaction);
-                      },
+                  if (canRefund) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _ThemedActionButton(
+                        label: 'Refund',
+                        icon: Icons.undo,
+                        backgroundColor: AppColors.danger,
+                        onTap: () async {
+                          await _handleRefund(context, state, transaction);
+                        },
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               );
       },
@@ -920,13 +939,20 @@ class _OrderDetailPane extends StatelessWidget {
     TransactionState state,
     TransactionRecord transaction,
   ) async {
+    final store = await ReceiptStoreConfig.loadFromPrefs();
+    final receipt = state.service.buildReceiptData(
+      transaction,
+      store: store,
+    );
+    if (!context.mounted) return;
+
     await showDialog(
       context: context,
       builder: (_) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760, maxHeight: 760),
+          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 760),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -935,13 +961,27 @@ class _OrderDetailPane extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                 child: Row(
                   children: [
-                    const Expanded(
-                      child: Text(
-                        'Receipt Preview',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Receipt Preview',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            transaction.receiptNumber,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.muted,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     IconButton(
@@ -956,134 +996,13 @@ class _OrderDetailPane extends StatelessWidget {
                 child: SingleChildScrollView(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'MyFinal POS',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Retail Tablet Receipt',
-                        style:
-                            TextStyle(fontSize: 14, color: AppColors.muted),
-                      ),
-                      const SizedBox(height: 24),
-                      _ReceiptDetailRow(
-                        label: 'Receipt',
-                        value: transaction.receiptNumber,
-                      ),
-                      _ReceiptDetailRow(
-                        label: 'Date',
-                        value: transaction.displayDate,
-                      ),
-                      _ReceiptDetailRow(
-                        label: 'Cashier',
-                        value: transaction.cashierName,
-                      ),
-                      _ReceiptDetailRow(
-                        label: 'Payment',
-                        value: transaction.paymentSummaryLabel,
-                      ),
-                      if (transaction.isSplitPayment) ...[
-                        const SizedBox(height: 8),
-                        ...transaction.splitPayments.map(
-                          (payment) => Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: Text(
-                              '${payment.paymentMethod} · ${formatMoney('₱', payment.amount)}'
-                              '${payment.reference.trim().isEmpty ? '' : ' · Ref ${payment.reference.trim()}'}',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.muted,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      const Divider(color: AppColors.border),
-                      const SizedBox(height: 16),
-                      ...transaction.items.map(
-                        (item) => Padding(
-                          padding: const EdgeInsets.only(bottom: 18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      '${item.productName} x${item.quantity}',
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                  Text(
-                                    '₱${item.subtotal.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                item.sku.isNotEmpty
-                                    ? item.sku
-                                    : 'Variant not available',
-                                style:
-                                    const TextStyle(color: AppColors.muted),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Divider(color: AppColors.border),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Subtotal',
-                              style: TextStyle(fontSize: 16)),
-                          Text(
-                            '₱${transaction.subtotal.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Total',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                              )),
-                          Text(
-                            '₱${transaction.grandTotal.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                  child: Center(
+                    child: ThermalReceiptPreview(
+                      receipt: receipt,
+                      usePrintLayout: true,
+                      compact: true,
+                      fitToContent: true,
+                    ),
                   ),
                 ),
               ),
@@ -1142,39 +1061,6 @@ class _OrderDetailPane extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ReceiptDetailRow extends StatelessWidget {
-  const _ReceiptDetailRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
       ),
     );
   }

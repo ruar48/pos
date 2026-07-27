@@ -59,6 +59,7 @@ class AttendanceBoardRow {
     this.nextActionNote,
     this.dayComplete = false,
     this.dayType = 'none',
+    this.totalMinutes = 0,
     this.totalHoursLabel = '0 hrs 0 mins',
     this.isClockedIn = false,
     this.punctualityStatus,
@@ -89,6 +90,7 @@ class AttendanceBoardRow {
   final String? nextActionNote;
   final bool dayComplete;
   final String dayType;
+  final int totalMinutes;
   final String totalHoursLabel;
   final bool isClockedIn;
   final String? punctualityStatus;
@@ -111,6 +113,70 @@ class AttendanceBoardRow {
       default:
         return 'Not in yet';
     }
+  }
+
+  AttendanceBoardRow copyWith({
+    int? userId,
+    String? fullName,
+    String? role,
+    String? branchName,
+    int? branchId,
+    DateTime? clockInAt,
+    DateTime? clockOutAt,
+    DateTime? morningInAt,
+    DateTime? lunchOutAt,
+    DateTime? afternoonInAt,
+    DateTime? dayOutAt,
+    String? morningInDisplay,
+    String? lunchOutDisplay,
+    String? afternoonInDisplay,
+    String? dayOutDisplay,
+    String? morningInPhotoUrl,
+    String? lunchOutPhotoUrl,
+    String? afternoonInPhotoUrl,
+    String? dayOutPhotoUrl,
+    int? punchCount,
+    String? nextAction,
+    String? nextActionNote,
+    bool? dayComplete,
+    String? dayType,
+    int? totalMinutes,
+    String? totalHoursLabel,
+    bool? isClockedIn,
+    String? punctualityStatus,
+    bool? isMorningAbsent,
+  }) {
+    return AttendanceBoardRow(
+      userId: userId ?? this.userId,
+      fullName: fullName ?? this.fullName,
+      role: role ?? this.role,
+      branchName: branchName ?? this.branchName,
+      branchId: branchId ?? this.branchId,
+      clockInAt: clockInAt ?? this.clockInAt,
+      clockOutAt: clockOutAt ?? this.clockOutAt,
+      morningInAt: morningInAt ?? this.morningInAt,
+      lunchOutAt: lunchOutAt ?? this.lunchOutAt,
+      afternoonInAt: afternoonInAt ?? this.afternoonInAt,
+      dayOutAt: dayOutAt ?? this.dayOutAt,
+      morningInDisplay: morningInDisplay ?? this.morningInDisplay,
+      lunchOutDisplay: lunchOutDisplay ?? this.lunchOutDisplay,
+      afternoonInDisplay: afternoonInDisplay ?? this.afternoonInDisplay,
+      dayOutDisplay: dayOutDisplay ?? this.dayOutDisplay,
+      morningInPhotoUrl: morningInPhotoUrl ?? this.morningInPhotoUrl,
+      lunchOutPhotoUrl: lunchOutPhotoUrl ?? this.lunchOutPhotoUrl,
+      afternoonInPhotoUrl: afternoonInPhotoUrl ?? this.afternoonInPhotoUrl,
+      dayOutPhotoUrl: dayOutPhotoUrl ?? this.dayOutPhotoUrl,
+      punchCount: punchCount ?? this.punchCount,
+      nextAction: nextAction ?? this.nextAction,
+      nextActionNote: nextActionNote ?? this.nextActionNote,
+      dayComplete: dayComplete ?? this.dayComplete,
+      dayType: dayType ?? this.dayType,
+      totalMinutes: totalMinutes ?? this.totalMinutes,
+      totalHoursLabel: totalHoursLabel ?? this.totalHoursLabel,
+      isClockedIn: isClockedIn ?? this.isClockedIn,
+      punctualityStatus: punctualityStatus ?? this.punctualityStatus,
+      isMorningAbsent: isMorningAbsent ?? this.isMorningAbsent,
+    );
   }
 
   factory AttendanceBoardRow.fromJson(Map<String, dynamic> json) {
@@ -143,6 +209,7 @@ class AttendanceBoardRow {
           json['day_complete'].toString() == '1' ||
           json['day_complete'].toString() == 'true',
       dayType: (json['day_type'] ?? 'none').toString(),
+      totalMinutes: toInt(json['total_minutes']),
       totalHoursLabel: (json['total_hours_label'] ?? '0 hrs 0 mins').toString(),
       isClockedIn: json['is_clocked_in'] == true ||
           json['is_clocked_in'].toString() == '1' ||

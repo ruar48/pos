@@ -1716,7 +1716,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     AppSettingsModel value, {
     ReceiptStoreConfig? receiptStore,
     int? defaultBranchId,
-    String? refundPin,
+    String? cashDrawerPin,
   }) async {
     final receiptPayload =
         receiptStore != null ? await receiptStore.toJson() : null;
@@ -1725,7 +1725,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       receiptStore: receiptPayload,
       defaultBranchId: defaultBranchId,
       actorUserId: widget.currentUser.id,
-      refundPin: refundPin,
+      cashDrawerPin: cashDrawerPin,
     );
     if (!mounted) return;
     final host = saved.printerHost.trim();
@@ -1945,6 +1945,19 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   }
 
   Future<void> refreshProductCatalog() => _reloadProductCatalog();
+
+  /// Pull latest store settings from the server (cash drawer PIN, loyalty, etc.).
+  Future<void> refreshAppSettings() async {
+    if (isOfflineMode) return;
+    try {
+      final remote = await api.fetchSettings();
+      if (!mounted) return;
+      await _applyRemoteSettings(remote);
+      _settingsSyncRevision = remote.settingsRevision;
+    } catch (_) {
+      // Best-effort; cash drawer still validates PIN on the server.
+    }
+  }
 
   Future<void> syncProductCatalog(BuildContext context) async {
     if (_catalogSyncInFlight || isLoadingProducts) {
