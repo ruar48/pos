@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/top_toast.dart';
 import '../../models/attendance_board.dart';
-import '../../models/attendance_status.dart';
 import '../../services/pos_api.dart';
 import '../management/widgets/management_widgets.dart';
 import '../management/widgets/super_admin_widgets.dart';
@@ -29,7 +28,6 @@ class _AttendancePageState extends State<AttendancePage> {
   final _api = const PosApi();
   final _searchController = TextEditingController();
 
-  AttendanceStatus? _status;
   AttendanceSchedule? _schedule;
   List<AttendanceBoardRow> _boardRows = [];
   String _boardDate = toIsoDate(DateTime.now());
@@ -65,25 +63,15 @@ class _AttendancePageState extends State<AttendancePage> {
       _error = null;
     });
     try {
-      if (_canManageBoard) {
-        final board = await _api.fetchAttendanceBoard(
-          actorUserId: _userId,
-          date: _boardDate,
-          branchId: _branchId,
-        );
-        if (!mounted) return;
-        setState(() {
-          _boardRows = board.rows;
-          _schedule = board.schedule;
-          _loading = false;
-        });
-        return;
-      }
-
-      final status = await _api.fetchAttendanceStatus(userId: _userId);
+      final board = await _api.fetchAttendanceBoard(
+        actorUserId: _userId,
+        date: _boardDate,
+        branchId: _branchId,
+      );
       if (!mounted) return;
       setState(() {
-        _status = status;
+        _boardRows = board.rows;
+        _schedule = board.schedule;
         _loading = false;
       });
     } catch (e) {
@@ -134,7 +122,7 @@ class _AttendancePageState extends State<AttendancePage> {
   }) async {
     if (_submitting || !mounted) return;
 
-    if (!isTodayIso(_boardDate) && _canManageBoard) {
+    if (!isTodayIso(_boardDate)) {
       showAppTopError('Switch to today’s date to punch attendance.');
       return;
     }
@@ -237,19 +225,6 @@ class _AttendancePageState extends State<AttendancePage> {
     );
   }
 
-  Future<void> _punchSelf() {
-    final status = _status;
-    final user = widget.pageState.widget.currentUser;
-    return _punchStaff(
-      targetUserId: user.id,
-      staffName: user.fullName,
-      nextAction: status?.nextAction,
-      punchCount: 0,
-      dayComplete: status?.dayComplete ?? false,
-      branchId: _branchId,
-    );
-  }
-
   List<AttendanceBoardRow> get _filteredRows {
     final q = _searchQuery.trim().toLowerCase();
     if (q.isEmpty) return _boardRows;
@@ -265,15 +240,11 @@ class _AttendancePageState extends State<AttendancePage> {
 
   @override
   Widget build(BuildContext context) {
-    final status = _status;
-
     return ManagementPageShell(
       pageState: widget.pageState,
       activeSection: AppDrawerSection.attendance,
       title: 'Staff',
-      subtitle: _canManageBoard
-          ? 'Tap IN / OUT, take a selfie — no face recognition'
-          : 'Tap IN / OUT, then take a selfie to record your punch',
+      subtitle: 'Tap IN / OUT, take a selfie — no face recognition',
       scrollBody: false,
       actions: [
         if (_canAddEmployee)
@@ -292,30 +263,22 @@ class _AttendancePageState extends State<AttendancePage> {
           ? const Center(child: CircularProgressIndicator(color: AppColors.green))
           : _error != null
               ? _ErrorState(message: _error!, onRetry: _load)
-              : _canManageBoard
-                  ? _AdminBoardView(
-                      boardDate: _boardDate,
-                      schedule: _schedule,
-                      filteredRows: _filteredRows,
-                      searchController: _searchController,
-                      submitting: _submitting,
-                      punchingUserId: _punchingUserId,
-                      clockEnabled: isTodayIso(_boardDate),
-                      lastPunchSummary: _lastPunchSummary,
-                      onPickDate: _pickBoardDate,
-                      onSelectDate: _selectBoardDate,
-                      onSearchChanged: (value) =>
-                          setState(() => _searchQuery = value),
-                      onPunch: _punchBoardRow,
-                      onAddEmployee: _canAddEmployee ? _addEmployee : null,
-                    )
-                  : _SelfPunchView(
-                      status: status,
-                      submitting: _submitting,
-                      lastPunchSummary: _lastPunchSummary,
-                      staffName: widget.pageState.widget.currentUser.fullName,
-                      onPunch: _punchSelf,
-                    ),
+              : _AdminBoardView(
+                  boardDate: _boardDate,
+                  schedule: _schedule,
+                  filteredRows: _filteredRows,
+                  searchController: _searchController,
+                  submitting: _submitting,
+                  punchingUserId: _punchingUserId,
+                  clockEnabled: isTodayIso(_boardDate),
+                  lastPunchSummary: _lastPunchSummary,
+                  onPickDate: _pickBoardDate,
+                  onSelectDate: _selectBoardDate,
+                  onSearchChanged: (value) =>
+                      setState(() => _searchQuery = value),
+                  onPunch: _punchBoardRow,
+                  onAddEmployee: _canAddEmployee ? _addEmployee : null,
+                ),
     );
   }
 }
@@ -528,119 +491,6 @@ class _AdminBoardView extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SelfPunchView extends StatelessWidget {
-  const _SelfPunchView({
-    required this.status,
-    required this.submitting,
-    required this.lastPunchSummary,
-    required this.staffName,
-    required this.onPunch,
-  });
-
-  final AttendanceStatus? status;
-  final bool submitting;
-  final String? lastPunchSummary;
-  final String staffName;
-  final VoidCallback onPunch;
-
-  @override
-  Widget build(BuildContext context) {
-    final dayComplete = status?.dayComplete ?? false;
-    final nextAction = status?.nextAction;
-    final canPunch = attendanceCanPunch(
-      dayComplete: dayComplete,
-      nextAction: nextAction,
-    );
-    final buttonLabel = attendancePunchButtonLabel(
-      dayComplete: dayComplete,
-      nextAction: nextAction,
-    );
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                staffName,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.text,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                status?.totalHoursLabel ?? '0 hrs 0 mins',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.muted),
-              ),
-              if (status?.nextActionNote != null &&
-                  status!.nextActionNote!.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(
-                  status!.nextActionNote!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, color: AppColors.muted),
-                ),
-              ],
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 52,
-                child: FilledButton(
-                  onPressed: canPunch && !submitting ? onPunch : null,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.green,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: AppColors.softSurface,
-                    disabledForegroundColor: AppColors.muted,
-                  ),
-                  child: submitting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          buttonLabel,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                            fontSize: 16,
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Tap the button, take a selfie, and your time is recorded.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-            ],
-          ),
-        ),
-        if (lastPunchSummary != null) ...[
-          const SizedBox(height: 16),
-          _LastPunchCard(summary: lastPunchSummary!),
-        ],
-      ],
     );
   }
 }

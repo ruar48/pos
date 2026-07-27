@@ -84,14 +84,14 @@ class ReportService
                 COALESCE(SUM(o.total_amount), 0) AS gross_sales,
                 COALESCE(SUM({$netExpr}), 0) AS net_sales,
                 COALESCE(SUM(o.vat), 0) AS vat_collected,
-                COALESCE(SUM(COALESCE(o.discount_amount, 0) + COALESCE(o.coupon_discount, 0) + COALESCE(o.loyalty_discount, 0)), 0) AS total_discounts,
-                COALESCE(SUM({$refundAmount}), 0) AS refunded_amount
+                COALESCE(SUM(COALESCE(o.discount_amount, 0) + COALESCE(o.coupon_discount, 0) + COALESCE(o.loyalty_discount, 0)), 0) AS total_discounts
              FROM orders o
              {$refundJoin}
              WHERE o.created_at BETWEEN :start AND :end",
             ['start' => $startDt, 'end' => $endDt],
         );
 
+        $refundedAmount = $this->refundsProcessedInRange($startDt, $endDt);
         $profit = $this->profitTotals($startDt, $endDt);
         $orderCount = (int) ($row->order_count ?? 0);
         $netSales = round((float) ($row->net_sales ?? 0), 2);
@@ -104,7 +104,15 @@ class ReportService
                 ? "SELECT payment_method, COUNT(*) AS order_count, COALESCE(SUM(net_total), 0) AS net_total
                    FROM (
                       SELECT COALESCE(NULLIF(TRIM(COALESCE(op.payment_method, o.payment_method)), ''), 'Cash') AS payment_method,
-                             COALESCE(op.amount, (o.total_amount - {$refundAmount})) AS net_total
+                             CASE
+                                 WHEN op.amount IS NOT NULL THEN op.amount - (
+                                     CASE WHEN o.total_amount > 0
+                                         THEN (op.amount / o.total_amount) * {$refundAmount}
+                                         ELSE 0
+                                     END
+                                 )
+                                 ELSE (o.total_amount - {$refundAmount})
+                             END AS net_total
                       FROM orders o
                       {$refundJoin}
                       LEFT JOIN order_payments op ON op.order_id = o.id
@@ -146,7 +154,7 @@ class ReportService
             'vat_gross' => round((float) ($row->vat_collected ?? 0), 2),
             'tax_rate' => PosHelpers::taxRate(),
             'total_discounts' => round((float) ($row->total_discounts ?? 0), 2),
-            'refunded_amount' => round((float) ($row->refunded_amount ?? 0), 2),
+            'refunded_amount' => round($refundedAmount, 2),
             'average_order_value' => $orderCount > 0 ? round($netSales / $orderCount, 2) : 0,
             'item_subtotal' => $itemSubtotal,
             'net_merchandise' => $netMerchandise,
@@ -579,7 +587,15 @@ class ReportService
                           COALESCE(SUM(net_total), 0) AS net_total
                    FROM (
                       SELECT COALESCE(NULLIF(TRIM(COALESCE(op.payment_method, o.payment_method)), ''), 'Cash') AS payment_method,
-                             COALESCE(op.amount, (o.total_amount - {$refundAmount})) AS net_total
+                             CASE
+                                 WHEN op.amount IS NOT NULL THEN op.amount - (
+                                     CASE WHEN o.total_amount > 0
+                                         THEN (op.amount / o.total_amount) * {$refundAmount}
+                                         ELSE 0
+                                     END
+                                 )
+                                 ELSE (o.total_amount - {$refundAmount})
+                             END AS net_total
                       FROM orders o
                       {$refundJoin}
                       LEFT JOIN order_payments op ON op.order_id = o.id
@@ -875,6 +891,28 @@ class ReportService
         return PosHelpers::tableExists('refunds')
             ? 'LEFT JOIN (SELECT order_id, SUM(amount) AS refunded_amount FROM refunds GROUP BY order_id) rf ON rf.order_id = o.id'
             : '';
+    }
+
+    /**
+     * Refunds actually processed within the range, keyed by the refund's own
+     * created_at — matches the Dashboard's "Total Refunds" tile so the two
+     * screens agree even when a refund is issued on a different day than the
+     * original order.
+     */
+    private function refundsProcessedInRange(string $startDt, string $endDt): float
+    {
+        if (! PosHelpers::tableExists('refunds')) {
+            return 0.0;
+        }
+
+        $row = DB::selectOne(
+            'SELECT COALESCE(SUM(amount), 0) AS refunded_amount
+             FROM refunds
+             WHERE created_at BETWEEN :start AND :end',
+            ['start' => $startDt, 'end' => $endDt],
+        );
+
+        return (float) ($row->refunded_amount ?? 0);
     }
 
     private function refundAmountExpr(): string

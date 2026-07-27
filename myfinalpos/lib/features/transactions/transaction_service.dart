@@ -86,6 +86,7 @@ class TransactionService {
     required String reason,
     required String refundType,
     required List<RefundItemRequest> items,
+    required String refundPin,
     int? actorUserId,
   }) async {
     final uri = _buildUri('process_refund.php');
@@ -97,6 +98,7 @@ class TransactionService {
         'refund_type': refundType,
         'reason': reason,
         'items': items.map((item) => item.toJson()).toList(),
+        'refund_pin': refundPin,
         'actor_user_id': actorUserId,
       }),
     );

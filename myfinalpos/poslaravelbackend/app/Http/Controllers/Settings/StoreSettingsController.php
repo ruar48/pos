@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Services\Pos\AppSettingsService;
 use App\Support\PosHelpers;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -78,6 +79,13 @@ class StoreSettingsController extends Controller
                 'message' => 'Store settings saved',
                 'settings' => $saved,
             ]);
+        } catch (HttpResponseException $e) {
+            throw $e;
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,

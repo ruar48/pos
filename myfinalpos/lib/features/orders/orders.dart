@@ -9,6 +9,7 @@ import '../pos/pages/pos_home_page.dart';
 import '../pos/widgets/app_drawer_section.dart';
 import '../pos/widgets/app_shell_scaffold.dart';
 import '../transactions/refund_dialog.dart';
+import '../transactions/refund_pin_dialog.dart';
 import '../transactions/transaction_model.dart';
 import '../transactions/transaction_payment_summary.dart';
 import '../transactions/transaction_service.dart';
@@ -644,11 +645,17 @@ class _OrderDetailPane extends StatelessWidget {
       ),
     );
     if (result == null) return;
+    if (!context.mounted) return;
+
+    final pin = await showRefundPinDialog(context);
+    if (pin == null) return;
+    if (!context.mounted) return;
 
     final apiResult = await state.refundSelectedTransaction(
       reason: result.reason,
       refundType: result.refundType,
       items: result.items,
+      refundPin: pin,
     );
 
     if (!context.mounted) return;

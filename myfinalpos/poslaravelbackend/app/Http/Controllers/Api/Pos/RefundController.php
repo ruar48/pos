@@ -61,6 +61,11 @@ class RefundController extends Controller
             return $this->posError('action must be refund or return', 400);
         }
 
+        $refundPin = trim((string) ($body['refund_pin'] ?? ''));
+        if (! PosHelpers::verifyRefundPin($refundPin)) {
+            return $this->posError('Invalid or missing refund PIN', 403);
+        }
+
         PosApiLogger::info('refunds.create.start', [
             'order_id' => $orderId,
             'refund_type' => $refundType,

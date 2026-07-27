@@ -13,6 +13,7 @@ import {
     Receipt,
     Save,
     Shield,
+    ShieldCheck,
     Store,
     Upload,
     User,
@@ -21,6 +22,13 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { ThermalReceiptPreview } from '@/components/thermal-receipt-preview';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -191,6 +199,15 @@ export default function StoreSettingsPage() {
     });
     const [saving, setSaving] = useState(false);
     const logoInputRef = useRef<HTMLInputElement>(null);
+    const isAdmin = account?.role === 'admin';
+    // Tracks the last persisted settings (not the live draft in `form`) so
+    // the PIN dialog never silently saves unrelated unsaved form edits.
+    const [savedSettings, setSavedSettings] = useState<StoreSettings>(initial);
+    const [pinDialogOpen, setPinDialogOpen] = useState(false);
+    const [pinValue, setPinValue] = useState('');
+    const [pinConfirmValue, setPinConfirmValue] = useState('');
+    const [pinError, setPinError] = useState<string | null>(null);
+    const [savingPin, setSavingPin] = useState(false);
 
     const update = <K extends keyof StoreSettings>(
         key: K,
@@ -238,6 +255,7 @@ export default function StoreSettingsPage() {
         try {
             const saved = await saveStoreSettings(form);
             setForm(saved);
+            setSavedSettings(saved);
             toast.success('Settings saved');
         } catch (e) {
             toast.error(
@@ -245,6 +263,42 @@ export default function StoreSettingsPage() {
             );
         } finally {
             setSaving(false);
+        }
+    };
+
+    const openPinDialog = () => {
+        setPinValue('');
+        setPinConfirmValue('');
+        setPinError(null);
+        setPinDialogOpen(true);
+    };
+
+    const handleSetPin = async () => {
+        if (!/^\d{4,6}$/.test(pinValue)) {
+            setPinError('PIN must be 4 to 6 digits.');
+            return;
+        }
+        if (pinValue !== pinConfirmValue) {
+            setPinError('PINs do not match.');
+            return;
+        }
+
+        setSavingPin(true);
+        try {
+            const saved = await saveStoreSettings({
+                ...savedSettings,
+                refund_pin: pinValue,
+            });
+            setForm((prev) => ({ ...prev, has_refund_pin: saved.has_refund_pin }));
+            setSavedSettings(saved);
+            setPinDialogOpen(false);
+            toast.success('Refund PIN updated');
+        } catch (e) {
+            setPinError(
+                e instanceof Error ? e.message : 'Could not save PIN',
+            );
+        } finally {
+            setSavingPin(false);
         }
     };
 
@@ -502,6 +556,36 @@ export default function StoreSettingsPage() {
                         </SelectContent>
                     </Select>
                 </div>
+            </SettingsSection>
+
+            <SettingsSection
+                title="Security"
+                subtitle="Require a PIN to approve refunds"
+                icon={Shield}
+            >
+                <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-secondary/20 px-4 py-3">
+                    <ShieldCheck
+                        className={`mt-0.5 size-5 shrink-0 ${
+                            form.has_refund_pin
+                                ? 'text-primary'
+                                : 'text-muted-foreground'
+                        }`}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                        {form.has_refund_pin
+                            ? 'Refund PIN is set. Cashiers need this PIN to process a refund.'
+                            : 'No refund PIN set yet. Refunds cannot be processed until you set one.'}
+                    </p>
+                </div>
+                {isAdmin ? (
+                    <Button type="button" variant="outline" onClick={openPinDialog}>
+                        {form.has_refund_pin ? 'Change Refund PIN' : 'Set Refund PIN'}
+                    </Button>
+                ) : (
+                    <p className="text-xs text-muted-foreground">
+                        Only an admin can set or change the refund PIN.
+                    </p>
+                )}
             </SettingsSection>
 
             <SettingsSection
@@ -831,6 +915,77 @@ export default function StoreSettingsPage() {
                     </div>
                 </aside>
             </div>
+
+            <Dialog
+                open={pinDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open && !savingPin) setPinDialogOpen(false);
+                }}
+            >
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {form.has_refund_pin
+                                ? 'Change Refund PIN'
+                                : 'Set Refund PIN'}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                        Cashiers will need this PIN to process any refund.
+                    </p>
+                    <div className="grid gap-2">
+                        <Label>New PIN (4-6 digits)</Label>
+                        <Input
+                            type="password"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={pinValue}
+                            onChange={(e) =>
+                                setPinValue(
+                                    e.target.value.replace(/\D/g, ''),
+                                )
+                            }
+                        />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>Confirm PIN</Label>
+                        <Input
+                            type="password"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={pinConfirmValue}
+                            onChange={(e) =>
+                                setPinConfirmValue(
+                                    e.target.value.replace(/\D/g, ''),
+                                )
+                            }
+                        />
+                    </div>
+                    {pinError && (
+                        <p className="text-sm text-destructive">{pinError}</p>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            disabled={savingPin}
+                            onClick={() => setPinDialogOpen(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            disabled={savingPin}
+                            onClick={() => void handleSetPin()}
+                        >
+                            {savingPin ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : null}
+                            Save PIN
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

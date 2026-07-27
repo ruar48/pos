@@ -10,6 +10,7 @@ import '../../models/refund_item_request.dart';
 import '../../core/utils/top_toast.dart';
 import '../receipt/receipt_printer.dart';
 import 'refund_dialog.dart';
+import 'refund_pin_dialog.dart';
 import 'transaction_details_widget.dart';
 import 'transaction_model.dart';
 import 'transaction_service.dart';
@@ -151,6 +152,7 @@ class TransactionState extends ChangeNotifier {
     required String reason,
     required String refundType,
     required List<RefundItemRequest> items,
+    required String refundPin,
   }) async {
     final transaction = selectedTransaction;
     if (transaction == null) {
@@ -165,6 +167,7 @@ class TransactionState extends ChangeNotifier {
       reason: reason,
       refundType: refundType,
       items: items,
+      refundPin: refundPin,
       actorUserId: actorUserId,
     );
 
@@ -296,11 +299,16 @@ class _TransactionDetailArea extends StatelessWidget {
           ),
         );
         if (result == null) return;
+        if (!context.mounted) return;
+
+        final pin = await showRefundPinDialog(context);
+        if (pin == null) return;
 
         final apiResult = await state.refundSelectedTransaction(
           reason: result.reason,
           refundType: result.refundType,
           items: result.items,
+          refundPin: pin,
         );
 
         if (context.mounted) {

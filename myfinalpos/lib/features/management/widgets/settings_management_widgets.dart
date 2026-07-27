@@ -44,7 +44,6 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
   late TextEditingController storeSubtitleController;
   late TextEditingController storeAddressController;
   late TextEditingController storeAddressLine2Controller;
-  late TextEditingController logoTextController;
   late TextEditingController tinController;
   late TextEditingController taxStatusController;
   late TextEditingController posTerminalController;
@@ -54,6 +53,7 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
   String? logoImagePath;
   late int selectedBranchId;
   bool saving = false;
+  bool settingRefundPin = false;
 
   @override
   void initState() {
@@ -89,7 +89,6 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
         TextEditingController(text: receiptStore.addressLine1);
     storeAddressLine2Controller =
         TextEditingController(text: receiptStore.addressLine2);
-    logoTextController = TextEditingController(text: receiptStore.logoText);
     tinController = TextEditingController(text: receiptStore.tin);
     taxStatusController = TextEditingController(text: receiptStore.taxStatus);
     posTerminalController =
@@ -106,7 +105,7 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
 
   ReceiptStoreConfig _draftReceiptStore() {
     return ReceiptStoreConfig(
-      logoText: logoTextController.text.trim(),
+      logoText: receiptStore.logoText,
       logoImagePath: logoImagePath,
       storeName: storeNameController.text.trim(),
       storeSubtitle: storeSubtitleController.text.trim(),
@@ -220,7 +219,6 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
     storeSubtitleController.dispose();
     storeAddressController.dispose();
     storeAddressLine2Controller.dispose();
-    logoTextController.dispose();
     tinController.dispose();
     taxStatusController.dispose();
     posTerminalController.dispose();
@@ -277,6 +275,27 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
       showTopError(context, error.toString());
     } finally {
       if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> _setRefundPin() async {
+    final pin = await showDialog<String>(
+      context: context,
+      builder: (_) => const _SetRefundPinDialog(),
+    );
+    if (pin == null) return;
+
+    setState(() => settingRefundPin = true);
+    try {
+      await widget.pageState.updateSettings(settings, refundPin: pin);
+      if (!mounted) return;
+      setState(() => settings = widget.pageState.settings);
+      showTopSuccess(context, 'Refund PIN updated');
+    } catch (error) {
+      if (!mounted) return;
+      showTopError(context, error.toString());
+    } finally {
+      if (mounted) setState(() => settingRefundPin = false);
     }
   }
 
@@ -426,16 +445,6 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: logoTextController,
-              onChanged: (_) => _refreshPreview(),
-              decoration: const InputDecoration(
-                labelText: 'Logo banner text',
-                hintText: '[ Farm & Tractor ]',
-                prefixIcon: Icon(Icons.badge_outlined),
-              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -596,6 +605,48 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
                 },
               ),
             ],
+          ],
+        ),
+        const SizedBox(height: 16),
+        _SettingsSection(
+          title: 'Security',
+          subtitle: 'Require a PIN to approve refunds',
+          icon: Icons.lock_outline,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  settings.hasRefundPin
+                      ? Icons.verified_user_outlined
+                      : Icons.warning_amber_outlined,
+                  color: settings.hasRefundPin
+                      ? AppColors.green
+                      : AppColors.amber,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    settings.hasRefundPin
+                        ? 'Refund PIN is set. Cashiers need this PIN to process a refund.'
+                        : 'No refund PIN set yet. Refunds cannot be processed until you set one.',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: settingRefundPin ? null : _setRefundPin,
+              icon: settingRefundPin
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.pin_outlined),
+              label: Text(
+                settings.hasRefundPin ? 'Change Refund PIN' : 'Set Refund PIN',
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -1154,6 +1205,109 @@ class _TimeSettingField extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
+    );
+  }
+}
+
+class _SetRefundPinDialog extends StatefulWidget {
+  const _SetRefundPinDialog();
+
+  @override
+  State<_SetRefundPinDialog> createState() => _SetRefundPinDialogState();
+}
+
+class _SetRefundPinDialogState extends State<_SetRefundPinDialog> {
+  final _pinController = TextEditingController();
+  final _confirmController = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _pinController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final pin = _pinController.text.trim();
+    final confirm = _confirmController.text.trim();
+
+    if (!RegExp(r'^\d{4,6}$').hasMatch(pin)) {
+      setState(() => _error = 'PIN must be 4 to 6 digits.');
+      return;
+    }
+    if (pin != confirm) {
+      setState(() => _error = 'PINs do not match.');
+      return;
+    }
+
+    Navigator.pop(context, pin);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Set Refund PIN'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Cashiers will need this PIN to process any refund.',
+              style: TextStyle(color: AppColors.muted),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _pinController,
+              autofocus: true,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              decoration: const InputDecoration(
+                labelText: 'New PIN (4-6 digits)',
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _confirmController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              decoration: const InputDecoration(
+                labelText: 'Confirm PIN',
+                counterText: '',
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Save PIN'),
+        ),
+      ],
     );
   }
 }

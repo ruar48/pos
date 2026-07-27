@@ -630,12 +630,20 @@ class CashDrawerService
                  FROM (
                     SELECT
                         LOWER(COALESCE(op.payment_method, o.payment_method, '')) AS payment_method,
-                        COALESCE(op.amount, {$netExpr}) AS amount
+                        CASE
+                            WHEN op.amount IS NOT NULL THEN op.amount - (
+                                CASE WHEN o.total_amount > 0
+                                    THEN (op.amount / o.total_amount) * {$refundAmount}
+                                    ELSE 0
+                                END
+                            )
+                            ELSE {$netExpr}
+                        END AS amount
                     FROM orders o
                     {$refundJoin}
                     LEFT JOIN order_payments op ON op.order_id = o.id
                     WHERE o.created_at BETWEEN :start AND :end
-                      AND LOWER(COALESCE(o.status, '')) = 'completed'
+                      AND LOWER(COALESCE(o.status, '')) IN ('completed', 'partial_refund', 'refunded')
                  ) sales_lines",
                 ['start' => $startDt, 'end' => $endDt],
             );
@@ -668,7 +676,7 @@ class CashDrawerService
                  FROM orders o
                  {$refundJoin}
                  WHERE o.created_at BETWEEN :start AND :end
-                   AND LOWER(COALESCE(o.status, '')) = 'completed'",
+                   AND LOWER(COALESCE(o.status, '')) IN ('completed', 'partial_refund', 'refunded')",
                 ['start' => $startDt, 'end' => $endDt],
             );
         }

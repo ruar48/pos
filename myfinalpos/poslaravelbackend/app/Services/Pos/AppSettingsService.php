@@ -142,6 +142,9 @@ class AppSettingsService
         if (PosHelpers::columnExists('app_settings', 'low_stock_email_recipients')) {
             $columns[] = 'low_stock_email_recipients';
         }
+        if (PosHelpers::columnExists('app_settings', 'refund_pin_hash')) {
+            $columns[] = 'refund_pin_hash';
+        }
 
         $row = DB::selectOne(
             'SELECT '.implode(', ', $columns).' FROM app_settings ORDER BY id ASC LIMIT 1',
@@ -378,6 +381,22 @@ class AppSettingsService
             ]);
         }
 
+        if (
+            PosHelpers::columnExists('app_settings', 'refund_pin_hash')
+            && array_key_exists('refund_pin', $input)
+            && trim((string) $input['refund_pin']) !== ''
+        ) {
+            PosHelpers::requireAdminActor($actorUserId);
+            $pin = trim((string) $input['refund_pin']);
+            if (preg_match('/^\d{4,6}$/', $pin) !== 1) {
+                throw new \RuntimeException('Refund PIN must be 4 to 6 digits.');
+            }
+            DB::table('app_settings')->where('id', 1)->update([
+                'refund_pin_hash' => password_hash($pin, PASSWORD_DEFAULT),
+                'updated_by' => $actorUserId,
+            ]);
+        }
+
         PosHelpers::insertAuditLog(
             $actorUserId,
             'update',
@@ -443,6 +462,7 @@ class AppSettingsService
             'attendance_timeout_start' => '16:30',
             'low_stock_email_enabled' => true,
             'low_stock_email_recipients' => '',
+            'has_refund_pin' => false,
         ];
 
         $payload['settings_revision'] = AppSettingsRevision::current();
@@ -508,6 +528,7 @@ class AppSettingsService
             'low_stock_email_recipients' => trim(
                 (string) ($data['low_stock_email_recipients'] ?? $defaults['low_stock_email_recipients']),
             ),
+            'has_refund_pin' => trim((string) ($data['refund_pin_hash'] ?? '')) !== '',
         ];
 
         foreach ($this->attendanceSessionColumns() as $column) {

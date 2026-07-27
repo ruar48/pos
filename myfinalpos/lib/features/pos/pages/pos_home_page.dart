@@ -1716,6 +1716,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     AppSettingsModel value, {
     ReceiptStoreConfig? receiptStore,
     int? defaultBranchId,
+    String? refundPin,
   }) async {
     final receiptPayload =
         receiptStore != null ? await receiptStore.toJson() : null;
@@ -1724,6 +1725,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       receiptStore: receiptPayload,
       defaultBranchId: defaultBranchId,
       actorUserId: widget.currentUser.id,
+      refundPin: refundPin,
     );
     if (!mounted) return;
     final host = saved.printerHost.trim();
