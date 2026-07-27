@@ -109,6 +109,16 @@ export async function watchCashDrawer(
     );
 }
 
+export async function verifyCashDrawerPin(cashDrawerPin: string) {
+    return laravelFetch<{ data: { verified: boolean } }>(
+        '/pos/cash-drawer/verify-pin',
+        {
+            method: 'POST',
+            body: JSON.stringify({ cash_drawer_pin: cashDrawerPin }),
+        },
+    );
+}
+
 export async function updateStartingCash(
     date: string,
     startingCash: number,

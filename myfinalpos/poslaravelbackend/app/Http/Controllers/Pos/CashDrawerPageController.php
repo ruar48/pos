@@ -25,12 +25,18 @@ class CashDrawerPageController extends Controller
 
         return Inertia::render('pos/cash-drawer', [
             'businessDayResetHour' => BusinessDay::resetHour(),
+            'hasCashDrawerPin' => (bool) ($settings['has_cash_drawer_pin'] ?? false),
             'printSettings' => [
                 'currency_symbol' => (string) ($settings['currency_symbol'] ?? 'PHP'),
                 'double_print_receipt' => (bool) ($settings['double_print_receipt'] ?? false),
                 'receipt_store' => $settings['receipt_store'] ?? [],
             ],
         ]);
+    }
+
+    public function verifyPin(Request $request): JsonResponse
+    {
+        return $this->jsonResponse(fn () => $this->cashDrawer->verifyPin($request));
     }
 
     public function summary(Request $request): JsonResponse

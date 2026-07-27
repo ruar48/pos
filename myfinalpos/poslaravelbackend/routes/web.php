@@ -75,6 +75,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/pos/reports/audit-trail', [ReportsPageController::class, 'auditTrail'])->name('pos.reports.audit-trail');
     Route::get('/pos/reports/attendance-punctuality', [ReportsPageController::class, 'attendancePunctuality'])->name('pos.reports.attendance-punctuality');
     Route::get('/pos/cash-drawer', [CashDrawerPageController::class, 'index'])->name('pos.cash-drawer');
+    Route::post('/pos/cash-drawer/verify-pin', [CashDrawerPageController::class, 'verifyPin'])->name('pos.cash-drawer.verify-pin');
     Route::get('/pos/cash-drawer/summary', [CashDrawerPageController::class, 'summary'])->name('pos.cash-drawer.summary');
     Route::get('/pos/cash-drawer/watch', [CashDrawerPageController::class, 'watch'])->name('pos.cash-drawer.watch');
     Route::patch('/pos/cash-drawer/starting-cash', [CashDrawerPageController::class, 'updateStartingCash'])->name('pos.cash-drawer.starting-cash');

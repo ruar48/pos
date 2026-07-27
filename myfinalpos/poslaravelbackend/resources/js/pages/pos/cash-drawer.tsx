@@ -4,6 +4,7 @@ import {
     Calendar,
     Download,
     Loader2,
+    Lock,
     Pencil,
     Plus,
     Printer,
@@ -40,6 +41,7 @@ import {
     updateDrawerExpense,
     watchCashDrawer,
     updateStartingCash,
+    verifyCashDrawerPin,
     type CashAddition,
     type CashDrawerData,
     type CashDrawerMutation,
@@ -212,6 +214,7 @@ type ExpensePrintSettings = {
 
 type PageProps = {
     businessDayResetHour: number;
+    hasCashDrawerPin: boolean;
     printSettings: ExpensePrintSettings;
 };
 
@@ -290,10 +293,17 @@ function PanelHeader({
 }
 
 export default function CashDrawerPage() {
-    const { businessDayResetHour, printSettings } = usePage<PageProps>().props;
+    const { businessDayResetHour, hasCashDrawerPin, printSettings } =
+        usePage<PageProps>().props;
     const receiptStore = printSettings?.receipt_store ?? DEFAULT_RECEIPT_STORE;
     const currencySymbol = printSettings?.currency_symbol ?? 'PHP';
     const doublePrintReceipt = printSettings?.double_print_receipt ?? false;
+
+    const [unlocked, setUnlocked] = useState(false);
+    const [unlocking, setUnlocking] = useState(false);
+    const [gatePin, setGatePin] = useState('');
+    const [gateError, setGateError] = useState<string | null>(null);
+    const unlockedPinRef = useRef('');
 
     const [selectedDate, setSelectedDate] = useState(() =>
         currentBusinessDate(undefined, businessDayResetHour),
@@ -331,12 +341,6 @@ export default function CashDrawerPage() {
 
     const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
     const [deleting, setDeleting] = useState(false);
-    const [pinDialogOpen, setPinDialogOpen] = useState(false);
-    const [pinValue, setPinValue] = useState('');
-    const [pinError, setPinError] = useState<string | null>(null);
-    const pendingPinAction = useRef<((pin: string) => Promise<void>) | null>(
-        null,
-    );
 
     const isToday = isCurrentBusinessDate(
         selectedDate,

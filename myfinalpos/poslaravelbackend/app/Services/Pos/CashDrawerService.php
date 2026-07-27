@@ -940,6 +940,16 @@ class CashDrawerService
         return mb_substr($series, 0, 60);
     }
 
+    /**
+     * @return array{verified: bool}
+     */
+    public function verifyPin(Request $request): array
+    {
+        $this->requireCashDrawerPin($request);
+
+        return ['verified' => true];
+    }
+
     private function requireCashDrawerPin(Request $request): void
     {
         $pin = trim((string) ($request->input('cash_drawer_pin') ?? $request->input('refund_pin') ?? ''));
