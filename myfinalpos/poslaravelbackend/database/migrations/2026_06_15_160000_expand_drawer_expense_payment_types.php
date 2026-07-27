@@ -12,6 +12,12 @@ return new class extends Migration
             return;
         }
 
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            // ENUM/MODIFY is MySQL-only; SQLite stores payment_type as a
+            // plain string, so there's no column definition to widen.
+            return;
+        }
+
         DB::statement(
             "ALTER TABLE drawer_expenses MODIFY payment_type ENUM('cash', 'gcash', 'bank', 'non_cash') NOT NULL DEFAULT 'cash'",
         );
@@ -28,6 +34,10 @@ return new class extends Migration
     public function down(): void
     {
         if (! Schema::hasTable('drawer_expenses')) {
+            return;
+        }
+
+        if (DB::connection()->getDriverName() !== 'mysql') {
             return;
         }
 

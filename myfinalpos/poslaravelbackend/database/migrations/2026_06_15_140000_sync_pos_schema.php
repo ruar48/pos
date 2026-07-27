@@ -15,6 +15,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            // This migration patches up pre-existing MySQL production
+            // databases (MODIFY/AUTO_INCREMENT/information_schema are all
+            // MySQL-only); a fresh SQLite dev database doesn't need it.
+            return;
+        }
+
         $this->syncProductsTable();
         $this->syncProductVarietiesTable();
         $this->syncAppSettingsTable();

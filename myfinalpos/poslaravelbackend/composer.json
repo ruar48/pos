@@ -101,8 +101,7 @@
     "extra": {
         "laravel": {
             "dont-discover": [
-                "laravel/chisel",
-                "laravel/telescope"
+                "laravel/chisel"
             ],
             "installer": {
                 "post-create-project": []

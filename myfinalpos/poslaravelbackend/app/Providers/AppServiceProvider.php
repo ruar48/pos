@@ -5,6 +5,7 @@ namespace App\Providers;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -43,6 +44,11 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureDefaults(): void
     {
+        // Older MySQL/MariaDB servers cap index keys at ~767-1000 bytes;
+        // utf8mb4 varchar(255) unique/primary keys exceed that. 191 chars
+        // keeps every indexed string column under the limit regardless.
+        Schema::defaultStringLength(191);
+
         $timezone = (string) config('app.timezone', 'Asia/Manila');
         date_default_timezone_set($timezone);
 

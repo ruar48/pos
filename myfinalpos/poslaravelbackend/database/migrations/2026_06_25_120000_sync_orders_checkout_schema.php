@@ -13,6 +13,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            // MODIFY/AUTO_INCREMENT/information_schema below are MySQL-only;
+            // a fresh SQLite dev database doesn't need this legacy patch-up.
+            return;
+        }
+
         $this->syncOrdersTable();
         $this->syncOrderItemsTable();
         $this->fixAutoIncrement('orders');

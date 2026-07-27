@@ -1,1 +1,0 @@
-import{i as e,n as t,t as n}from"./jsx-runtime-D8oeQWO-.js";import{t as r}from"./live-monitor-panel-jM_105Tb.js";var i=t(),a=n();function o(){let t=(0,i.c)(1),n;return t[0]===Symbol.for(`react.memo_cache_sentinel`)?(n=(0,a.jsxs)(a.Fragment,{children:[(0,a.jsx)(e,{title:`Live POS Wall`}),(0,a.jsx)(r,{wallMode:!0})]}),t[0]=n):n=t[0],n}o.layout={breadcrumbs:[]};export{o as default};
