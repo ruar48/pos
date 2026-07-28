@@ -440,12 +440,13 @@ export default function CashDrawerPage() {
     }, [businessDayResetHour]);
 
     useEffect(() => {
+        if (!unlocked) return;
         revisionRef.current = null;
         void load();
-    }, [load]);
+    }, [load, unlocked]);
 
     useEffect(() => {
-        if (!isToday) {
+        if (!isToday || !unlocked) {
             return;
         }
 
@@ -527,7 +528,7 @@ export default function CashDrawerPage() {
             abortWatch();
             document.removeEventListener('visibilitychange', onVisibility);
         };
-    }, [abortWatch, businessDayResetHour, isToday, load, selectedDate]);
+    }, [abortWatch, businessDayResetHour, isToday, load, selectedDate, unlocked]);
 
     const summary = data?.summary;
 
@@ -547,28 +548,37 @@ export default function CashDrawerPage() {
         setBusy: (busy: boolean) => void,
     ) => runMutation(action, setBusy);
 
+    // The page is already gated behind the unlock screen below, so
+    // individual actions reuse the PIN that was verified at unlock time
+    // instead of prompting again for every add/edit/delete.
     const requestCashDrawerPin = useCallback(
         (action: (pin: string) => Promise<void>) => {
-            pendingPinAction.current = action;
-            setPinValue('');
-            setPinError(null);
-            setPinDialogOpen(true);
+            void action(unlockedPinRef.current);
         },
         [],
     );
 
-    const confirmCashDrawerPin = async () => {
-        if (!/^\d{4,6}$/.test(pinValue)) {
-            setPinError('PIN must be 4 to 6 digits.');
+    const handleUnlock = async () => {
+        if (!/^\d{4,6}$/.test(gatePin)) {
+            setGateError('PIN must be 4 to 6 digits.');
             return;
         }
 
-        const action = pendingPinAction.current;
-        if (!action) return;
-
-        setPinDialogOpen(false);
-        await action(pinValue);
-        pendingPinAction.current = null;
+        setUnlocking(true);
+        setGateError(null);
+        try {
+            const response = await verifyCashDrawerPin(gatePin);
+            if (response.data.verified) {
+                unlockedPinRef.current = gatePin;
+                setUnlocked(true);
+            } else {
+                setGateError('Incorrect PIN.');
+            }
+        } catch (e) {
+            setGateError(e instanceof Error ? e.message : 'Incorrect PIN.');
+        } finally {
+            setUnlocking(false);
+        }
     };
 
     const handleAddCash = () => {
@@ -936,6 +946,74 @@ export default function CashDrawerPage() {
             );
         }
     };
+
+    if (!unlocked) {
+        return (
+            <>
+                <Head title="Cash Drawer" />
+                <div className="flex min-h-[70vh] items-center justify-center p-6">
+                    <div className="w-full max-w-sm rounded-2xl border border-border/60 bg-card p-6 text-center shadow-sm">
+                        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+                            <Lock className="size-6" />
+                        </div>
+                        <h1 className="text-lg font-bold text-foreground">
+                            Cash Drawer Locked
+                        </h1>
+                        {hasCashDrawerPin ? (
+                            <>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Enter the cash drawer PIN to continue.
+                                </p>
+                                <div className="mt-4 grid gap-2 text-left">
+                                    <Label htmlFor="cash-drawer-gate-pin">PIN</Label>
+                                    <Input
+                                        id="cash-drawer-gate-pin"
+                                        type="password"
+                                        inputMode="numeric"
+                                        maxLength={6}
+                                        autoFocus
+                                        value={gatePin}
+                                        onChange={(e) => {
+                                            setGatePin(
+                                                e.target.value.replace(/\D/g, ''),
+                                            );
+                                            setGateError(null);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                void handleUnlock();
+                                            }
+                                        }}
+                                    />
+                                    {gateError ? (
+                                        <p className="text-sm text-destructive">
+                                            {gateError}
+                                        </p>
+                                    ) : null}
+                                </div>
+                                <Button
+                                    className="mt-4 w-full"
+                                    onClick={() => void handleUnlock()}
+                                    disabled={unlocking}
+                                >
+                                    {unlocking ? (
+                                        <Loader2 className="size-4 animate-spin" />
+                                    ) : null}
+                                    Unlock
+                                </Button>
+                            </>
+                        ) : (
+                            <p className="mt-2 text-sm text-muted-foreground">
+                                No cash drawer PIN has been set yet. Ask an admin to
+                                set one under Settings → Security before this page
+                                can be unlocked.
+                            </p>
+                        )}
+                    </div>
+                </div>
+            </>
+        );
+    }
 
     return (
         <>
@@ -1584,60 +1662,6 @@ export default function CashDrawerPage() {
                 </DialogContent>
             </Dialog>
 
-            <Dialog
-                open={pinDialogOpen}
-                onOpenChange={(open) => {
-                    if (!open) {
-                        setPinDialogOpen(false);
-                        pendingPinAction.current = null;
-                    }
-                }}
-            >
-                <DialogContent className="sm:max-w-sm">
-                    <DialogHeader>
-                        <DialogTitle>Cash Drawer PIN</DialogTitle>
-                        <DialogDescription>
-                            Enter the cash drawer PIN to approve this change.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-2">
-                        <Label htmlFor="cash-drawer-pin">PIN (4-6 digits)</Label>
-                        <Input
-                            id="cash-drawer-pin"
-                            type="password"
-                            inputMode="numeric"
-                            maxLength={6}
-                            value={pinValue}
-                            onChange={(e) => {
-                                setPinValue(e.target.value.replace(/\D/g, ''));
-                                setPinError(null);
-                            }}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    void confirmCashDrawerPin();
-                                }
-                            }}
-                        />
-                        {pinError ? (
-                            <p className="text-sm text-destructive">{pinError}</p>
-                        ) : null}
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                setPinDialogOpen(false);
-                                pendingPinAction.current = null;
-                            }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button onClick={() => void confirmCashDrawerPin()}>
-                            Confirm
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </>
     );
 }
