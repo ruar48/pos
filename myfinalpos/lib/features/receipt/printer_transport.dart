@@ -393,10 +393,11 @@ class PrinterTransport {
         );
       }
 
-      final ok = await PrintBluetoothThermal.writeBytes(bytes);
-      if (!ok) {
-        throw ReceiptPrintException('Bluetooth printer rejected the print job.');
-      }
+      // Give the printer's buffer a moment to settle right after connecting
+      // — writing a full receipt immediately on a fresh connection is a
+      // known cause of dropped/garbled bytes on cheap thermal printers.
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await _writeInChunks(bytes);
 
       await Future<void>.delayed(const Duration(milliseconds: 250));
     } catch (error) {
@@ -407,6 +408,26 @@ class PrinterTransport {
       );
     } finally {
       await _resetBluetoothConnection();
+    }
+  }
+
+  /// Writes bytes to the connected Bluetooth printer in small chunks with a
+  /// short pause between each — some cheap thermal printers silently drop
+  /// or corrupt bytes when a large payload (a full receipt) is written in
+  /// one burst, which can show up as a single line printing misaligned or
+  /// with missing characters even though the generated text is correct.
+  static Future<void> _writeInChunks(List<int> bytes) async {
+    const chunkSize = 128;
+    for (var offset = 0; offset < bytes.length; offset += chunkSize) {
+      final end = (offset + chunkSize).clamp(0, bytes.length);
+      final chunk = bytes.sublist(offset, end);
+      final ok = await PrintBluetoothThermal.writeBytes(chunk);
+      if (!ok) {
+        throw ReceiptPrintException('Bluetooth printer rejected the print job.');
+      }
+      if (end < bytes.length) {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+      }
     }
   }
 
