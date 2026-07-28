@@ -1,4 +1,5 @@
 import { laravelFetch } from '@/lib/laravel-fetch';
+import type { AttendanceRow } from '@/lib/staff-api';
 
 export type DashboardGranularity = 'hourly' | 'daily' | 'monthly';
 
@@ -39,6 +40,7 @@ export type DashboardData = {
     metrics: DashboardMetrics;
     payment_types: DashboardPaymentType[];
     sales_series: DashboardSalesPoint[];
+    attendance_today: AttendanceRow[];
 };
 
 function rangeQuery(

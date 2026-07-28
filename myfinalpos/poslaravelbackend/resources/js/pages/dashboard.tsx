@@ -174,6 +174,41 @@ function PaymentIcon({ type }: { type: 'cash' | 'bank' | 'other' }) {
     );
 }
 
+function AttendanceStatusPill({
+    label,
+    active,
+    time,
+    tone,
+}: {
+    label: string;
+    active: boolean;
+    time?: string | null;
+    tone: 'teal' | 'orange';
+}) {
+    const toneClass = tone === 'teal' ? 'bg-teal-500' : 'bg-orange-500';
+    return (
+        <div className="text-right">
+            <div className="flex items-center justify-end gap-1.5 text-[11px] font-semibold text-muted-foreground">
+                <span
+                    className={cn(
+                        'size-2 rounded-full',
+                        active ? toneClass : 'bg-border',
+                    )}
+                />
+                {label}
+            </div>
+            <p
+                className={cn(
+                    'text-xs font-bold',
+                    active ? 'text-foreground' : 'text-muted-foreground',
+                )}
+            >
+                {active && time ? time : '—'}
+            </p>
+        </div>
+    );
+}
+
 function SalesLineChart({
     series,
     maxSales,
@@ -616,6 +651,61 @@ export default function Dashboard() {
                                         </ul>
                                     )}
                                 </div>
+                            </div>
+
+                            <div className="mt-4 rounded-2xl border border-border/60 bg-background p-4 sm:p-5">
+                                <h2 className="mb-4 text-base font-semibold text-foreground">
+                                    Attendance Today
+                                </h2>
+                                {(data?.attendance_today ?? []).length ===
+                                0 ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        No staff scheduled today.
+                                    </p>
+                                ) : (
+                                    <ul className="divide-y divide-border/50">
+                                        {(data?.attendance_today ?? []).map(
+                                            (row) => (
+                                                <li
+                                                    key={row.user_id}
+                                                    className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                                                >
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-foreground">
+                                                            {row.full_name}
+                                                        </p>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {row.role} ·{' '}
+                                                            {row.branch_name}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-5">
+                                                        <AttendanceStatusPill
+                                                            label="Sign In"
+                                                            active={Boolean(
+                                                                row.morning_in_at,
+                                                            )}
+                                                            time={
+                                                                row.morning_in_display
+                                                            }
+                                                            tone="teal"
+                                                        />
+                                                        <AttendanceStatusPill
+                                                            label="Sign Out"
+                                                            active={Boolean(
+                                                                row.day_out_at,
+                                                            )}
+                                                            time={
+                                                                row.day_out_display
+                                                            }
+                                                            tone="orange"
+                                                        />
+                                                    </div>
+                                                </li>
+                                            ),
+                                        )}
+                                    </ul>
+                                )}
                             </div>
                         </>
                     ) : null}

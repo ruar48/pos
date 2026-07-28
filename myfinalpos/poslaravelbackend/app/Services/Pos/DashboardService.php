@@ -12,6 +12,7 @@ class DashboardService
 {
     public function __construct(
         private readonly ReportService $reports,
+        private readonly AttendanceService $attendance,
     ) {}
 
     /**
@@ -57,6 +58,7 @@ class DashboardService
             ],
             'payment_types' => $this->normalizePaymentTypes($summary['payment_methods']),
             'sales_series' => $this->salesSeries($startDt, $endDt, $granularity, $start, $end),
+            'attendance_today' => $this->attendance->dailyBoard(Carbon::today()->toDateString()),
         ];
     }
 

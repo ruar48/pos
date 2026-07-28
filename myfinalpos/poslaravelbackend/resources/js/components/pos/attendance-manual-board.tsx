@@ -29,10 +29,20 @@ function punchAction(row: AttendanceRow): 'clock_in' | 'clock_out' | null {
     return row.is_clocked_in ? 'clock_out' : 'clock_in';
 }
 
+// Mirrors the Flutter app's resolveAttendancePhotoUrl(): the server always
+// returns a relative path (e.g. /uploads/attendance/xxx.jpg), so build a
+// fully-qualified URL from the current origin rather than relying on the
+// browser to resolve it implicitly — matches what already works reliably
+// in the deployed app regardless of hosting/document-root quirks.
 function resolvePhotoUrl(url: string | null | undefined): string | null {
     if (!url) return null;
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
-    return url.startsWith('/') ? url : `/${url}`;
+    const trimmed = url.trim();
+    if (trimmed === '') return null;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed;
+    }
+    const normalized = trimmed.replace(/\\/g, '/').replace(/^\/+/, '');
+    return `${window.location.origin}/${normalized}`;
 }
 
 function selfieInUrl(row: AttendanceRow): string | null {

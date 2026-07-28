@@ -429,8 +429,13 @@ class ThermalReceiptLayout {
     }
     add('');
     add(_divider());
-    for (final item in data.items) {
-      lines.addAll(_formatItemLines(item));
+    if (!data.hasRefunds) {
+      // Reprinting a refunded order should only show what was refunded
+      // (added below via _addRefundSection), not the full original
+      // purchase — keeps the reprint short and focused.
+      for (final item in data.items) {
+        lines.addAll(_formatItemLines(item));
+      }
     }
     add(_divider());
     final totalDiscount =
@@ -513,7 +518,10 @@ class ThermalReceiptLayout {
     }
     add('');
     add(_divider());
-    if (data.items.isNotEmpty) {
+    if (data.hasRefunds) {
+      // Matches buildLines(): a refunded order's reprint only shows the
+      // refunded items (added below via _addRefundSection).
+    } else if (data.items.isNotEmpty) {
       for (final item in data.items) {
         for (final line in _formatItemLines(item)) {
           add(line);
@@ -1007,7 +1015,10 @@ class PosReceiptService {
       final remainingText = layout.formatMoney(receipt.remainingTotal);
       if (ThermalReceiptLayout._isGrandTotalLine(line, totalText) ||
           (receipt.hasRefunds && line.contains('REMAINING TOTAL $remainingText'))) {
-        builder.text(line, bold: true);
+        // Bold mode shifts character pitch on some thermal printers, which
+        // throws the amount column out of alignment with SUBTOTAL above it.
+        // Print plain so the columns always line up.
+        builder.text(line);
         continue;
       }
       if (line == ThermalReceiptLayout.centerLine(kReceiptFooterThanks)) {
