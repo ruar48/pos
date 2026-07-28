@@ -440,12 +440,16 @@ class ThermalReceiptLayout {
     add(_divider());
     final totalDiscount =
         data.manualDiscount + data.couponDiscount + data.loyaltyDiscount;
-    add(_amountRow('SUBTOTAL', _money(data.subtotal)));
-    if (totalDiscount > 0) {
-      add(_amountRow('DISCOUNT', _money(-totalDiscount)));
-    }
-    if (data.vat > 0) {
-      add(_amountRow('VAT', _money(data.vat)));
+    if (!data.hasRefunds) {
+      // ORIGINAL TOTAL below already covers this for a refund reprint —
+      // showing SUBTOTAL too was redundant per the boss's request.
+      add(_amountRow('SUBTOTAL', _money(data.subtotal)));
+      if (totalDiscount > 0) {
+        add(_amountRow('DISCOUNT', _money(-totalDiscount)));
+      }
+      if (data.vat > 0) {
+        add(_amountRow('VAT', _money(data.vat)));
+      }
     }
     _addRefundSection(add, _money);
     add(_shortDivider());
@@ -456,16 +460,20 @@ class ThermalReceiptLayout {
       add(_amountRow('TOTAL', _money(data.total), emphasize: true));
     }
     add(_shortDivider());
-    if (data.hasSplitPayments) {
-      for (final payment in data.splitPayments!) {
-        add(_amountRow(payment.paymentMethod, _money(payment.amount)));
-        if (payment.reference.trim().isNotEmpty) {
-          add(_labelValue('Ref', payment.reference.trim()));
+    if (!data.hasRefunds) {
+      // The original cash/change breakdown isn't relevant once refunded —
+      // REFUNDED / ORIGINAL TOTAL / REMAINING TOTAL above cover it.
+      if (data.hasSplitPayments) {
+        for (final payment in data.splitPayments!) {
+          add(_amountRow(payment.paymentMethod, _money(payment.amount)));
+          if (payment.reference.trim().isNotEmpty) {
+            add(_labelValue('Ref', payment.reference.trim()));
+          }
         }
+      } else if (data.paymentMethod.toLowerCase() == 'cash') {
+        add(_amountRow('Cash', _money(data.amountTendered)));
+        add(_amountRow('Change', _money(data.change)));
       }
-    } else if (data.paymentMethod.toLowerCase() == 'cash') {
-      add(_amountRow('Cash', _money(data.amountTendered)));
-      add(_amountRow('Change', _money(data.change)));
     }
     add(_labelValue('Payment Type', data.paymentMethod));
     add(_amountRow('Total Qty', '${data.itemCount}'));
@@ -538,9 +546,11 @@ class ThermalReceiptLayout {
       );
     }
     add(_divider());
-    add(previewLabelValue('SUBTOTAL', previewMoney(data.subtotal)));
-    if (data.vat > 0) {
-      add(previewLabelValue('VAT', previewMoney(data.vat)));
+    if (!data.hasRefunds) {
+      add(previewLabelValue('SUBTOTAL', previewMoney(data.subtotal)));
+      if (data.vat > 0) {
+        add(previewLabelValue('VAT', previewMoney(data.vat)));
+      }
     }
     _addRefundSection(add, previewMoney);
     add(_doubleDivider());
@@ -551,16 +561,18 @@ class ThermalReceiptLayout {
       add(previewLabelValue('TOTAL', previewMoney(data.total)));
     }
     add(_shortDivider());
-    if (data.hasSplitPayments) {
-      for (final payment in data.splitPayments!) {
-        add(previewLabelValue(payment.paymentMethod, previewMoney(payment.amount)));
-        if (payment.reference.trim().isNotEmpty) {
-          add(previewLabelValue('Ref', payment.reference.trim()));
+    if (!data.hasRefunds) {
+      if (data.hasSplitPayments) {
+        for (final payment in data.splitPayments!) {
+          add(previewLabelValue(payment.paymentMethod, previewMoney(payment.amount)));
+          if (payment.reference.trim().isNotEmpty) {
+            add(previewLabelValue('Ref', payment.reference.trim()));
+          }
         }
+      } else if (data.paymentMethod.toLowerCase() == 'cash') {
+        add(previewLabelValue('Cash', previewMoney(data.amountTendered)));
+        add(previewLabelValue('Change', previewMoney(data.change)));
       }
-    } else if (data.paymentMethod.toLowerCase() == 'cash') {
-      add(previewLabelValue('Cash', previewMoney(data.amountTendered)));
-      add(previewLabelValue('Change', previewMoney(data.change)));
     }
     add(previewLabelValue('Payment Type', data.paymentMethod));
     add(previewLabelValue('Total Qty', '${data.itemCount}'));
@@ -1015,10 +1027,14 @@ class PosReceiptService {
       final remainingText = layout.formatMoney(receipt.remainingTotal);
       if (ThermalReceiptLayout._isGrandTotalLine(line, totalText) ||
           (receipt.hasRefunds && line.contains('REMAINING TOTAL $remainingText'))) {
-        // Bold mode shifts character pitch on some thermal printers, which
-        // throws the amount column out of alignment with SUBTOTAL above it.
-        // Print plain so the columns always line up.
-        builder.text(line);
+        // Every other row in the receipt is exactly kThermalWidth chars, so
+        // the generic branch below always computes centered=true for it
+        // (centering an already-full-width string is a no-op) and sends the
+        // ESC align-center byte. This branch was the one line NOT sending
+        // that byte — on some thermal printers that alone shifts the pitch
+        // enough to throw the amount column out of alignment. Match the
+        // rest of the receipt exactly: bold off, center on.
+        builder.text(line, center: true);
         continue;
       }
       if (line == ThermalReceiptLayout.centerLine(kReceiptFooterThanks)) {
