@@ -161,6 +161,7 @@ class OrderController extends Controller
                 $stockChanges = [];
 
                 $hasVarietyTable = Schema::hasTable('product_varieties');
+                $allowNegativeStock = $this->allowNegativeStock();
 
                 foreach ($items as $item) {
                     $productId = (int) ($item['product_id'] ?? 0);
@@ -199,7 +200,7 @@ class OrderController extends Controller
                         }
 
                         $stock = (int) ($variety->stock ?? 0);
-                        if ($stock < $quantity) {
+                        if (! $allowNegativeStock && $stock < $quantity) {
                             throw new \RuntimeException(
                                 'Insufficient stock for '.$product->name.' - '.$variety->name,
                             );
@@ -237,7 +238,7 @@ class OrderController extends Controller
                     }
 
                     $stock = (int) ($product->stock ?? 0);
-                    if ($stock < $quantity) {
+                    if (! $allowNegativeStock && $stock < $quantity) {
                         throw new \RuntimeException('Insufficient stock for '.$product->name);
                     }
 
@@ -506,5 +507,21 @@ class OrderController extends Controller
         }
 
         return $now->format('Y-m-d H:i:s');
+    }
+
+    private function allowNegativeStock(): bool
+    {
+        if (! PosHelpers::tableExists('app_settings')) {
+            return false;
+        }
+
+        $settings = DB::selectOne(
+            'SELECT allow_negative_stock
+             FROM app_settings
+             ORDER BY id ASC
+             LIMIT 1',
+        );
+
+        return $settings && (int) ($settings->allow_negative_stock ?? 0) === 1;
     }
 }
