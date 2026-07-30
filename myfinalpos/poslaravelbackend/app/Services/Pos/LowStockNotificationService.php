@@ -133,12 +133,6 @@ class LowStockNotificationService
      */
     private function resolveRecipients(): array
     {
-        $envRecipients = trim((string) env('LOW_STOCK_ALERT_EMAIL', ''));
-        $emails = $this->parseEmailList($envRecipients);
-        if ($emails !== []) {
-            return $emails;
-        }
-
         $configured = '';
 
         if (
@@ -152,6 +146,12 @@ class LowStockNotificationService
         }
 
         $emails = $this->parseEmailList($configured);
+        if ($emails !== []) {
+            return $emails;
+        }
+
+        $envRecipients = trim((string) env('LOW_STOCK_ALERT_EMAIL', ''));
+        $emails = $this->parseEmailList($envRecipients);
         if ($emails !== []) {
             return $emails;
         }
