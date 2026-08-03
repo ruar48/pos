@@ -19,7 +19,7 @@ import {
     Warehouse,
     type LucideIcon,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -42,8 +42,9 @@ import {
 } from '@/components/ui/select';
 import {
     adjustInventoryStock,
-    getInventoryReportCache,
-    loadInventoryReport,
+    fetchInventoryReport,
+    fetchInventoryReportPage,
+    type InventoryFilteredTotals,
     type InventoryReport,
     type InventoryRow,
     type InventoryVarietyRow,
@@ -230,6 +231,100 @@ function StatCard({ label, value, hint, icon: Icon, tone = 'default' }: StatCard
     );
 }
 
+const ITEMS_PER_PAGE = 100;
+const EMPTY_FILTERED_TOTALS: InventoryFilteredTotals = {
+    beginning: 0,
+    added: 0,
+    deducted: 0,
+    sold: 0,
+    ending: 0,
+    value_cost: 0,
+    value_retail: 0,
+};
+
+function statusFilterParam(status: StatusFilter): string | undefined {
+    if (status === 'low') return 'low_stock';
+    if (status === 'out') return 'out_of_stock';
+    return undefined;
+}
+
+function downloadInventoryCsv(rows: InventoryRow[]) {
+    const header = [
+        'Item',
+        'Category',
+        'Unit',
+        'Beginning',
+        'Added',
+        'Deducted',
+        'Sold',
+        'Current',
+        'Reorder Level',
+        'Cost Price',
+        'Retail Price',
+        'Stock Value (Cost)',
+        'Stock Value (Retail)',
+    ];
+    const escape = (v: string | number) => {
+        const s = String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [header.join(',')];
+    rows.forEach((r) => {
+        lines.push(
+            [
+                escape(r.name),
+                escape(r.category),
+                escape(r.unit ?? ''),
+                r.beginning,
+                r.added,
+                r.deducted,
+                r.sold,
+                r.ending,
+                r.reorder_level,
+                r.cost_price,
+                r.price,
+                r.value_cost,
+                r.value_retail,
+            ].join(','),
+        );
+    });
+    const blob = new Blob([lines.join('\n')], {
+        type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'inventory.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Inventory exported');
+}
+
+function rowMatchesFilters(
+    row: InventoryRow,
+    q: string,
+    category: string,
+    status: StatusFilter,
+): boolean {
+    if (category !== ALL && row.category !== category) return false;
+    const varietyLow =
+        (row.low_varieties_count ?? 0) > 0 ||
+        (row.varieties?.some((v) => v.is_low_stock) ?? false);
+    const varietyOut =
+        (row.out_varieties_count ?? 0) > 0 ||
+        (row.varieties?.some((v) => v.is_out_of_stock) ?? false);
+    if (status === 'low' && !row.is_low_stock && !varietyLow) return false;
+    if (status === 'out' && !row.is_out_of_stock && !varietyOut) return false;
+    if (q === '') return true;
+    const varietyMatch =
+        row.varieties?.some((v) => v.name.toLowerCase().includes(q)) ?? false;
+    return (
+        row.name.toLowerCase().includes(q) ||
+        row.category.toLowerCase().includes(q) ||
+        varietyMatch
+    );
+}
+
 export default function PosInventory() {
 
     const [rangeKey, setRangeKey] = useState<RangeKey>('today');
@@ -237,13 +332,20 @@ export default function PosInventory() {
     const [start, setStart] = useState(initial.start);
     const [end, setEnd] = useState(initial.end);
 
-    const cachedReport = getInventoryReportCache(initial.start, initial.end);
-    const [report, setReport] = useState<InventoryReport | null>(
-        () => cachedReport,
-    );
-    const [loading, setLoading] = useState(() => cachedReport == null);
+    const [report, setReport] = useState<InventoryReport | null>(null);
+    const [rows, setRows] = useState<InventoryRow[]>([]);
+    const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [filteredTotals, setFilteredTotals] = useState<InventoryFilteredTotals>(
+        EMPTY_FILTERED_TOTALS,
+    );
+    const [exporting, setExporting] = useState(false);
+    const tableScrollRef = useRef<HTMLDivElement>(null);
 
     const [query, setQuery] = useState('');
     const [category, setCategory] = useState<string>(ALL);
@@ -253,68 +355,108 @@ export default function PosInventory() {
         null,
     );
 
-    const load = useCallback(() => {
-        const hasLocalData = getInventoryReportCache(start, end) != null;
-        if (!hasLocalData) {
-            setLoading(true);
-        } else {
-            setRefreshing(true);
-        }
-        setError(null);
+    const load = useCallback(
+        (options?: { silent?: boolean }) => {
+            if (!options?.silent) {
+                setLoading(true);
+            } else {
+                setRefreshing(true);
+            }
+            setError(null);
 
-        loadInventoryReport(start, end, { force: true })
-            .then((res) => {
-                setReport(res);
-                setError(null);
+            fetchInventoryReportPage({
+                start,
+                end,
+                page: 1,
+                perPage: ITEMS_PER_PAGE,
+                search: query.trim(),
+                category: category === ALL ? undefined : category,
+                status: statusFilterParam(status),
             })
-            .catch((err: Error) => {
-                if (!getInventoryReportCache(start, end)) {
+                .then((res) => {
+                    setReport(res);
+                    setRows(res.rows);
+                    setPage(1);
+                    setHasMore(res.meta?.has_more ?? false);
+                    setFilteredTotals(
+                        res.meta?.filtered_totals ?? EMPTY_FILTERED_TOTALS,
+                    );
+                    setError(null);
+                })
+                .catch((err: Error) => {
                     setError(err.message);
                     setReport(null);
-                }
+                    setRows([]);
+                })
+                .finally(() => {
+                    setLoading(false);
+                    setRefreshing(false);
+                });
+        },
+        [start, end, query, category, status],
+    );
+
+    const loadMore = useCallback(() => {
+        if (loadingMore || !hasMore) {
+            return;
+        }
+        setLoadingMore(true);
+        const nextPage = page + 1;
+        fetchInventoryReportPage({
+            start,
+            end,
+            page: nextPage,
+            perPage: ITEMS_PER_PAGE,
+            search: query.trim(),
+            category: category === ALL ? undefined : category,
+            status: statusFilterParam(status),
+        })
+            .then((res) => {
+                setRows((current) => [...current, ...res.rows]);
+                setPage(nextPage);
+                setHasMore(res.meta?.has_more ?? false);
+            })
+            .catch((err: Error) => {
+                toast.error(err.message);
             })
             .finally(() => {
-                setLoading(false);
-                setRefreshing(false);
+                setLoadingMore(false);
             });
-    }, [start, end]);
+    }, [start, end, query, category, status, page, hasMore, loadingMore]);
+
+    const loadMoreSentinelRef = useRef<HTMLTableRowElement>(null);
+    useEffect(() => {
+        const sentinel = loadMoreSentinelRef.current;
+        if (!sentinel) {
+            return;
+        }
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) {
+                    loadMore();
+                }
+            },
+            { rootMargin: '600px' },
+        );
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [loadMore]);
 
     useEffect(() => {
-        const cached = getInventoryReportCache(start, end);
-        if (cached) {
-            setReport(cached);
-            setLoading(false);
-            setRefreshing(true);
-        } else {
-            setLoading(true);
-            setRefreshing(false);
-        }
-        setError(null);
-
-        let cancelled = false;
-        loadInventoryReport(start, end, { force: true })
-            .then((res) => {
-                if (cancelled) return;
-                setReport(res);
-                setError(null);
-            })
-            .catch((err: Error) => {
-                if (cancelled) return;
-                if (!getInventoryReportCache(start, end)) {
-                    setError(err.message);
-                    setReport(null);
-                }
-            })
-            .finally(() => {
-                if (cancelled) return;
-                setLoading(false);
-                setRefreshing(false);
-            });
-
-        return () => {
-            cancelled = true;
-        };
+        load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [start, end]);
+
+    const didMountFilterRef = useRef(false);
+    useEffect(() => {
+        if (!didMountFilterRef.current) {
+            didMountFilterRef.current = true;
+            return;
+        }
+        const timeout = setTimeout(() => load({ silent: true }), 300);
+        return () => clearTimeout(timeout);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [query, category, status]);
 
     const selectRange = (key: Exclude<RangeKey, 'custom'>) => {
         const r = rangeForKey(key);
@@ -323,129 +465,40 @@ export default function PosInventory() {
         setEnd(r.end);
     };
 
-    const rows = report?.rows ?? [];
+    const categoryNames = useMemo(
+        () =>
+            (report?.categories ?? [])
+                .map((c) => c.category)
+                .sort((a, b) => a.localeCompare(b)),
+        [report],
+    );
 
-    const categories = useMemo(() => {
-        const set = new Set<string>();
-        rows.forEach((r) => set.add(r.category));
-        return Array.from(set).sort((a, b) => a.localeCompare(b));
-    }, [rows]);
-
-    const filteredRows = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        return rows.filter((r) => {
-            if (category !== ALL && r.category !== category) return false;
-            const varietyLow =
-                (r.low_varieties_count ?? 0) > 0 ||
-                (r.varieties?.some((v) => v.is_low_stock) ?? false);
-            const varietyOut =
-                (r.out_varieties_count ?? 0) > 0 ||
-                (r.varieties?.some((v) => v.is_out_of_stock) ?? false);
-            if (status === 'low' && !r.is_low_stock && !varietyLow) return false;
-            if (
-                status === 'out' &&
-                !r.is_out_of_stock &&
-                !varietyOut
-            ) {
-                return false;
-            }
-            if (q === '') return true;
-            const varietyMatch =
-                r.varieties?.some(
-                    (v) => v.name.toLowerCase().includes(q),
-                ) ?? false;
-            return (
-                r.name.toLowerCase().includes(q) ||
-                r.category.toLowerCase().includes(q) ||
-                varietyMatch
+    const exportCsv = useCallback(async () => {
+        setExporting(true);
+        try {
+            const full = await fetchInventoryReport(start, end);
+            const q = query.trim().toLowerCase();
+            const matched = full.rows.filter((r) =>
+                rowMatchesFilters(r, q, category, status),
             );
-        });
-    }, [rows, query, category, status]);
-
-    const filteredTotals = useMemo(() => {
-        return filteredRows.reduce(
-            (acc, r) => {
-                acc.beginning += r.beginning;
-                acc.added += r.added;
-                acc.deducted += r.deducted;
-                acc.sold += r.sold;
-                acc.ending += r.ending;
-                acc.value_cost += r.value_cost;
-                acc.value_retail += r.value_retail;
-                return acc;
-            },
-            {
-                beginning: 0,
-                added: 0,
-                deducted: 0,
-                sold: 0,
-                ending: 0,
-                value_cost: 0,
-                value_retail: 0,
-            },
-        );
-    }, [filteredRows]);
+            if (matched.length === 0) {
+                toast.error('Nothing to export');
+                return;
+            }
+            downloadInventoryCsv(matched);
+        } catch (err) {
+            toast.error(
+                err instanceof Error ? err.message : 'Failed to export CSV',
+            );
+        } finally {
+            setExporting(false);
+        }
+    }, [start, end, query, category, status]);
 
     const totals = report?.totals;
     const potentialMargin =
         totals?.value_margin ??
         (totals ? totals.value_retail - totals.value_cost : 0);
-
-    const exportCsv = () => {
-        if (filteredRows.length === 0) {
-            toast.error('Nothing to export');
-            return;
-        }
-        const header = [
-            'Item',
-            'Category',
-            'Unit',
-            'Beginning',
-            'Added',
-            'Deducted',
-            'Sold',
-            'Current',
-            'Reorder Level',
-            'Cost Price',
-            'Retail Price',
-            'Stock Value (Cost)',
-            'Stock Value (Retail)',
-        ];
-        const escape = (v: string | number) => {
-            const s = String(v);
-            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-        };
-        const lines = [header.join(',')];
-        filteredRows.forEach((r) => {
-            lines.push(
-                [
-                    escape(r.name),
-                    escape(r.category),
-                    escape(r.unit ?? ''),
-                    r.beginning,
-                    r.added,
-                    r.deducted,
-                    r.sold,
-                    r.ending,
-                    r.reorder_level,
-                    r.cost_price,
-                    r.price,
-                    r.value_cost,
-                    r.value_retail,
-                ].join(','),
-            );
-        });
-        const blob = new Blob([lines.join('\n')], {
-            type: 'text/csv;charset=utf-8;',
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `inventory_${start}_to_${end}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast.success('Inventory exported');
-    };
 
     const isSingleDay = start === end;
 
@@ -462,7 +515,7 @@ export default function PosInventory() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={load}
+                                onClick={() => load()}
                                 disabled={loading}
                             >
                                 {loading ? (
@@ -472,8 +525,16 @@ export default function PosInventory() {
                                 )}
                                 Refresh
                             </Button>
-                            <Button size="sm" onClick={exportCsv}>
-                                <Download className="size-4" />
+                            <Button
+                                size="sm"
+                                onClick={() => void exportCsv()}
+                                disabled={exporting}
+                            >
+                                {exporting ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                    <Download className="size-4" />
+                                )}
                                 Export
                             </Button>
                         </>
@@ -609,7 +670,7 @@ export default function PosInventory() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value={ALL}>All categories</SelectItem>
-                            {categories.map((c) => (
+                            {categoryNames.map((c) => (
                                 <SelectItem key={c} value={c}>
                                     {c}
                                 </SelectItem>
@@ -645,7 +706,7 @@ export default function PosInventory() {
                             <p className="text-sm font-medium text-destructive">
                                 {error}
                             </p>
-                            <Button variant="outline" size="sm" onClick={load}>
+                            <Button variant="outline" size="sm" onClick={() => load()}>
                                 Try again
                             </Button>
                         </div>
@@ -657,7 +718,7 @@ export default function PosInventory() {
                                     Updating inventory…
                                 </div>
                             )}
-                            {filteredRows.length === 0 ? (
+                            {rows.length === 0 ? (
                         <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
                             <Package className="size-8 text-muted-foreground" />
                             <p className="text-sm font-medium text-foreground">
@@ -668,7 +729,10 @@ export default function PosInventory() {
                             </p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
+                        <div
+                            ref={tableScrollRef}
+                            className="max-h-[70vh] overflow-auto"
+                        >
                             <table className="w-full min-w-[60rem] text-sm">
                                 <thead>
                                     <tr className="border-b border-border/60 bg-secondary/40 text-left">
@@ -698,7 +762,7 @@ export default function PosInventory() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredRows.map((r) => (
+                                    {rows.map((r) => (
                                         <InventoryTableRowGroup
                                             key={r.product_id}
                                             row={r}
@@ -722,12 +786,39 @@ export default function PosInventory() {
                                             }
                                         />
                                     ))}
+                                    {hasMore && !loadingMore ? (
+                                        <tr ref={loadMoreSentinelRef}>
+                                            <td colSpan={7} className="p-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => loadMore()}
+                                                    className="w-full border-t border-border/60 bg-secondary/30 px-3 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-secondary/50"
+                                                >
+                                                    Load 100 more ({rows.length}
+                                                    /{report?.meta?.total ?? rows.length})
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ) : null}
+                                    {loadingMore ? (
+                                        <tr>
+                                            <td
+                                                colSpan={7}
+                                                className="px-4 py-3 text-center text-xs text-muted-foreground"
+                                            >
+                                                <span className="inline-flex items-center gap-2">
+                                                    <Loader2 className="size-3.5 animate-spin" />
+                                                    Loading more items…
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ) : null}
                                 </tbody>
                                 <tfoot>
                                     <tr className="border-t-2 border-border bg-secondary/30 font-semibold">
                                         <td className="px-4 py-3 text-foreground">
-                                            {filteredRows.length} item
-                                            {filteredRows.length === 1
+                                            {rows.length} item
+                                            {rows.length === 1
                                                 ? ''
                                                 : 's'}
                                         </td>

@@ -166,16 +166,85 @@ class InventoryReportController extends Controller
         $totals['value_retail'] = round($totals['value_retail'], 2);
         $totals['value_margin'] = round($totals['value_retail'] - $totals['value_cost'], 2);
 
+        $page = (int) $request->query('page', 0);
+
+        if ($page <= 0) {
+            return $this->posSuccess([
+                'range' => [
+                    'start' => $start->format('Y-m-d'),
+                    'end' => $end->format('Y-m-d'),
+                ],
+                'valuation_as_of' => $valuationAsOf,
+                'rows' => $rows,
+                'categories' => $categories,
+                'totals' => $totals,
+                'generated_at' => now()->toIso8601String(),
+            ]);
+        }
+
+        $search = trim((string) $request->query('search', ''));
+        $categoryFilter = trim((string) $request->query('category', ''));
+        $statusFilter = trim((string) $request->query('status', ''));
+
+        $filteredRows = array_values(array_filter($rows, static function ($row) use ($search, $categoryFilter, $statusFilter) {
+            if ($search !== '' && ! str_contains(strtolower($row['name']), strtolower($search))) {
+                return false;
+            }
+            if ($categoryFilter !== '' && $row['category'] !== $categoryFilter) {
+                return false;
+            }
+            if ($statusFilter === 'low_stock' && ! $row['is_low_stock']) {
+                return false;
+            }
+            if ($statusFilter === 'out_of_stock' && ! $row['is_out_of_stock']) {
+                return false;
+            }
+
+            return true;
+        }));
+
+        $perPage = max(1, min(200, (int) $request->query('per_page', 100)));
+        $total = count($filteredRows);
+        $pageRows = array_slice($filteredRows, ($page - 1) * $perPage, $perPage);
+
+        $filteredTotals = [
+            'beginning' => 0,
+            'added' => 0,
+            'deducted' => 0,
+            'sold' => 0,
+            'ending' => 0,
+            'value_cost' => 0.0,
+            'value_retail' => 0.0,
+        ];
+        foreach ($filteredRows as $row) {
+            $filteredTotals['beginning'] += $row['beginning'];
+            $filteredTotals['added'] += $row['added'];
+            $filteredTotals['deducted'] += $row['deducted'];
+            $filteredTotals['sold'] += $row['sold'];
+            $filteredTotals['ending'] += $row['ending'];
+            $filteredTotals['value_cost'] += $row['value_cost'];
+            $filteredTotals['value_retail'] += $row['value_retail'];
+        }
+        $filteredTotals['value_cost'] = round($filteredTotals['value_cost'], 2);
+        $filteredTotals['value_retail'] = round($filteredTotals['value_retail'], 2);
+
         return $this->posSuccess([
             'range' => [
                 'start' => $start->format('Y-m-d'),
                 'end' => $end->format('Y-m-d'),
             ],
             'valuation_as_of' => $valuationAsOf,
-            'rows' => $rows,
+            'rows' => $pageRows,
             'categories' => $categories,
             'totals' => $totals,
             'generated_at' => now()->toIso8601String(),
+            'meta' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'has_more' => $page * $perPage < $total,
+                'filtered_totals' => $filteredTotals,
+            ],
         ]);
     }
 

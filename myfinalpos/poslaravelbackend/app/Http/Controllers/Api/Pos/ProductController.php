@@ -71,7 +71,7 @@ class ProductController extends Controller
             return $this->stockSync($request);
         }
 
-        return $this->index();
+        return $this->index($request);
     }
 
     private function stockSync(Request $request): JsonResponse
@@ -85,18 +85,95 @@ class ProductController extends Controller
         ]);
     }
 
-    private function index(): JsonResponse
+    private function index(?Request $request = null): JsonResponse
     {
-        $rows = DB::select(
-            'SELECT '.self::SELECT_COLUMNS.'
+        $page = (int) ($request?->query('page') ?? 0);
+
+        if ($page <= 0) {
+            $rows = DB::select(
+                'SELECT '.self::SELECT_COLUMNS.'
+                 FROM products p
+                 INNER JOIN categories c ON c.id = p.category_id
+                 WHERE p.status = "active"
+                 ORDER BY p.id ASC',
+            );
+
+            return $this->posSuccess([
+                'data' => array_map(static fn ($row) => (array) $row, $rows),
+            ]);
+        }
+
+        $perPage = max(1, min(200, (int) ($request?->query('per_page') ?? 100)));
+        $search = trim((string) $request?->query('search', ''));
+        $category = trim((string) $request?->query('category', ''));
+
+        $where = ['p.status = "active"'];
+        $bindings = [];
+
+        if ($search !== '') {
+            $where[] = 'p.name LIKE ?';
+            $bindings[] = '%'.str_replace(['%', '_'], ['\\%', '\\_'], $search).'%';
+        }
+
+        if ($category !== '') {
+            $where[] = 'c.name = ?';
+            $bindings[] = $category;
+        }
+
+        $whereSql = implode(' AND ', $where);
+
+        $total = (int) DB::selectOne(
+            "SELECT COUNT(*) AS total
+             FROM products p
+             INNER JOIN categories c ON c.id = p.category_id
+             WHERE {$whereSql}",
+            $bindings,
+        )->total;
+
+        $catalogTotal = (int) DB::selectOne(
+            'SELECT COUNT(*) AS total FROM products WHERE status = "active"',
+        )->total;
+
+        $lowStockTotal = (int) DB::selectOne(
+            'SELECT COUNT(*) AS total
+             FROM products
+             WHERE status = "active"
+               AND COALESCE(stock, 0) <= COALESCE(reorder_level, 0)',
+        )->total;
+
+        $categoryCountRows = DB::select(
+            'SELECT c.name AS category_name, COUNT(*) AS total
              FROM products p
              INNER JOIN categories c ON c.id = p.category_id
              WHERE p.status = "active"
-             ORDER BY p.id ASC',
+             GROUP BY c.name',
+        );
+        $categoryCounts = [];
+        foreach ($categoryCountRows as $row) {
+            $categoryCounts[(string) $row->category_name] = (int) $row->total;
+        }
+
+        $rows = DB::select(
+            "SELECT ".self::SELECT_COLUMNS."
+             FROM products p
+             INNER JOIN categories c ON c.id = p.category_id
+             WHERE {$whereSql}
+             ORDER BY p.id ASC
+             LIMIT ? OFFSET ?",
+            [...$bindings, $perPage, ($page - 1) * $perPage],
         );
 
         return $this->posSuccess([
             'data' => array_map(static fn ($row) => (array) $row, $rows),
+            'meta' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'has_more' => $page * $perPage < $total,
+                'catalog_total' => $catalogTotal,
+                'low_stock_total' => $lowStockTotal,
+                'category_counts' => $categoryCounts,
+            ],
         ]);
     }
 

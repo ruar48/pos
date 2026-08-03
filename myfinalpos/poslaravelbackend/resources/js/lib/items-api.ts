@@ -121,6 +121,38 @@ export async function fetchProducts() {
     return laravelFetch<{ data: PosProduct[] }>(products.url());
 }
 
+export type ProductsPageMeta = {
+    page: number;
+    per_page: number;
+    total: number;
+    has_more: boolean;
+    catalog_total: number;
+    low_stock_total: number;
+    category_counts: Record<string, number>;
+};
+
+export async function fetchProductsPage(options: {
+    page: number;
+    perPage?: number;
+    search?: string;
+    category?: string;
+}) {
+    const query: Record<string, string> = {
+        page: String(options.page),
+        per_page: String(options.perPage ?? 100),
+    };
+    if (options.search) {
+        query.search = options.search;
+    }
+    if (options.category) {
+        query.category = options.category;
+    }
+
+    return laravelFetch<{ data: PosProduct[]; meta: ProductsPageMeta }>(
+        products.url({ query }),
+    );
+}
+
 /** Load categories + products, with in-memory cache for fast revisits. */
 export async function loadItemsCatalog(options?: {
     force?: boolean;

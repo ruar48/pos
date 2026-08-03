@@ -81,6 +81,24 @@ export type InventoryTotals = {
     out_of_stock: number;
 };
 
+export type InventoryFilteredTotals = {
+    beginning: number;
+    added: number;
+    deducted: number;
+    sold: number;
+    ending: number;
+    value_cost: number;
+    value_retail: number;
+};
+
+export type InventoryReportMeta = {
+    page: number;
+    per_page: number;
+    total: number;
+    has_more: boolean;
+    filtered_totals: InventoryFilteredTotals;
+};
+
 export type InventoryReport = {
     range: { start: string; end: string };
     valuation_as_of: string;
@@ -88,6 +106,7 @@ export type InventoryReport = {
     categories: InventoryCategoryTotal[];
     totals: InventoryTotals;
     generated_at: string;
+    meta?: InventoryReportMeta;
 };
 
 type InventoryCacheEntry = {
@@ -129,6 +148,36 @@ export function clearInventoryReportCache(): void {
 export async function fetchInventoryReport(start: string, end: string) {
     return laravelFetch<InventoryReport>(
         inventoryReportRoute.url({ query: { start, end } }),
+    );
+}
+
+export async function fetchInventoryReportPage(options: {
+    start: string;
+    end: string;
+    page: number;
+    perPage?: number;
+    search?: string;
+    category?: string;
+    status?: string;
+}) {
+    const query: Record<string, string> = {
+        start: options.start,
+        end: options.end,
+        page: String(options.page),
+        per_page: String(options.perPage ?? 100),
+    };
+    if (options.search) {
+        query.search = options.search;
+    }
+    if (options.category) {
+        query.category = options.category;
+    }
+    if (options.status) {
+        query.status = options.status;
+    }
+
+    return laravelFetch<InventoryReport>(
+        inventoryReportRoute.url({ query }),
     );
 }
 

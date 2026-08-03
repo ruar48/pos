@@ -50,9 +50,8 @@ import {
     createCategory,
     deleteProduct,
     exportProducts,
-    getItemsCatalogCache,
-    loadItemsCatalog,
-    setItemsCatalogCache,
+    fetchCategories,
+    fetchProductsPage,
     importProducts,
     saveProduct,
     updateCategory,
@@ -564,18 +563,24 @@ function downloadCsv(filename: string, header: string[], rows: (string | number)
     URL.revokeObjectURL(url);
 }
 
-export function ItemsCatalogView({ standalone = false }: { standalone?: boolean }) {
-    const cachedCatalog = getItemsCatalogCache();
+const ITEMS_PER_PAGE = 100;
 
-    const [categories, setCategories] = useState<PosCategory[]>(
-        () => cachedCatalog?.categories ?? [],
-    );
-    const [products, setProducts] = useState<PosProduct[]>(
-        () => cachedCatalog?.products ?? [],
-    );
-    const [loading, setLoading] = useState(() => cachedCatalog == null);
+export function ItemsCatalogView({ standalone = false }: { standalone?: boolean }) {
+    const [categories, setCategories] = useState<PosCategory[]>([]);
+    const [products, setProducts] = useState<PosProduct[]>([]);
+    const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
+
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [catalogTotal, setCatalogTotal] = useState(0);
+    const [filteredTotal, setFilteredTotal] = useState(0);
+    const [lowStockTotal, setLowStockTotal] = useState(0);
+    const [categoryCounts, setCategoryCounts] = useState<
+        Record<string, number>
+    >({});
 
     const [search, setSearch] = useState('');
     const [activeCategory, setActiveCategory] = useState<string>(ALL);
@@ -620,6 +625,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
     const [deletingProduct, setDeletingProduct] = useState(false);
     const newRowItemRef = useRef<HTMLInputElement>(null);
     const spreadsheetRootRef = useRef<HTMLDivElement>(null);
+    const tableScrollRef = useRef<HTMLDivElement>(null);
     const [browserFullscreen, setBrowserFullscreen] = useState(false);
 
     const categoryIconByName = useMemo(() => {
@@ -628,8 +634,14 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
         return map;
     }, [categories]);
 
-    async function loadData(options?: { force?: boolean }) {
+    async function loadData(options?: {
+        search?: string;
+        category?: string;
+        resetPending?: boolean;
+    }) {
         const hasLocalData = categories.length > 0 || products.length > 0;
+        const searchTerm = options?.search ?? search;
+        const category = options?.category ?? activeCategory;
 
         if (!hasLocalData) {
             setLoading(true);
@@ -639,14 +651,27 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
         setLoadError(null);
 
         try {
-            // Always refresh from server; cache is only for instant first paint.
-            const catalog = await loadItemsCatalog({
-                force: options?.force !== false,
-            });
-            setCategories(catalog.categories);
-            setProducts(catalog.products);
-            setPendingEdits(new Map());
-            setPendingCreates([]);
+            const [catRes, prodRes] = await Promise.all([
+                fetchCategories(),
+                fetchProductsPage({
+                    page: 1,
+                    perPage: ITEMS_PER_PAGE,
+                    search: searchTerm,
+                    category: category === ALL ? undefined : category,
+                }),
+            ]);
+            setCategories(catRes.data ?? []);
+            setProducts(prodRes.data ?? []);
+            setPage(1);
+            setHasMore(prodRes.meta?.has_more ?? false);
+            setFilteredTotal(prodRes.meta?.total ?? (prodRes.data?.length ?? 0));
+            setCatalogTotal(prodRes.meta?.catalog_total ?? 0);
+            setLowStockTotal(prodRes.meta?.low_stock_total ?? 0);
+            setCategoryCounts(prodRes.meta?.category_counts ?? {});
+            if (options?.resetPending !== false) {
+                setPendingEdits(new Map());
+                setPendingCreates([]);
+            }
         } catch (error) {
             if (!hasLocalData) {
                 setLoadError(
@@ -660,6 +685,68 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             setRefreshing(false);
         }
     }
+
+    const loadMore = useCallback(async () => {
+        if (loadingMore || !hasMore) {
+            return;
+        }
+        setLoadingMore(true);
+        try {
+            const nextPage = page + 1;
+            const res = await fetchProductsPage({
+                page: nextPage,
+                perPage: ITEMS_PER_PAGE,
+                search,
+                category: activeCategory === ALL ? undefined : activeCategory,
+            });
+            setProducts((current) => [...current, ...(res.data ?? [])]);
+            setPage(nextPage);
+            setHasMore(res.meta?.has_more ?? false);
+        } catch (error) {
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : 'Failed to load more items',
+            );
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [activeCategory, hasMore, loadingMore, page, search]);
+
+    const loadMoreSentinelRef = useRef<HTMLTableRowElement>(null);
+    useEffect(() => {
+        const sentinel = loadMoreSentinelRef.current;
+        if (!sentinel) {
+            return;
+        }
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) {
+                    void loadMore();
+                }
+            },
+            { rootMargin: '600px' },
+        );
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [loadMore]);
+
+    const didMountRef = useRef(false);
+    useEffect(() => {
+        if (!didMountRef.current) {
+            didMountRef.current = true;
+            return;
+        }
+        const timeout = setTimeout(() => {
+            void loadData({
+                search,
+                category: activeCategory,
+                resetPending: false,
+            });
+        }, 300);
+        return () => clearTimeout(timeout);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search, activeCategory]);
 
     useEffect(() => {
         void loadData();
@@ -789,7 +876,6 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             }
 
             setProducts(nextProducts);
-            setItemsCatalogCache(categories, nextProducts);
             setPendingEdits(new Map());
             setPendingCreates([]);
             setNewProductDraft(
@@ -949,14 +1035,6 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             window.open(ITEMS_SHEET_PATH, '_blank', 'noopener,noreferrer');
         });
     }, [requestLeave]);
-
-    const lowStockCount = useMemo(
-        () =>
-            products.filter(
-                (p) => toNumber(p.stock) <= toNumber(p.reorder_level),
-            ).length,
-        [products],
-    );
 
     const categoryNames = useMemo(
         () => categories.map((category) => category.name),
@@ -1396,7 +1474,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 Spreadsheet
                             </span>
                             <span className="hidden text-xs text-gray-500 sm:inline">
-                                {products.length} products · {categories.length}{' '}
+                                {catalogTotal} products · {categories.length}{' '}
                                 categories
                             </span>
                         </div>
@@ -1441,7 +1519,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 </div>
                             </div>
                             <p className="agri-stat-value mt-auto">
-                                {products.length}
+                                {catalogTotal}
                             </p>
                         </div>
                         <div className="agri-stat-card">
@@ -1466,10 +1544,10 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             </div>
                             <p
                                 className={`agri-stat-value mt-auto ${
-                                    lowStockCount > 0 ? 'text-destructive' : ''
+                                    lowStockTotal > 0 ? 'text-destructive' : ''
                                 }`}
                             >
-                                {lowStockCount}
+                                {lowStockTotal}
                             </p>
                         </div>
                         <div className="agri-stat-card">
@@ -1663,7 +1741,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                 >
                     <CategoryChip
                         label="All"
-                        count={products.length}
+                        count={catalogTotal}
                         active={activeCategory === ALL}
                         onClick={() => setActiveCategory(ALL)}
                     />
@@ -1673,11 +1751,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             <CategoryChip
                                 key={cat.id}
                                 label={cat.name}
-                                count={
-                                    products.filter(
-                                        (p) => p.category_name === cat.name,
-                                    ).length
-                                }
+                                count={categoryCounts[cat.name] ?? 0}
                                 active={activeCategory === cat.name}
                                 onClick={() => setActiveCategory(cat.name)}
                                 icon={<Icon className="size-3.5" />}
@@ -1715,12 +1789,21 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             </div>
                         )}
                     <div
+                        ref={tableScrollRef}
                         className={cn(
                             'overflow-auto border border-gray-300 bg-white',
-                            scrollLayout &&
-                                'min-h-0 flex-1 fullscreen:min-h-0 fullscreen:flex-1 fullscreen:overflow-auto',
+                            scrollLayout
+                                ? 'min-h-0 flex-1 fullscreen:min-h-0 fullscreen:flex-1 fullscreen:overflow-auto'
+                                : 'max-h-[70vh]',
                         )}
                     >
+                        {products.length === 0 &&
+                        (search.trim() !== '' || activeCategory !== ALL) ? (
+                            <p className="border-b border-gray-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                                No products match your current filter. Clear
+                                search or choose another category.
+                            </p>
+                        ) : null}
                         {products.length > 0 && filteredProducts.length === 0 ? (
                             <p className="border-b border-gray-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
                                 No products match your current filter. Clear
@@ -1967,6 +2050,33 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                     onTryCommit={tryCommitNewProduct}
                                     onFocusRow={focusNewProductRow}
                                 />
+                                {hasMore && !loadingMore ? (
+                                    <tr ref={loadMoreSentinelRef}>
+                                        <td colSpan={9} className="p-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => void loadMore()}
+                                                className="w-full border-t border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-medium text-gray-600 hover:bg-gray-100"
+                                            >
+                                                Load 100 more ({products.length}
+                                                /{filteredTotal})
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ) : null}
+                                {loadingMore ? (
+                                    <tr>
+                                        <td
+                                            colSpan={9}
+                                            className="border border-gray-300 px-3 py-2 text-center text-xs text-muted-foreground"
+                                        >
+                                            <span className="inline-flex items-center gap-2">
+                                                <Loader2 className="size-3.5 animate-spin" />
+                                                Loading more items…
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ) : null}
                             </tbody>
                             <tfoot>
                                 <tr className="bg-gray-50 font-semibold">
