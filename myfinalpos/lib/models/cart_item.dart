@@ -12,8 +12,13 @@ class CartItem {
 
   int? get availableStock => variety?.stock ?? product.stock;
 
-  String get displayName =>
-      variety == null ? product.name : '${product.name} - ${variety!.name}';
+  String get displayName {
+    if (variety != null) return '${product.name} - ${variety!.name}';
+    // Products without a separate variety row can still carry a flat
+    // "option" (e.g. "1000 ML", "50 KILO") set directly on the product.
+    final option = product.displayOption;
+    return option == null ? product.name : '${product.name} - $option';
+  }
 
   double get total => unitPrice * quantity;
 

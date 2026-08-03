@@ -173,7 +173,7 @@ class OrderController extends Controller
                     }
 
                     $product = DB::selectOne(
-                        'SELECT id, name, price, stock, cost_price
+                        'SELECT id, name, price, stock, cost_price, option
                          FROM products
                          WHERE id = ?
                          LIMIT 1
@@ -247,11 +247,17 @@ class OrderController extends Controller
                     $lineTotal = round($price * $quantity, 2);
                     $calculatedSubtotal += $lineTotal;
 
+                    $flatOption = trim((string) ($product->option ?? ''));
+
                     $validatedItems[] = [
                         'product_id' => (int) $product->id,
                         'product_name' => (string) $product->name,
                         'variety_id' => null,
-                        'variety_name' => null,
+                        // Products without a separate variety row can still
+                        // carry a flat "option" (e.g. "1000 ML", "50 KILO") -
+                        // store it in variety_name so receipts/reports show
+                        // it exactly like a real variety.
+                        'variety_name' => $flatOption === '' ? null : $flatOption,
                         'quantity' => $quantity,
                         'price' => $price,
                         'unit_cost' => $unitCost,

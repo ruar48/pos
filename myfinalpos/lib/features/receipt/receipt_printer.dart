@@ -531,14 +531,16 @@ class ThermalReceiptLayout {
         }
       }
     } else {
-      add(
-        _composeItemLine(
+      for (final line in _formatItemLines(
+        ReceiptLineItem(
           name: 'Sample Product',
-          unitPrice: data.subtotal,
           quantity: 1,
+          unitPrice: data.subtotal,
           total: data.subtotal,
         ),
-      );
+      )) {
+        add(line);
+      }
     }
     add(_divider());
     if (!data.hasRefunds) {
@@ -728,65 +730,28 @@ class ThermalReceiptLayout {
     return rounded.toStringAsFixed(2);
   }
 
-  String _composeItemLine({
-    required String name,
-    required double unitPrice,
-    required int quantity,
-    required double total,
-  }) {
-    final lines = _formatItemLines(
-      ReceiptLineItem(
-        name: name,
-        quantity: quantity,
-        unitPrice: unitPrice,
-        total: total,
-      ),
-    );
-    return lines.first;
-  }
-
-  String? _lineWithRightAmount(String left, String amountCol) {
-    const amountWidth = 8;
-    final normalized = left.trimRight();
-    final spaces = kThermalWidth - normalized.length - amountWidth;
-    if (spaces >= 1) {
-      return '$normalized${' ' * spaces}$amountCol';
-    }
-    return null;
-  }
-
+  /// Always: the item name on its own line(s) (wrapped if too long), then
+  /// a separate "qty x @unit price ... amount" line. Keeping these on
+  /// guaranteed-separate lines - rather than trying to cram name, price,
+  /// and amount onto one line when they happen to fit - means the layout
+  /// never depends on exact name length or paper width, so it can't come
+  /// out jumbled for long product names.
   List<String> _formatItemLines(ReceiptLineItem item) {
-    const amountWidth = 8;
-    final amountCol = _money(item.total).padLeft(amountWidth);
-    final meta = '@${_formatUnitPrice(item.unitPrice)}x${item.quantity}';
-    final name = item.name.trim();
+    final amount = _money(item.total);
+    final meta = '${item.quantity} x @${_formatUnitPrice(item.unitPrice)}';
     final result = <String>[];
 
-    final combined = '$name $meta';
-    final singleLine = _lineWithRightAmount(combined, amountCol);
-    if (singleLine != null) {
-      result.add(singleLine);
-    } else {
-      var remaining = name;
-      while (remaining.length > kThermalWidth) {
-        result.add(remaining.substring(0, kThermalWidth));
-        remaining = remaining.substring(kThermalWidth).trimLeft();
-      }
-
-      final descriptor = remaining.isEmpty ? meta : '$remaining $meta';
-      final descriptorLine = _lineWithRightAmount(descriptor, amountCol);
-      if (descriptorLine != null) {
-        result.add(descriptorLine);
-      } else {
-        if (remaining.isNotEmpty) {
-          result.add(remaining);
-        }
-        result.add(
-          _lineWithRightAmount(meta, amountCol) ??
-              amountCol.padLeft(kThermalWidth),
-        );
-      }
+    var remaining = item.name.trim();
+    if (remaining.isEmpty) {
+      remaining = 'Item';
     }
+    while (remaining.length > kThermalWidth) {
+      result.add(remaining.substring(0, kThermalWidth));
+      remaining = remaining.substring(kThermalWidth).trimLeft();
+    }
+    result.add(remaining);
+
+    result.add(_amountRow(meta, amount));
 
     final gross = item.unitPrice * item.quantity;
     final lineDiscount = gross - item.total;
