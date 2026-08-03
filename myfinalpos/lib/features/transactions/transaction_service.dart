@@ -170,7 +170,9 @@ class TransactionService {
       items: transaction.items
           .map(
             (item) => ReceiptLineItem(
-              name: item.productName,
+              name: (item.varietyName == null || item.varietyName!.isEmpty)
+                  ? item.productName
+                  : '${item.productName} - ${item.varietyName}',
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               total: item.subtotal,
@@ -198,7 +200,9 @@ class TransactionService {
       refundItems: transaction.refundedItems
           .map(
             (item) => ReceiptRefundLineItem(
-              name: item.productName,
+              name: (item.varietyName == null || item.varietyName!.isEmpty)
+                  ? item.productName
+                  : '${item.productName} - ${item.varietyName}',
               quantity: item.refundedQuantity,
               amount: item.refundedAmount,
             ),

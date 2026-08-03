@@ -768,6 +768,10 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
         if (!target) {
             return;
         }
+        // Scroll the blank row into view first (it sits at the bottom of the
+        // list) so staff can start typing immediately instead of having to
+        // scroll down manually to find it, then focus it.
+        target.scrollIntoView({ block: 'end', behavior: 'smooth' });
         target.focus({ preventScroll: true });
     }, []);
 
@@ -1137,7 +1141,9 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             const preset = defaultNewProductCategory(categories, activeCategory);
             setNewProductDraft(emptyNewProductDraft(preset));
             window.requestAnimationFrame(() => {
-                newRowItemRef.current?.focus();
+                const target = newRowItemRef.current;
+                target?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+                target?.focus({ preventScroll: true });
             });
             return true;
         },
