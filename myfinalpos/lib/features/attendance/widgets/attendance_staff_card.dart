@@ -483,7 +483,16 @@ class _SelfieThumb extends StatelessWidget {
           ? Image.network(
               photoUrl!,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, error) {
+              // Some shared hosts block hotlink-style requests missing a
+              // browser-like User-Agent/Referer - Image.network sends
+              // neither by default, even though the same URL loads fine in
+              // an actual browser (e.g. the web admin dashboard).
+              headers: {
+                'User-Agent':
+                    'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36',
+                'Referer': serverOrigin,
+              },
+              errorBuilder: (_, error, __) {
                 debugPrint('[attendance] photo failed to load: $photoUrl ($error)');
                 return Icon(
                   emptyIcon,
