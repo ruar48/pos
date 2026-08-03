@@ -539,7 +539,7 @@ class AttendanceService
 
     ): array {
 
-        if (! in_array($eventType, ['clock_in', 'clock_out'], true)) {
+        if (! in_array($eventType, ['clock_in', 'clock_out', 'break_in', 'break_out'], true)) {
 
             throw new \InvalidArgumentException('Invalid attendance event');
 
