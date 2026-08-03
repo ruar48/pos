@@ -408,15 +408,12 @@ class ThermalReceiptLayout {
     add(_center(s.storeSubtitle));
     add(_center(s.addressLine1));
     add(_center(s.addressLine2));
-    add('');
     add(_center('INVOICE'));
-    add('');
     add(_labelValue('INV NO', data.invoiceNumber));
     add(_labelValue('DATE', _formatDate(data.dateTime)));
     add(_labelValue('TIME', _formatTime(data.dateTime)));
     add(_labelValue('CASHIER', _shortCashier(data.cashierName)));
     add(_labelValue('POS', s.posTerminalId));
-    add('');
     add(_labelValue('CUSTOMER', _clip(data.customerName, 22)));
     final customerTin = _clip(data.customerTin, 22);
     if (customerTin.isNotEmpty) {
@@ -430,7 +427,6 @@ class ThermalReceiptLayout {
       add(_labelValue('POINTS EARNED', '${data.loyaltyPointsEarned}'));
       add(_labelValue('TOTAL POINTS', '${data.loyaltyBalance}'));
     }
-    add('');
     add(_divider());
     if (!data.hasRefunds) {
       // Reprinting a refunded order should only show what was refunded
@@ -513,21 +509,17 @@ class ThermalReceiptLayout {
     add(s.storeSubtitle);
     add(s.addressLine1);
     add(s.addressLine2);
-    add('');
     add('INVOICE');
-    add('');
     add(previewLabelValue('INV NO', data.invoiceNumber));
     add(previewLabelValue('DATE', _formatDate(data.dateTime)));
     add(previewLabelValue('TIME', _formatTime(data.dateTime)));
     add(previewLabelValue('CASHIER', _shortCashier(data.cashierName)));
     add(previewLabelValue('POS', s.posTerminalId));
-    add('');
     add(previewLabelValue('CUSTOMER', _clip(data.customerName, 22)));
     if (data.isLoyaltyCustomer || data.loyaltyPointsEarned > 0) {
       add(previewLabelValue('POINTS EARNED', '${data.loyaltyPointsEarned}'));
       add(previewLabelValue('TOTAL POINTS', '${data.loyaltyBalance}'));
     }
-    add('');
     add(_divider());
     if (data.hasRefunds) {
       // Matches buildLines(): a refunded order's reprint only shows the

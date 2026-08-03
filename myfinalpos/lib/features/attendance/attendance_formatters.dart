@@ -265,6 +265,28 @@ bool attendanceHasSelfieOut(AttendanceBoardRow row) {
       attendanceSelfieOutUrl(row) != null;
 }
 
+String? attendanceBreakInUrl(AttendanceBoardRow row) => row.breakStartPhotoUrl;
+
+String? attendanceBreakOutUrl(AttendanceBoardRow row) => row.breakEndPhotoUrl;
+
+String attendanceBreakInTime(AttendanceBoardRow row) {
+  final display = row.breakStartDisplay;
+  if (display != null && display.isNotEmpty) return display;
+  return formatAttendanceIsoTime(row.breakStartAt);
+}
+
+String attendanceBreakOutTime(AttendanceBoardRow row) {
+  final display = row.breakEndDisplay;
+  if (display != null && display.isNotEmpty) return display;
+  return formatAttendanceIsoTime(row.breakEndAt);
+}
+
+bool attendanceHasSelfieBreak(AttendanceBoardRow row) {
+  return attendanceBreakInUrl(row) != null ||
+      attendanceBreakOutUrl(row) != null ||
+      row.isOnBreak;
+}
+
 List<DateTime> attendanceRecentDates({int days = 7}) {
   final today = DateTime.now();
   final start = DateTime(today.year, today.month, today.day);

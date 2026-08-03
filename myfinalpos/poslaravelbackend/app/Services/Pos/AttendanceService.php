@@ -786,6 +786,10 @@ class AttendanceService
 
         $breakEndAt = null;
 
+        $breakStartPhoto = null;
+
+        $breakEndPhoto = null;
+
         $totalBreakMinutes = 0;
 
 
@@ -796,12 +800,14 @@ class AttendanceService
 
             $at = (string) $event->created_at;
 
+            $eventPhoto = isset($event->photo_url) && $event->photo_url !== null && $event->photo_url !== ''
+                ? (string) $event->photo_url
+                : null;
+
             $punchTimes[] = [
                 'type' => $type,
                 'at' => $at,
-                'photo_url' => isset($event->photo_url) && $event->photo_url !== null && $event->photo_url !== ''
-                    ? (string) $event->photo_url
-                    : null,
+                'photo_url' => $eventPhoto,
             ];
 
 
@@ -836,6 +842,8 @@ class AttendanceService
 
                 $breakStartAt = $at;
 
+                $breakStartPhoto = $eventPhoto;
+
             }
 
             if ($type === 'break_out' && $openBreakStart !== null) {
@@ -843,6 +851,8 @@ class AttendanceService
                 $totalBreakMinutes += $openBreakStart->diffInMinutes(Carbon::parse($at));
 
                 $breakEndAt = $at;
+
+                $breakEndPhoto = $eventPhoto;
 
                 $openBreakStart = null;
 
@@ -963,6 +973,10 @@ class AttendanceService
             'break_start_display' => $this->apiTimeLabel($breakStartAt),
 
             'break_end_display' => $this->apiTimeLabel($breakEndAt),
+
+            'break_start_photo_url' => $breakStartPhoto,
+
+            'break_end_photo_url' => $breakEndPhoto,
 
             'total_break_minutes' => $totalBreakMinutes,
 
@@ -1104,6 +1118,10 @@ class AttendanceService
 
         if ($eventType === 'break_in' && $isOnBreak) {
             throw new \RuntimeException('You are already on break.');
+        }
+
+        if ($eventType === 'break_in' && ($status['break_end_at'] ?? null) !== null) {
+            throw new \RuntimeException('You have already taken your break for today.');
         }
 
         if ($eventType === 'break_out' && ! $isOnBreak) {

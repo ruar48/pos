@@ -69,6 +69,8 @@ class AttendanceBoardRow {
     this.breakEndAt,
     this.breakStartDisplay,
     this.breakEndDisplay,
+    this.breakStartPhotoUrl,
+    this.breakEndPhotoUrl,
     this.totalBreakMinutes = 0,
   });
 
@@ -106,6 +108,8 @@ class AttendanceBoardRow {
   final DateTime? breakEndAt;
   final String? breakStartDisplay;
   final String? breakEndDisplay;
+  final String? breakStartPhotoUrl;
+  final String? breakEndPhotoUrl;
   final int totalBreakMinutes;
 
   String get punctualityLabel {
@@ -162,6 +166,8 @@ class AttendanceBoardRow {
     DateTime? breakEndAt,
     String? breakStartDisplay,
     String? breakEndDisplay,
+    String? breakStartPhotoUrl,
+    String? breakEndPhotoUrl,
     int? totalBreakMinutes,
   }) {
     return AttendanceBoardRow(
@@ -199,6 +205,8 @@ class AttendanceBoardRow {
       breakEndAt: breakEndAt ?? this.breakEndAt,
       breakStartDisplay: breakStartDisplay ?? this.breakStartDisplay,
       breakEndDisplay: breakEndDisplay ?? this.breakEndDisplay,
+      breakStartPhotoUrl: breakStartPhotoUrl ?? this.breakStartPhotoUrl,
+      breakEndPhotoUrl: breakEndPhotoUrl ?? this.breakEndPhotoUrl,
       totalBreakMinutes: totalBreakMinutes ?? this.totalBreakMinutes,
     );
   }
@@ -249,6 +257,8 @@ class AttendanceBoardRow {
       breakEndAt: parse(json['break_end_at']?.toString()),
       breakStartDisplay: json['break_start_display']?.toString(),
       breakEndDisplay: json['break_end_display']?.toString(),
+      breakStartPhotoUrl: json['break_start_photo_url']?.toString(),
+      breakEndPhotoUrl: json['break_end_photo_url']?.toString(),
       totalBreakMinutes: toInt(json['total_break_minutes']),
     );
   }

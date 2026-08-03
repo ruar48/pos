@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 import {
     ArrowLeftRight,
     BarChart3,
+    Banknote,
     Gift,
     Home,
     LayoutGrid,
@@ -76,6 +77,11 @@ const managementNavItems: NavItem[] = [
         title: 'Staff',
         href: '/pos/staff',
         icon: Users,
+    },
+    {
+        title: 'Payroll',
+        href: '/pos/payroll',
+        icon: Banknote,
     },
     {
         title: 'Loyalty & Customers',

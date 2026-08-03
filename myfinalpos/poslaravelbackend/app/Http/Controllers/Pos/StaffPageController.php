@@ -7,9 +7,11 @@ use App\Http\Controllers\Api\Pos\FaceProfileController;
 use App\Http\Controllers\Api\Pos\UserController;
 use App\Http\Controllers\Controller;
 use App\Services\Pos\AttendanceExportService;
+use App\Services\Pos\PayrollService;
 use App\Support\AttendancePhotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -61,6 +63,58 @@ class StaffPageController extends Controller
             $end,
             $branchId > 0 ? $branchId : null,
         );
+    }
+
+    public function payrollPage(): Response
+    {
+        return Inertia::render('pos/payroll');
+    }
+
+    public function payrollReport(Request $request): JsonResponse
+    {
+        $today = Carbon::today()->format('Y-m-d');
+        $start = trim((string) $request->query('start', $today));
+        $end = trim((string) $request->query('end', $today));
+        $branchId = (int) $request->query('branch_id', 0);
+
+        $rows = app(PayrollService::class)->report(
+            $start,
+            $end,
+            $branchId > 0 ? $branchId : null,
+        );
+
+        return response()->json([
+            'success' => true,
+            'range' => ['start' => $start, 'end' => $end],
+            'rows' => $rows,
+        ]);
+    }
+
+    public function updatePayrollRate(Request $request): JsonResponse
+    {
+        $userId = (int) $request->input('user_id', 0);
+        $rate = (float) $request->input('hourly_rate', 0);
+
+        if ($userId <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'user_id is required',
+            ], 400);
+        }
+
+        try {
+            app(PayrollService::class)->updateHourlyRate($userId, $rate, (int) Auth::id());
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Hourly rate updated',
+        ]);
     }
 
     public function clockAttendance(Request $request): JsonResponse

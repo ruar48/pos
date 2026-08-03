@@ -44,6 +44,10 @@ class _AttendancePageState extends State<AttendancePage> {
   final Map<int, String> _pendingOutPhotos = {};
   final Map<int, DateTime> _pendingInTimes = {};
   final Map<int, DateTime> _pendingOutTimes = {};
+  final Map<int, String> _pendingBreakInPhotos = {};
+  final Map<int, String> _pendingBreakOutPhotos = {};
+  final Map<int, DateTime> _pendingBreakInTimes = {};
+  final Map<int, DateTime> _pendingBreakOutTimes = {};
 
   int get _userId => widget.pageState.widget.currentUser.id;
   int get _branchId => widget.pageState.activeBranchId;
@@ -345,6 +349,56 @@ class _AttendancePageState extends State<AttendancePage> {
         }
       }
 
+      final pendingBreakIn = _pendingBreakInPhotos[row.userId];
+      if (pendingBreakIn != null &&
+          (patched.breakStartPhotoUrl == null ||
+              patched.breakStartPhotoUrl!.isEmpty)) {
+        patched = patched.copyWith(breakStartPhotoUrl: pendingBreakIn);
+      } else if (patched.breakStartPhotoUrl != null &&
+          patched.breakStartPhotoUrl!.isNotEmpty) {
+        _pendingBreakInPhotos.remove(row.userId);
+        await AttendancePhotoCache.save(
+          date: _boardDate,
+          userId: row.userId,
+          type: 'break_in',
+          photoUrl: patched.breakStartPhotoUrl!,
+        );
+      } else {
+        final cachedBreakIn = await AttendancePhotoCache.load(
+          date: _boardDate,
+          userId: row.userId,
+          type: 'break_in',
+        );
+        if (cachedBreakIn != null) {
+          patched = patched.copyWith(breakStartPhotoUrl: cachedBreakIn);
+        }
+      }
+
+      final pendingBreakOut = _pendingBreakOutPhotos[row.userId];
+      if (pendingBreakOut != null &&
+          (patched.breakEndPhotoUrl == null ||
+              patched.breakEndPhotoUrl!.isEmpty)) {
+        patched = patched.copyWith(breakEndPhotoUrl: pendingBreakOut);
+      } else if (patched.breakEndPhotoUrl != null &&
+          patched.breakEndPhotoUrl!.isNotEmpty) {
+        _pendingBreakOutPhotos.remove(row.userId);
+        await AttendancePhotoCache.save(
+          date: _boardDate,
+          userId: row.userId,
+          type: 'break_out',
+          photoUrl: patched.breakEndPhotoUrl!,
+        );
+      } else {
+        final cachedBreakOut = await AttendancePhotoCache.load(
+          date: _boardDate,
+          userId: row.userId,
+          type: 'break_out',
+        );
+        if (cachedBreakOut != null) {
+          patched = patched.copyWith(breakEndPhotoUrl: cachedBreakOut);
+        }
+      }
+
       patched = await _patchCachedPunchTimes(patched);
 
       merged.add(attendanceNormalizeRow(patched));
@@ -397,6 +451,50 @@ class _AttendancePageState extends State<AttendancePage> {
       );
       if (cachedOut != null) {
         patched = patched.copyWith(dayOutAt: cachedOut, clockOutAt: cachedOut);
+      }
+    }
+
+    final pendingBreakIn = _pendingBreakInTimes[row.userId];
+    final breakInTime = patched.breakStartAt;
+    if (breakInTime != null) {
+      await AttendancePhotoCache.saveTime(
+        date: _boardDate,
+        userId: row.userId,
+        type: 'break_in',
+        at: breakInTime,
+      );
+    } else if (pendingBreakIn != null) {
+      patched = patched.copyWith(breakStartAt: pendingBreakIn);
+    } else {
+      final cachedBreakIn = await AttendancePhotoCache.loadTime(
+        date: _boardDate,
+        userId: row.userId,
+        type: 'break_in',
+      );
+      if (cachedBreakIn != null) {
+        patched = patched.copyWith(breakStartAt: cachedBreakIn);
+      }
+    }
+
+    final pendingBreakOut = _pendingBreakOutTimes[row.userId];
+    final breakOutTime = patched.breakEndAt;
+    if (breakOutTime != null) {
+      await AttendancePhotoCache.saveTime(
+        date: _boardDate,
+        userId: row.userId,
+        type: 'break_out',
+        at: breakOutTime,
+      );
+    } else if (pendingBreakOut != null) {
+      patched = patched.copyWith(breakEndAt: pendingBreakOut);
+    } else {
+      final cachedBreakOut = await AttendancePhotoCache.loadTime(
+        date: _boardDate,
+        userId: row.userId,
+        type: 'break_out',
+      );
+      if (cachedBreakOut != null) {
+        patched = patched.copyWith(breakEndAt: cachedBreakOut);
       }
     }
 
@@ -464,6 +562,13 @@ class _AttendancePageState extends State<AttendancePage> {
         ? row.branchId!
         : _branchId;
 
+    final selfie = await showAttendanceSelfieSheet(
+      context,
+      staffName: row.fullName,
+      actionLabel: actionLabel,
+    );
+    if (selfie == null || !mounted) return;
+
     setState(() {
       _submitting = true;
       _punchingUserId = targetUserId;
@@ -485,17 +590,62 @@ class _AttendancePageState extends State<AttendancePage> {
                     ? 'Flutter iOS'
                     : 'Flutter',
         tabletManual: true,
+        photoBase64: selfie.base64,
+        photoMime: selfie.mime,
       );
 
       if (!mounted) return;
 
       final isOnBreak = result.status?.isOnBreak ?? (action == 'break_in');
+      final photoUrl = result.photoUrl;
+      final punchedAt = DateTime.now();
+      final punchTime = action == 'break_in'
+          ? (result.status?.breakStartAt ?? punchedAt)
+          : (result.status?.breakEndAt ?? punchedAt);
+      final cacheType = action == 'break_in' ? 'break_in' : 'break_out';
+
+      await AttendancePhotoCache.saveTime(
+        date: _boardDate,
+        userId: targetUserId,
+        type: cacheType,
+        at: punchTime,
+      );
+
+      if (action == 'break_in') {
+        _pendingBreakInTimes[targetUserId] = punchTime;
+      } else {
+        _pendingBreakOutTimes[targetUserId] = punchTime;
+      }
+
+      if (photoUrl != null && photoUrl.isNotEmpty) {
+        await AttendancePhotoCache.save(
+          date: _boardDate,
+          userId: targetUserId,
+          type: cacheType,
+          photoUrl: photoUrl,
+        );
+        if (action == 'break_in') {
+          _pendingBreakInPhotos[targetUserId] = photoUrl;
+        } else {
+          _pendingBreakOutPhotos[targetUserId] = photoUrl;
+        }
+      }
 
       setState(() {
         _boardRows = _boardRows
             .map(
               (r) => r.userId == targetUserId
-                  ? r.copyWith(isOnBreak: isOnBreak)
+                  ? r.copyWith(
+                      isOnBreak: isOnBreak,
+                      breakStartAt: action == 'break_in' ? punchTime : r.breakStartAt,
+                      breakEndAt: action == 'break_out' ? punchTime : r.breakEndAt,
+                      breakStartPhotoUrl: action == 'break_in'
+                          ? (photoUrl ?? r.breakStartPhotoUrl)
+                          : r.breakStartPhotoUrl,
+                      breakEndPhotoUrl: action == 'break_out'
+                          ? (photoUrl ?? r.breakEndPhotoUrl)
+                          : r.breakEndPhotoUrl,
+                    )
                   : r,
             )
             .toList();

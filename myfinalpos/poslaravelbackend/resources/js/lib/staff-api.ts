@@ -100,6 +100,8 @@ export type AttendanceRow = {
     break_end_at: string | null;
     break_start_display?: string | null;
     break_end_display?: string | null;
+    break_start_photo_url?: string | null;
+    break_end_photo_url?: string | null;
     total_break_minutes: number;
 };
 

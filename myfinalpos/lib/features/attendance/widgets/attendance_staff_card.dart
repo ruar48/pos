@@ -46,6 +46,11 @@ class AttendanceStaffCard extends StatelessWidget {
     final outTime = attendanceSelfieOutTime(row);
     final hasIn = attendanceHasSelfieIn(row);
     final hasOut = attendanceHasSelfieOut(row);
+    final breakInUrl = resolveAttendancePhotoUrl(attendanceBreakInUrl(row));
+    final breakOutUrl = resolveAttendancePhotoUrl(attendanceBreakOutUrl(row));
+    final breakInTime = attendanceBreakInTime(row);
+    final breakOutTime = attendanceBreakOutTime(row);
+    final hasSelfieBreak = attendanceHasSelfieBreak(row);
     final isClockedIn = attendanceIsClockedIn(row);
     final isDayDone = attendanceIsDayComplete(row);
     final canTimeIn = attendanceCanTimeIn(row, punchEnabled: punchEnabled);
@@ -64,86 +69,137 @@ class AttendanceStaffCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 4,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  row.fullName.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    letterSpacing: 0.2,
-                    color: AppColors.text,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                _DutyHoursText(row: row),
-              ],
+          Text(
+            row.fullName.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              letterSpacing: 0.2,
+              color: AppColors.text,
             ),
           ),
-          _ActionCircle(
-            label: 'IN',
-            caption: 'Time In',
-            color: AppColors.green,
-            enabled: canTimeIn,
-            done: inDone && !canTimeIn,
-            busy: punchBusy,
-            onTap: canTimeIn && !punchBusy && onTimeIn != null ? onTimeIn : null,
-          ),
-          const SizedBox(width: 8),
-          _ActionCircle(
-            label: 'OUT',
-            caption: 'Time Out',
-            color: AppColors.orange,
-            enabled: canTimeOut,
-            done: outDone && !canTimeOut,
-            busy: punchBusy,
-            onTap:
-                canTimeOut && !punchBusy && onTimeOut != null ? onTimeOut : null,
-          ),
-          const SizedBox(width: 8),
-          _ActionCircle(
-            label: isOnBreak ? 'END' : 'BRK',
-            caption: isOnBreak ? 'End Break' : 'Break',
-            color: AppColors.amber,
-            enabled: canBreak,
-            done: isOnBreak,
-            busy: punchBusy,
-            onTap: canBreak && !punchBusy && onBreak != null ? onBreak : null,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            flex: 3,
-            child: Row(
-              children: [
+          const SizedBox(height: 2),
+          _DutyHoursText(row: row),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _LabeledPhotoCircle(
+                  label: 'In',
+                  photoUrl: inUrl,
+                  hasRecord: hasIn,
+                  emptyIcon: Icons.login_rounded,
+                  accent: const Color(0xFF0D9488),
+                ),
+              ),
+              if (hasSelfieBreak) ...[
                 Expanded(
-                  child: _SelfieMeta(
-                    label: 'Selfie-In',
-                    time: inTime,
-                    color: const Color(0xFF0D9488),
-                    photoUrl: inUrl,
-                    hasRecord: hasIn,
-                    emptyIcon: Icons.login_rounded,
+                  child: _LabeledPhotoCircle(
+                    label: 'Break',
+                    photoUrl: breakInUrl,
+                    hasRecord: breakInUrl != null || breakInTime != '—',
+                    emptyIcon: Icons.free_breakfast_outlined,
+                    accent: AppColors.amber,
                   ),
                 ),
                 Expanded(
-                  child: _SelfieMeta(
-                    label: 'Selfie-Out',
-                    time: outTime,
-                    color: AppColors.orange,
-                    photoUrl: outUrl,
-                    hasRecord: hasOut,
-                    emptyIcon: Icons.logout_rounded,
+                  child: _LabeledPhotoCircle(
+                    label: 'Break Out',
+                    photoUrl: breakOutUrl,
+                    hasRecord: breakOutUrl != null || breakOutTime != '—',
+                    emptyIcon: Icons.free_breakfast_outlined,
+                    accent: AppColors.amber,
                   ),
                 ),
               ],
-            ),
+              Expanded(
+                child: _LabeledPhotoCircle(
+                  label: 'Out',
+                  photoUrl: outUrl,
+                  hasRecord: hasOut,
+                  emptyIcon: Icons.logout_rounded,
+                  accent: AppColors.orange,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _ActionCircle(
+                label: 'IN',
+                caption: 'Time In',
+                color: AppColors.green,
+                enabled: canTimeIn,
+                done: inDone && !canTimeIn,
+                busy: punchBusy,
+                onTap:
+                    canTimeIn && !punchBusy && onTimeIn != null ? onTimeIn : null,
+              ),
+              const SizedBox(width: 8),
+              _ActionCircle(
+                label: 'OUT',
+                caption: 'Time Out',
+                color: AppColors.orange,
+                enabled: canTimeOut,
+                done: outDone && !canTimeOut,
+                busy: punchBusy,
+                onTap: canTimeOut && !punchBusy && onTimeOut != null
+                    ? onTimeOut
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              _ActionCircle(
+                label: isOnBreak ? 'END' : 'BRK',
+                caption: isOnBreak ? 'End Break' : 'Break',
+                color: AppColors.amber,
+                enabled: canBreak,
+                done: isOnBreak,
+                busy: punchBusy,
+                onTap: canBreak && !punchBusy && onBreak != null ? onBreak : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _SelfieInfo(
+                  label: 'Selfie-In',
+                  time: inTime,
+                  color: const Color(0xFF0D9488),
+                ),
+              ),
+              Expanded(
+                child: _SelfieInfo(
+                  label: 'Selfie-Out',
+                  time: outTime,
+                  color: AppColors.orange,
+                ),
+              ),
+              if (hasSelfieBreak) ...[
+                Expanded(
+                  child: _SelfieInfo(
+                    label: 'Break-In',
+                    time: breakInTime,
+                    color: AppColors.amber,
+                  ),
+                ),
+                Expanded(
+                  child: _SelfieInfo(
+                    label: 'Break-Out',
+                    time: breakOutTime,
+                    color: AppColors.amber,
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),
@@ -294,22 +350,57 @@ class _ActionCircle extends StatelessWidget {
   }
 }
 
-class _SelfieMeta extends StatelessWidget {
-  const _SelfieMeta({
+class _LabeledPhotoCircle extends StatelessWidget {
+  const _LabeledPhotoCircle({
+    required this.label,
+    required this.hasRecord,
+    required this.emptyIcon,
+    required this.accent,
+    this.photoUrl,
+  });
+
+  final String label;
+  final bool hasRecord;
+  final IconData emptyIcon;
+  final Color accent;
+  final String? photoUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _SelfieThumb(
+          photoUrl: photoUrl,
+          hasRecord: hasRecord,
+          emptyIcon: emptyIcon,
+          accent: accent,
+          size: 48,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: AppColors.muted,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SelfieInfo extends StatelessWidget {
+  const _SelfieInfo({
     required this.label,
     required this.time,
     required this.color,
-    required this.hasRecord,
-    required this.emptyIcon,
-    this.photoUrl,
   });
 
   final String label;
   final String time;
   final Color color;
-  final bool hasRecord;
-  final IconData emptyIcon;
-  final String? photoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -324,29 +415,25 @@ class _SelfieMeta extends StatelessWidget {
               width: 8,
               height: 8,
               decoration: BoxDecoration(
-                color: hasRecord ? color : AppColors.border,
+                color: hasTime ? color : AppColors.border,
                 shape: BoxShape.circle,
               ),
             ),
             const SizedBox(width: 6),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.muted,
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.muted,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        _SelfieThumb(
-          photoUrl: photoUrl,
-          hasRecord: hasRecord,
-          emptyIcon: emptyIcon,
-          accent: color,
-        ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         Text(
           hasTime ? 'Today' : '—',
           style: TextStyle(
@@ -375,18 +462,20 @@ class _SelfieThumb extends StatelessWidget {
     required this.hasRecord,
     required this.emptyIcon,
     required this.accent,
+    this.size = 56,
   });
 
   final String? photoUrl;
   final bool hasRecord;
   final IconData emptyIcon;
   final Color accent;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 56,
-      height: 56,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: AppColors.softSurface,

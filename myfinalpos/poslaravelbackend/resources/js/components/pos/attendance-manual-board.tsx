@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { Camera, Loader2, LogIn, LogOut, RefreshCw, X } from 'lucide-react';
+import { Camera, Coffee, Loader2, LogIn, LogOut, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -76,6 +76,22 @@ function selfieOutTime(row: AttendanceRow): string {
     return row.day_out_display || '—';
 }
 
+function breakInUrl(row: AttendanceRow): string | null {
+    return resolvePhotoUrl(row.break_start_photo_url);
+}
+
+function breakOutUrl(row: AttendanceRow): string | null {
+    return resolvePhotoUrl(row.break_end_photo_url);
+}
+
+function breakInTime(row: AttendanceRow): string {
+    return row.break_start_display || '—';
+}
+
+function breakOutTime(row: AttendanceRow): string {
+    return row.break_end_display || '—';
+}
+
 function actionClass(label: string): string {
     switch (label) {
         case 'OUT':
@@ -111,6 +127,7 @@ export function AttendanceManualBoard({
 }: Props) {
     const [punchingUserId, setPunchingUserId] = useState<number | null>(null);
     const [target, setTarget] = useState<AttendanceRow | null>(null);
+    const [pendingKind, setPendingKind] = useState<'clock' | 'break'>('clock');
     const [preview, setPreview] = useState<string | null>(null);
     const [mime, setMime] = useState('image/jpeg');
     const [capturing, setCapturing] = useState(false);
@@ -129,6 +146,7 @@ export function AttendanceManualBoard({
     const closeDialog = useCallback(() => {
         stopCamera();
         setTarget(null);
+        setPendingKind('clock');
         setPreview(null);
         setCapturing(false);
     }, [stopCamera]);
@@ -154,34 +172,6 @@ export function AttendanceManualBoard({
         }
     }, []);
 
-    const handleBreak = async (row: AttendanceRow) => {
-        if (!clockEnabled) {
-            toast.error('Switch to today’s date to punch attendance.');
-            return;
-        }
-        const action = breakAction(row);
-        if (!action) return;
-
-        setPunchingUserId(row.user_id);
-        try {
-            await clockStaffAttendance({
-                action,
-                user_id: row.user_id,
-                branch_id: row.branch_id ?? undefined,
-            });
-            toast.success(
-                `${action === 'break_in' ? 'Break' : 'End Break'} · ${row.full_name}`,
-            );
-            await onClocked();
-        } catch (err) {
-            toast.error(
-                err instanceof Error ? err.message : 'Attendance punch failed',
-            );
-        } finally {
-            setPunchingUserId(null);
-        }
-    };
-
     const openPunch = async (row: AttendanceRow) => {
         if (!clockEnabled) {
             toast.error('Switch to today’s date to punch attendance.');
@@ -191,6 +181,22 @@ export function AttendanceManualBoard({
             toast.error(`${row.full_name} is done for today.`);
             return;
         }
+        setPendingKind('clock');
+        setTarget(row);
+        setPreview(null);
+        await startCamera();
+    };
+
+    const openBreak = async (row: AttendanceRow) => {
+        if (!clockEnabled) {
+            toast.error('Switch to today’s date to punch attendance.');
+            return;
+        }
+        if (!canBreak(row)) {
+            toast.error(`${row.full_name} can't take a break right now.`);
+            return;
+        }
+        setPendingKind('break');
         setTarget(row);
         setPreview(null);
         await startCamera();
@@ -227,12 +233,27 @@ export function AttendanceManualBoard({
 
     const confirmPunch = async () => {
         if (!target || !preview) return;
-        const action = punchAction(target);
-        if (action !== 'clock_in' && action !== 'clock_out') return;
+        const action =
+            pendingKind === 'break' ? breakAction(target) : punchAction(target);
+        if (
+            action !== 'clock_in' &&
+            action !== 'clock_out' &&
+            action !== 'break_in' &&
+            action !== 'break_out'
+        ) {
+            return;
+        }
 
         const base64 = preview.includes(',')
             ? preview.slice(preview.indexOf(',') + 1)
             : preview;
+
+        const successLabel =
+            pendingKind === 'break'
+                ? action === 'break_in'
+                    ? 'Break'
+                    : 'End Break'
+                : punchButtonLabel(target);
 
         setPunchingUserId(target.user_id);
         try {
@@ -243,7 +264,7 @@ export function AttendanceManualBoard({
                 photo_base64: base64,
                 photo_mime: mime,
             });
-            toast.success(`${punchButtonLabel(target)} · ${target.full_name}`);
+            toast.success(`${successLabel} · ${target.full_name}`);
             closeDialog();
             await onClocked();
         } catch (err) {
@@ -272,7 +293,7 @@ export function AttendanceManualBoard({
                             busy={punchingUserId === row.user_id}
                             punchEnabled={clockEnabled}
                             onPunch={() => void openPunch(row)}
-                            onBreak={() => void handleBreak(row)}
+                            onBreak={() => void openBreak(row)}
                         />
                     ))}
                 </div>
@@ -296,7 +317,13 @@ export function AttendanceManualBoard({
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>
-                            {target ? punchButtonLabel(target) : 'Attendance'}
+                            {target
+                                ? pendingKind === 'break'
+                                    ? breakButtonLabel(target) === 'END'
+                                        ? 'End Break'
+                                        : 'Break'
+                                    : punchButtonLabel(target)
+                                : 'Attendance'}
                         </DialogTitle>
                     </DialogHeader>
                     <p className="text-sm text-muted-foreground">
@@ -411,6 +438,10 @@ function ManualAttendanceRow({
     const outTime = selfieOutTime(row);
     const breakEnabled = punchEnabled && canBreak(row) && !busy;
     const breakLabel = breakButtonLabel(row);
+    const breakInPhotoUrl = breakInUrl(row);
+    const breakOutPhotoUrl = breakOutUrl(row);
+    const breakInAt = breakInTime(row);
+    const breakOutAt = breakOutTime(row);
 
     return (
         <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap">
@@ -425,8 +456,30 @@ function ManualAttendanceRow({
                 </p>
             </div>
 
-            <PhotoCircle src={inUrl} fallback={<LogIn className="size-4 opacity-40" />} />
-            <PhotoCircle src={outUrl} fallback={<LogOut className="size-4 opacity-40" />} />
+            <LabeledPhotoCircle
+                label="In"
+                src={inUrl}
+                fallback={<LogIn className="size-4 opacity-40" />}
+            />
+            {(breakInPhotoUrl || breakOutPhotoUrl) && (
+                <>
+                    <LabeledPhotoCircle
+                        label="Break"
+                        src={breakInPhotoUrl}
+                        fallback={<Coffee className="size-4 opacity-40" />}
+                    />
+                    <LabeledPhotoCircle
+                        label="Break Out"
+                        src={breakOutPhotoUrl}
+                        fallback={<Coffee className="size-4 opacity-40" />}
+                    />
+                </>
+            )}
+            <LabeledPhotoCircle
+                label="Out"
+                src={outUrl}
+                fallback={<LogOut className="size-4 opacity-40" />}
+            />
 
             <div className="flex shrink-0 flex-col items-center gap-1">
                 <button
@@ -469,6 +522,12 @@ function ManualAttendanceRow({
             <div className="grid min-w-[12rem] flex-1 grid-cols-2 gap-2">
                 <SelfieMeta label="Selfie-In" time={inTime} tone="teal" />
                 <SelfieMeta label="Selfie-Out" time={outTime} tone="orange" />
+                {(breakInPhotoUrl || breakOutPhotoUrl || row.is_on_break) && (
+                    <>
+                        <SelfieMeta label="Break-In" time={breakInAt} tone="amber" />
+                        <SelfieMeta label="Break-Out" time={breakOutAt} tone="amber" />
+                    </>
+                )}
             </div>
         </div>
     );
@@ -494,6 +553,25 @@ function PhotoCircle({
     );
 }
 
+function LabeledPhotoCircle({
+    label,
+    src,
+    fallback,
+}: {
+    label: string;
+    src: string | null;
+    fallback: ReactNode;
+}) {
+    return (
+        <div className="flex shrink-0 flex-col items-center gap-1">
+            <PhotoCircle src={src} fallback={fallback} />
+            <span className="text-[10px] font-semibold text-muted-foreground">
+                {label}
+            </span>
+        </div>
+    );
+}
+
 function SelfieMeta({
     label,
     time,
@@ -501,7 +579,7 @@ function SelfieMeta({
 }: {
     label: string;
     time: string;
-    tone: 'teal' | 'orange';
+    tone: 'teal' | 'orange' | 'amber';
 }) {
     const hasTime = time !== '—';
     return (
@@ -513,7 +591,9 @@ function SelfieMeta({
                         hasTime
                             ? tone === 'teal'
                                 ? 'bg-teal-500'
-                                : 'bg-orange-500'
+                                : tone === 'amber'
+                                    ? 'bg-amber-500'
+                                    : 'bg-orange-500'
                             : 'bg-border',
                     )}
                 />
