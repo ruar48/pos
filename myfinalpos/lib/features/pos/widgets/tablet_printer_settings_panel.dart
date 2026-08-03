@@ -28,8 +28,11 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
   late TextEditingController printerDeviceController;
   late TextEditingController printerPortController;
   PrinterConnectionType printerType = PrinterConnectionType.network;
+  int paperWidthChars = 32;
   bool saving = false;
   bool bluetoothTesting = false;
+
+  static const _paperWidthOptions = [24, 26, 28, 30, 32, 42, 48];
 
   @override
   void initState() {
@@ -43,6 +46,9 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
         : PrinterConfig.fromSettings(widget.pageState.settings);
 
     printerType = draft.type;
+    paperWidthChars = _paperWidthOptions.contains(draft.paperWidthChars)
+        ? draft.paperWidthChars
+        : 32;
     printerHostController = TextEditingController(text: draft.host);
     printerDeviceController = TextEditingController(text: draft.device);
     printerPortController = TextEditingController(
@@ -59,6 +65,7 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
                 printerDeviceController.text.trim(),
               )
             : printerDeviceController.text.trim(),
+        paperWidthChars: paperWidthChars,
       );
 
   String get _statusLabel => _draftConfig.statusLabel;
@@ -424,6 +431,31 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
                   style: TextStyle(fontSize: 12, color: AppColors.muted),
                 ),
               ],
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                value: paperWidthChars,
+                decoration: const InputDecoration(
+                  labelText: 'Paper Width (characters per line)',
+                  prefixIcon: Icon(Icons.straighten_outlined),
+                ),
+                items: [
+                  for (final width in _paperWidthOptions)
+                    DropdownMenuItem(
+                      value: width,
+                      child: Text('$width columns'),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => paperWidthChars = value);
+                },
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'If receipt totals or labels print misaligned or cut off mid-word, '
+                'try a different width here to match your printer/paper.',
+                style: TextStyle(fontSize: 12, color: AppColors.muted),
+              ),
               const SizedBox(height: 16),
               Container(
                 width: double.infinity,

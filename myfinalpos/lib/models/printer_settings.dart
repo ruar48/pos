@@ -36,6 +36,7 @@ class PrinterConfig {
     this.host = '',
     this.port = 9100,
     this.device = '',
+    this.paperWidthChars = 32,
   });
 
   final PrinterConnectionType type;
@@ -43,6 +44,10 @@ class PrinterConfig {
   final int port;
   /// Bluetooth MAC address, or USB `vendorId:productId`.
   final String device;
+  /// Characters per line the physical printer actually fits (Font A).
+  /// 58mm printers are usually 32, 80mm printers are usually 42 or 48 -
+  /// but this varies by model/font, so it's adjustable per device.
+  final int paperWidthChars;
 
   bool get isConfigured {
     switch (type) {
@@ -80,12 +85,14 @@ class PrinterConfig {
     String? host,
     int? port,
     String? device,
+    int? paperWidthChars,
   }) {
     return PrinterConfig(
       type: type ?? this.type,
       host: host ?? this.host,
       port: port ?? this.port,
       device: device ?? this.device,
+      paperWidthChars: paperWidthChars ?? this.paperWidthChars,
     );
   }
 }

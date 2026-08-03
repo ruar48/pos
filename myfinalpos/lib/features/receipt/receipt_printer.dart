@@ -14,8 +14,11 @@ import 'receipt_print_exception.dart';
 
 export 'receipt_print_exception.dart';
 
-/// 58mm thermal paper ≈ 32 characters per line (Font A).
-const int kThermalWidth = 32;
+/// Characters per line for the printer currently being printed to.
+/// 58mm thermal paper ≈ 32 characters per line (Font A) by default, but
+/// this varies by printer model/font, so it's set from [PrinterConfig]
+/// right before each print job (see [PosReceiptService.printReceipt]).
+int kThermalWidth = 32;
 const String kReceiptFooterThanks = 'MARAMING SALAMAT PO!';
 
 class ReceiptStoreConfig {
@@ -956,6 +959,8 @@ class PosReceiptService {
             'Store printer is not set up yet. Ask your manager or admin to configure it.',
       );
     }
+
+    kThermalWidth = config.paperWidthChars > 0 ? config.paperWidthChars : 32;
 
     await PrinterTransport.sendEscPos(
       config: config,
