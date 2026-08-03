@@ -111,8 +111,8 @@ class AttendanceController extends Controller
         $deviceInfo = trim((string) ($body['device_info'] ?? ''));
         $actorUserId = PosHelpers::currentActorId($request, $body);
 
-        if (! in_array($action, ['clock_in', 'clock_out'], true)) {
-            return $this->posError('action must be clock_in or clock_out', 400);
+        if (! in_array($action, ['clock_in', 'clock_out', 'break_in', 'break_out'], true)) {
+            return $this->posError('action must be clock_in, clock_out, break_in, or break_out', 400);
         }
 
         if ($userId <= 0) {
@@ -167,8 +167,16 @@ class AttendanceController extends Controller
             $photoUrl,
         );
 
+        $message = match ($action) {
+            'clock_in' => 'Clocked in successfully',
+            'clock_out' => 'Clocked out successfully',
+            'break_in' => 'Break started',
+            'break_out' => 'Break ended',
+            default => 'Recorded',
+        };
+
         return $this->posSuccess([
-            'message' => $action === 'clock_in' ? 'Clocked in successfully' : 'Clocked out successfully',
+            'message' => $message,
             'data' => $result,
         ]);
     }

@@ -17,6 +17,10 @@ class AttendanceStatus {
     this.nextAction,
     this.nextActionNote,
     this.dayComplete = false,
+    this.isOnBreak = false,
+    this.breakStartAt,
+    this.breakEndAt,
+    this.totalBreakMinutes = 0,
   });
 
   final DateTime? clockInAt;
@@ -34,6 +38,10 @@ class AttendanceStatus {
   final String? nextAction;
   final String? nextActionNote;
   final bool dayComplete;
+  final bool isOnBreak;
+  final DateTime? breakStartAt;
+  final DateTime? breakEndAt;
+  final int totalBreakMinutes;
 
   String get punctualityLabel {
     switch (punctualityStatus) {
@@ -85,6 +93,12 @@ class AttendanceStatus {
       dayComplete: json['day_complete'] == true ||
           json['day_complete'].toString() == '1' ||
           json['day_complete'].toString() == 'true',
+      isOnBreak: json['is_on_break'] == true ||
+          json['is_on_break'].toString() == '1' ||
+          json['is_on_break'].toString() == 'true',
+      breakStartAt: parseServerDateTime(json['break_start_at']?.toString()),
+      breakEndAt: parseServerDateTime(json['break_end_at']?.toString()),
+      totalBreakMinutes: toInt(json['total_break_minutes']),
     );
   }
 }

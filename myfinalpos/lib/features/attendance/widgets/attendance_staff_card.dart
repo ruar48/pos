@@ -26,6 +26,7 @@ class AttendanceStaffCard extends StatelessWidget {
     this.punchBusy = false,
     this.onTimeIn,
     this.onTimeOut,
+    this.onBreak,
   });
 
   final AttendanceBoardRow row;
@@ -33,6 +34,9 @@ class AttendanceStaffCard extends StatelessWidget {
   final bool punchBusy;
   final VoidCallback? onTimeIn;
   final VoidCallback? onTimeOut;
+  /// Toggles break state - caller decides break_in vs break_out based on
+  /// [AttendanceBoardRow.isOnBreak].
+  final VoidCallback? onBreak;
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +52,10 @@ class AttendanceStaffCard extends StatelessWidget {
     final canTimeOut = attendanceCanTimeOut(row, punchEnabled: punchEnabled);
     final inDone = isClockedIn || isDayDone;
     final outDone = isDayDone;
+    final isOnBreak = attendanceIsOnBreak(row);
+    final canBreak = isOnBreak
+        ? attendanceCanBreakOut(row, punchEnabled: punchEnabled)
+        : attendanceCanBreakIn(row, punchEnabled: punchEnabled);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -98,6 +106,16 @@ class AttendanceStaffCard extends StatelessWidget {
             busy: punchBusy,
             onTap:
                 canTimeOut && !punchBusy && onTimeOut != null ? onTimeOut : null,
+          ),
+          const SizedBox(width: 8),
+          _ActionCircle(
+            label: isOnBreak ? 'END' : 'BRK',
+            caption: isOnBreak ? 'End Break' : 'Break',
+            color: AppColors.amber,
+            enabled: canBreak,
+            done: isOnBreak,
+            busy: punchBusy,
+            onTap: canBreak && !punchBusy && onBreak != null ? onBreak : null,
           ),
           const SizedBox(width: 14),
           Expanded(

@@ -64,6 +64,12 @@ class AttendanceBoardRow {
     this.isClockedIn = false,
     this.punctualityStatus,
     this.isMorningAbsent = false,
+    this.isOnBreak = false,
+    this.breakStartAt,
+    this.breakEndAt,
+    this.breakStartDisplay,
+    this.breakEndDisplay,
+    this.totalBreakMinutes = 0,
   });
 
   final int userId;
@@ -95,6 +101,12 @@ class AttendanceBoardRow {
   final bool isClockedIn;
   final String? punctualityStatus;
   final bool isMorningAbsent;
+  final bool isOnBreak;
+  final DateTime? breakStartAt;
+  final DateTime? breakEndAt;
+  final String? breakStartDisplay;
+  final String? breakEndDisplay;
+  final int totalBreakMinutes;
 
   String get punctualityLabel {
     switch (punctualityStatus) {
@@ -145,6 +157,12 @@ class AttendanceBoardRow {
     bool? isClockedIn,
     String? punctualityStatus,
     bool? isMorningAbsent,
+    bool? isOnBreak,
+    DateTime? breakStartAt,
+    DateTime? breakEndAt,
+    String? breakStartDisplay,
+    String? breakEndDisplay,
+    int? totalBreakMinutes,
   }) {
     return AttendanceBoardRow(
       userId: userId ?? this.userId,
@@ -176,6 +194,12 @@ class AttendanceBoardRow {
       isClockedIn: isClockedIn ?? this.isClockedIn,
       punctualityStatus: punctualityStatus ?? this.punctualityStatus,
       isMorningAbsent: isMorningAbsent ?? this.isMorningAbsent,
+      isOnBreak: isOnBreak ?? this.isOnBreak,
+      breakStartAt: breakStartAt ?? this.breakStartAt,
+      breakEndAt: breakEndAt ?? this.breakEndAt,
+      breakStartDisplay: breakStartDisplay ?? this.breakStartDisplay,
+      breakEndDisplay: breakEndDisplay ?? this.breakEndDisplay,
+      totalBreakMinutes: totalBreakMinutes ?? this.totalBreakMinutes,
     );
   }
 
@@ -218,6 +242,14 @@ class AttendanceBoardRow {
       isMorningAbsent: json['is_morning_absent'] == true ||
           json['is_morning_absent'].toString() == '1' ||
           json['is_morning_absent'].toString() == 'true',
+      isOnBreak: json['is_on_break'] == true ||
+          json['is_on_break'].toString() == '1' ||
+          json['is_on_break'].toString() == 'true',
+      breakStartAt: parse(json['break_start_at']?.toString()),
+      breakEndAt: parse(json['break_end_at']?.toString()),
+      breakStartDisplay: json['break_start_display']?.toString(),
+      breakEndDisplay: json['break_end_display']?.toString(),
+      totalBreakMinutes: toInt(json['total_break_minutes']),
     );
   }
 }

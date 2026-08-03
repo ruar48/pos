@@ -95,6 +95,12 @@ export type AttendanceRow = {
     lunch_out_photo_url?: string | null;
     afternoon_in_photo_url?: string | null;
     day_out_photo_url?: string | null;
+    is_on_break: boolean;
+    break_start_at: string | null;
+    break_end_at: string | null;
+    break_start_display?: string | null;
+    break_end_display?: string | null;
+    total_break_minutes: number;
 };
 
 export type AttendancePunctualityRow = {
@@ -231,7 +237,7 @@ export async function downloadAttendanceExport(
 }
 
 export async function clockStaffAttendance(input: {
-    action: 'clock_in' | 'clock_out';
+    action: 'clock_in' | 'clock_out' | 'break_in' | 'break_out';
     user_id: number;
     branch_id?: number;
     face_verified?: boolean;

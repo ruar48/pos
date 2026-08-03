@@ -445,6 +445,80 @@ class _AttendancePageState extends State<AttendancePage> {
     );
   }
 
+  Future<void> _breakRow(AttendanceBoardRow row) {
+    return _punchBreak(row);
+  }
+
+  Future<void> _punchBreak(AttendanceBoardRow row) async {
+    if (_submitting || !mounted) return;
+
+    if (!isTodayIso(_boardDate)) {
+      showAppTopError('Switch to today’s date to punch attendance.');
+      return;
+    }
+
+    final targetUserId = row.userId;
+    final action = row.isOnBreak ? 'break_out' : 'break_in';
+    final actionLabel = row.isOnBreak ? 'End Break' : 'Break';
+    final branchId = (row.branchId != null && row.branchId! > 0)
+        ? row.branchId!
+        : _branchId;
+
+    setState(() {
+      _submitting = true;
+      _punchingUserId = targetUserId;
+    });
+
+    try {
+      final result = await _api.clockAttendance(
+        action: action,
+        userId: targetUserId,
+        actorUserId: _userId,
+        branchId: branchId,
+        latitude: 0,
+        longitude: 0,
+        deviceInfo: kIsWeb
+            ? 'Flutter Web Manual'
+            : Platform.isAndroid
+                ? 'Flutter Android Tablet'
+                : Platform.isIOS
+                    ? 'Flutter iOS'
+                    : 'Flutter',
+        tabletManual: true,
+      );
+
+      if (!mounted) return;
+
+      final isOnBreak = result.status?.isOnBreak ?? (action == 'break_in');
+
+      setState(() {
+        _boardRows = _boardRows
+            .map(
+              (r) => r.userId == targetUserId
+                  ? r.copyWith(isOnBreak: isOnBreak)
+                  : r,
+            )
+            .toList();
+      });
+      await _load();
+
+      setState(() {
+        _submitting = false;
+        _punchingUserId = null;
+        _lastPunchSummary = '${row.fullName} · $actionLabel';
+      });
+
+      showAppTopSuccess('$actionLabel · ${row.fullName}');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _punchingUserId = null;
+      });
+      showAppTopError(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
   List<AttendanceBoardRow> get _filteredRows {
     final q = _searchQuery.trim().toLowerCase();
     if (q.isEmpty) return _boardRows;
@@ -498,6 +572,7 @@ class _AttendancePageState extends State<AttendancePage> {
                       setState(() => _searchQuery = value),
                   onTimeIn: _timeInRow,
                   onTimeOut: _timeOutRow,
+                  onBreak: _breakRow,
                   onAddEmployee: _canAddEmployee ? _addEmployee : null,
                 ),
     );
@@ -519,6 +594,7 @@ class _AdminBoardView extends StatelessWidget {
     required this.onSearchChanged,
     required this.onTimeIn,
     required this.onTimeOut,
+    required this.onBreak,
     this.onAddEmployee,
   });
 
@@ -535,6 +611,7 @@ class _AdminBoardView extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
   final Future<void> Function(AttendanceBoardRow) onTimeIn;
   final Future<void> Function(AttendanceBoardRow) onTimeOut;
+  final Future<void> Function(AttendanceBoardRow) onBreak;
   final VoidCallback? onAddEmployee;
 
   @override
@@ -705,6 +782,7 @@ class _AdminBoardView extends StatelessWidget {
                                   punchingUserId == row.userId,
                               onTimeIn: () => onTimeIn(row),
                               onTimeOut: () => onTimeOut(row),
+                              onBreak: () => onBreak(row),
                             );
                           },
                         ),

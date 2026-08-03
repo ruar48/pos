@@ -622,13 +622,21 @@ class AttendanceService
             if (! $geofence['skipped'] && ! $geofence['within']) {
                 $radius = (float) ($branch->geofence_radius_km ?? 2.0);
 
+                $actionLabel = match ($eventType) {
+                    'clock_in' => 'clock in',
+                    'clock_out' => 'clock out',
+                    'break_in' => 'start your break',
+                    'break_out' => 'end your break',
+                    default => 'do this',
+                };
+
                 throw new \RuntimeException(
                     sprintf(
-                        'You are %.2f km from %s. Must be within %.1f km to clock %s.',
+                        'You are %.2f km from %s. Must be within %.1f km to %s.',
                         $geofence['distance_km'],
                         $branch->name,
                         $radius,
-                        $eventType === 'clock_in' ? 'in' : 'out',
+                        $actionLabel,
                     ),
                 );
             }
@@ -772,6 +780,14 @@ class AttendanceService
 
         $punchTimes = [];
 
+        $openBreakStart = null;
+
+        $breakStartAt = null;
+
+        $breakEndAt = null;
+
+        $totalBreakMinutes = 0;
+
 
 
         foreach ($events as $event) {
@@ -814,6 +830,24 @@ class AttendanceService
 
             }
 
+            if ($type === 'break_in') {
+
+                $openBreakStart = Carbon::parse($at);
+
+                $breakStartAt = $at;
+
+            }
+
+            if ($type === 'break_out' && $openBreakStart !== null) {
+
+                $totalBreakMinutes += $openBreakStart->diffInMinutes(Carbon::parse($at));
+
+                $breakEndAt = $at;
+
+                $openBreakStart = null;
+
+            }
+
 
 
             if ($event->latitude !== null) {
@@ -845,6 +879,8 @@ class AttendanceService
 
 
         $isClockedIn = $openIn !== null;
+
+        $isOnBreak = $openBreakStart !== null;
 
         $punchState = $this->analyzePunchState($punchTimes, $date, $isClockedIn);
 
@@ -917,6 +953,18 @@ class AttendanceService
             'total_hours_label' => $this->formatDuration($totalMinutes),
 
             'is_clocked_in' => $isClockedIn,
+
+            'is_on_break' => $isOnBreak,
+
+            'break_start_at' => $this->apiTime($breakStartAt),
+
+            'break_end_at' => $this->apiTime($breakEndAt),
+
+            'break_start_display' => $this->apiTimeLabel($breakStartAt),
+
+            'break_end_display' => $this->apiTimeLabel($breakEndAt),
+
+            'total_break_minutes' => $totalBreakMinutes,
 
             'last_latitude' => $lastLat,
 
@@ -1036,6 +1084,7 @@ class AttendanceService
         }
 
         $isClockedIn = (bool) ($status['is_clocked_in'] ?? false);
+        $isOnBreak = (bool) ($status['is_on_break'] ?? false);
 
         if ($eventType === 'clock_in' && $isClockedIn) {
             throw new \RuntimeException('You must clock out first.');
@@ -1043,6 +1092,22 @@ class AttendanceService
 
         if ($eventType === 'clock_out' && ! $isClockedIn) {
             throw new \RuntimeException('You must clock in first.');
+        }
+
+        if ($eventType === 'clock_out' && $isOnBreak) {
+            throw new \RuntimeException('You must end your break first.');
+        }
+
+        if ($eventType === 'break_in' && ! $isClockedIn) {
+            throw new \RuntimeException('You must clock in first.');
+        }
+
+        if ($eventType === 'break_in' && $isOnBreak) {
+            throw new \RuntimeException('You are already on break.');
+        }
+
+        if ($eventType === 'break_out' && ! $isOnBreak) {
+            throw new \RuntimeException('You must start a break first.');
         }
     }
 

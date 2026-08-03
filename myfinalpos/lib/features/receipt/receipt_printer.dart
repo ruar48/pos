@@ -478,7 +478,7 @@ class ThermalReceiptLayout {
         add(_amountRow('Change', _money(data.change)));
       }
     }
-    add(_labelValue('Payment Type', data.paymentMethod));
+    add(_amountRow('Payment Type', data.paymentMethod));
     add(_amountRow('Total Qty', '${data.itemCount}'));
     _addReceiptFooter(add, receiptNote: data.receiptNote);
 

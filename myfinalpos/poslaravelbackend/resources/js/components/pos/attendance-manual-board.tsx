@@ -29,6 +29,21 @@ function punchAction(row: AttendanceRow): 'clock_in' | 'clock_out' | null {
     return row.is_clocked_in ? 'clock_out' : 'clock_in';
 }
 
+function breakButtonLabel(row: AttendanceRow): string {
+    return row.is_on_break ? 'END' : 'BRK';
+}
+
+function canBreak(row: AttendanceRow): boolean {
+    if (row.day_complete) return false;
+    if (row.is_on_break) return true;
+    return row.is_clocked_in;
+}
+
+function breakAction(row: AttendanceRow): 'break_in' | 'break_out' | null {
+    if (!canBreak(row)) return null;
+    return row.is_on_break ? 'break_out' : 'break_in';
+}
+
 // Mirrors the Flutter app's resolveAttendancePhotoUrl(): the server always
 // returns a relative path (e.g. /uploads/attendance/xxx.jpg), so build a
 // fully-qualified URL from the current origin rather than relying on the
@@ -139,6 +154,34 @@ export function AttendanceManualBoard({
         }
     }, []);
 
+    const handleBreak = async (row: AttendanceRow) => {
+        if (!clockEnabled) {
+            toast.error('Switch to today’s date to punch attendance.');
+            return;
+        }
+        const action = breakAction(row);
+        if (!action) return;
+
+        setPunchingUserId(row.user_id);
+        try {
+            await clockStaffAttendance({
+                action,
+                user_id: row.user_id,
+                branch_id: row.branch_id ?? undefined,
+            });
+            toast.success(
+                `${action === 'break_in' ? 'Break' : 'End Break'} · ${row.full_name}`,
+            );
+            await onClocked();
+        } catch (err) {
+            toast.error(
+                err instanceof Error ? err.message : 'Attendance punch failed',
+            );
+        } finally {
+            setPunchingUserId(null);
+        }
+    };
+
     const openPunch = async (row: AttendanceRow) => {
         if (!clockEnabled) {
             toast.error('Switch to today’s date to punch attendance.');
@@ -229,6 +272,7 @@ export function AttendanceManualBoard({
                             busy={punchingUserId === row.user_id}
                             punchEnabled={clockEnabled}
                             onPunch={() => void openPunch(row)}
+                            onBreak={() => void handleBreak(row)}
                         />
                     ))}
                 </div>
@@ -351,11 +395,13 @@ function ManualAttendanceRow({
     busy,
     punchEnabled,
     onPunch,
+    onBreak,
 }: {
     row: AttendanceRow;
     busy: boolean;
     punchEnabled: boolean;
     onPunch: () => void;
+    onBreak: () => void;
 }) {
     const enabled = punchEnabled && canPunch(row) && !busy;
     const label = punchButtonLabel(row);
@@ -363,6 +409,8 @@ function ManualAttendanceRow({
     const outUrl = selfieOutUrl(row);
     const inTime = selfieInTime(row);
     const outTime = selfieOutTime(row);
+    const breakEnabled = punchEnabled && canBreak(row) && !busy;
+    const breakLabel = breakButtonLabel(row);
 
     return (
         <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap">
@@ -394,6 +442,27 @@ function ManualAttendanceRow({
                 </button>
                 <span className="text-[11px] font-bold text-muted-foreground">
                     {actionCaption(label)}
+                </span>
+            </div>
+
+            <div className="flex shrink-0 flex-col items-center gap-1">
+                <button
+                    type="button"
+                    disabled={!breakEnabled}
+                    onClick={onBreak}
+                    className={cn(
+                        'inline-flex size-16 items-center justify-center rounded-full text-center text-xs font-extrabold leading-tight shadow-sm transition disabled:cursor-not-allowed',
+                        row.is_on_break
+                            ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                            : breakEnabled
+                                ? 'bg-amber-100 hover:bg-amber-200 text-amber-700'
+                                : 'bg-muted text-muted-foreground',
+                    )}
+                >
+                    {busy ? <Loader2 className="size-5 animate-spin" /> : breakLabel}
+                </button>
+                <span className="text-[11px] font-bold text-muted-foreground">
+                    {row.is_on_break ? 'End Break' : 'Break'}
                 </span>
             </div>
 

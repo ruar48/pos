@@ -216,6 +216,24 @@ bool attendanceCanTimeOut(AttendanceBoardRow row, {required bool punchEnabled}) 
   return attendanceIsClockedIn(row);
 }
 
+bool attendanceIsOnBreak(AttendanceBoardRow row) => row.isOnBreak;
+
+bool attendanceCanBreakIn(AttendanceBoardRow row, {required bool punchEnabled}) {
+  if (!punchEnabled) return false;
+  if (attendanceIsDayComplete(row)) return false;
+  if (!attendanceIsClockedIn(row)) return false;
+  return !row.isOnBreak;
+}
+
+bool attendanceCanBreakOut(AttendanceBoardRow row, {required bool punchEnabled}) {
+  if (!punchEnabled) return false;
+  if (attendanceIsDayComplete(row)) return false;
+  return row.isOnBreak;
+}
+
+String attendanceBreakButtonLabel(AttendanceBoardRow row) =>
+    row.isOnBreak ? 'END BRK' : 'BREAK';
+
 AttendanceBoardRow attendanceNormalizeRow(AttendanceBoardRow row) {
   final dayComplete = attendanceIsDayComplete(row);
   final isClockedIn = attendanceIsClockedIn(row);
