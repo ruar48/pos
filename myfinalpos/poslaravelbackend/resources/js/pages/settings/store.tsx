@@ -208,6 +208,11 @@ export default function StoreSettingsPage() {
     const [pinConfirmValue, setPinConfirmValue] = useState('');
     const [pinError, setPinError] = useState<string | null>(null);
     const [savingPin, setSavingPin] = useState(false);
+    const [refundPinDialogOpen, setRefundPinDialogOpen] = useState(false);
+    const [refundPinValue, setRefundPinValue] = useState('');
+    const [refundPinConfirmValue, setRefundPinConfirmValue] = useState('');
+    const [refundPinError, setRefundPinError] = useState<string | null>(null);
+    const [savingRefundPin, setSavingRefundPin] = useState(false);
 
     const update = <K extends keyof StoreSettings>(
         key: K,
@@ -302,6 +307,45 @@ export default function StoreSettingsPage() {
             );
         } finally {
             setSavingPin(false);
+        }
+    };
+
+    const openRefundPinDialog = () => {
+        setRefundPinValue('');
+        setRefundPinConfirmValue('');
+        setRefundPinError(null);
+        setRefundPinDialogOpen(true);
+    };
+
+    const handleSetRefundPin = async () => {
+        if (!/^\d{4,6}$/.test(refundPinValue)) {
+            setRefundPinError('PIN must be 4 to 6 digits.');
+            return;
+        }
+        if (refundPinValue !== refundPinConfirmValue) {
+            setRefundPinError('PINs do not match.');
+            return;
+        }
+
+        setSavingRefundPin(true);
+        try {
+            const saved = await saveStoreSettings({
+                ...savedSettings,
+                refund_pin: refundPinValue,
+            });
+            setForm((prev) => ({
+                ...prev,
+                has_refund_pin: saved.has_refund_pin,
+            }));
+            setSavedSettings(saved);
+            setRefundPinDialogOpen(false);
+            toast.success('Refund PIN updated');
+        } catch (e) {
+            setRefundPinError(
+                e instanceof Error ? e.message : 'Could not save PIN',
+            );
+        } finally {
+            setSavingRefundPin(false);
         }
     };
 
@@ -589,6 +633,42 @@ export default function StoreSettingsPage() {
                 ) : (
                     <p className="text-xs text-muted-foreground">
                         Only an admin can set or change the cash drawer PIN.
+                    </p>
+                )}
+            </SettingsSection>
+
+            <SettingsSection
+                title="Refund Security"
+                subtitle="Require a separate PIN to approve refunds"
+                icon={Shield}
+            >
+                <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-secondary/20 px-4 py-3">
+                    <ShieldCheck
+                        className={`mt-0.5 size-5 shrink-0 ${
+                            form.has_refund_pin
+                                ? 'text-primary'
+                                : 'text-muted-foreground'
+                        }`}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                        {form.has_refund_pin
+                            ? 'Refund PIN is set. Staff need this PIN to process a refund. This is separate from the cash drawer PIN.'
+                            : 'No refund PIN set. Refunds do not require a PIN until you set one here.'}
+                    </p>
+                </div>
+                {isAdmin ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={openRefundPinDialog}
+                    >
+                        {form.has_refund_pin
+                            ? 'Change Refund PIN'
+                            : 'Set Refund PIN'}
+                    </Button>
+                ) : (
+                    <p className="text-xs text-muted-foreground">
+                        Only an admin can set or change the refund PIN.
                     </p>
                 )}
             </SettingsSection>
@@ -985,6 +1065,80 @@ export default function StoreSettingsPage() {
                             onClick={() => void handleSetPin()}
                         >
                             {savingPin ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : null}
+                            Save PIN
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={refundPinDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open && !savingRefundPin) setRefundPinDialogOpen(false);
+                }}
+            >
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {form.has_refund_pin
+                                ? 'Change Refund PIN'
+                                : 'Set Refund PIN'}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-muted-foreground">
+                        Staff will need this PIN to process a refund. It is
+                        separate from the cash drawer PIN.
+                    </p>
+                    <div className="grid gap-2">
+                        <Label>New PIN (4-6 digits)</Label>
+                        <Input
+                            type="password"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={refundPinValue}
+                            onChange={(e) =>
+                                setRefundPinValue(
+                                    e.target.value.replace(/\D/g, ''),
+                                )
+                            }
+                        />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>Confirm PIN</Label>
+                        <Input
+                            type="password"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={refundPinConfirmValue}
+                            onChange={(e) =>
+                                setRefundPinConfirmValue(
+                                    e.target.value.replace(/\D/g, ''),
+                                )
+                            }
+                        />
+                    </div>
+                    {refundPinError && (
+                        <p className="text-sm text-destructive">
+                            {refundPinError}
+                        </p>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            disabled={savingRefundPin}
+                            onClick={() => setRefundPinDialogOpen(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            disabled={savingRefundPin}
+                            onClick={() => void handleSetRefundPin()}
+                        >
+                            {savingRefundPin ? (
                                 <Loader2 className="size-4 animate-spin" />
                             ) : null}
                             Save PIN

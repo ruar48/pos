@@ -62,7 +62,7 @@ class ProductImportExportService
     }
 
     /**
-     * @return array{created: int, updated: int, skipped: int, errors: list<string>}
+     * @return array{created: int, updated: int, skipped: int, errors: list<string>, warnings: list<string>}
      */
     public function importFromCsv(string $csvContent, ?int $actorUserId = null): array
     {
@@ -73,6 +73,7 @@ class ProductImportExportService
                 'updated' => 0,
                 'skipped' => 0,
                 'errors' => ['Could not create temporary file'],
+                'warnings' => [],
             ];
         }
 
@@ -241,7 +242,7 @@ class ProductImportExportService
 
     /**
      * @param  list<array<string, string>>  $rows
-     * @return array{created: int, updated: int, skipped: int, errors: list<string>}
+     * @return array{created: int, updated: int, skipped: int, errors: list<string>, warnings: list<string>}
      */
     private function importRows(array $rows, ?int $actorUserId = null): array
     {
@@ -251,6 +252,7 @@ class ProductImportExportService
                 'updated' => 0,
                 'skipped' => 0,
                 'errors' => ['File is empty or missing required columns (Category, Item, Price)'],
+                'warnings' => [],
             ];
         }
 
@@ -258,6 +260,7 @@ class ProductImportExportService
         $updated = 0;
         $skipped = 0;
         $errors = [];
+        $duplicateWarnings = [];
         $maxErrors = 50;
         $hasOption = Schema::hasColumn('products', 'option');
         $hasDeal = Schema::hasColumn('products', 'deal');
@@ -276,6 +279,9 @@ class ProductImportExportService
         foreach ($productIndex as $indexed) {
             $productIndexById[(int) $indexed->id] = $indexed;
         }
+
+        /** @var array<string, list<int>> $productIdsByNameOption */
+        $productIdsByNameOption = $this->buildProductNameOptionIndex($hasOption);
 
         DB::beginTransaction();
 
@@ -336,6 +342,26 @@ class ProductImportExportService
                     $existing = $productIndexById[$importId];
                 } else {
                     $existing = $productIndex[$matchKey] ?? null;
+
+                    if ($existing === null) {
+                        // Category text in the file didn't resolve to the same category_id
+                        // as an existing product with this name+option. Don't guess whether
+                        // this is the same item under a corrected category or a genuinely
+                        // different new item that happens to share a name+option — that's
+                        // ambiguous and merging could silently overwrite an unrelated
+                        // product. Create it as a new row (safe default) and flag it so
+                        // staff can review/merge manually if needed.
+                        $nameOptionKey = strtolower($name).'|'.strtolower(trim($option));
+                        $candidateIds = $productIdsByNameOption[$nameOptionKey] ?? [];
+                        if ($candidateIds !== [] && count($duplicateWarnings) < $maxErrors) {
+                            $duplicateWarnings[] = sprintf(
+                                "Row {$displayLine}: '%s' (%s) matches existing product ID %s under a different category — created as a separate item; review for a possible duplicate.",
+                                $name,
+                                $option !== '' ? $option : 'no option',
+                                implode(', ', $candidateIds),
+                            );
+                        }
+                    }
                 }
 
                 $payload = [
@@ -393,6 +419,7 @@ class ProductImportExportService
                     'updated' => $updated,
                     'skipped' => $skipped,
                     'rows' => count($rows),
+                    'possible_duplicates' => count($duplicateWarnings),
                 ],
             );
 
@@ -407,7 +434,13 @@ class ProductImportExportService
             $errors[] = 'Additional row errors were omitted.';
         }
 
-        return compact('created', 'updated', 'skipped', 'errors');
+        if (count($duplicateWarnings) >= $maxErrors) {
+            $duplicateWarnings[] = 'Additional duplicate warnings were omitted.';
+        }
+
+        $warnings = $duplicateWarnings;
+
+        return compact('created', 'updated', 'skipped', 'errors', 'warnings');
     }
 
     /**
@@ -440,6 +473,26 @@ class ProductImportExportService
     private function productMatchKey(int $categoryId, string $name, string $option): string
     {
         return $categoryId.'|'.strtolower($name).'|'.strtolower(trim($option));
+    }
+
+    /**
+     * @return array<string, list<int>>
+     */
+    private function buildProductNameOptionIndex(bool $hasOption): array
+    {
+        $columns = ['id', 'name'];
+        if ($hasOption) {
+            $columns[] = 'option';
+        }
+
+        $index = [];
+        foreach (DB::table('products')->select($columns)->get() as $product) {
+            $option = $hasOption ? (string) ($product->option ?? '') : '';
+            $key = strtolower((string) $product->name).'|'.strtolower(trim($option));
+            $index[$key][] = (int) $product->id;
+        }
+
+        return $index;
     }
 
     /**

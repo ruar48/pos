@@ -597,7 +597,7 @@ class _ProductStockBadge extends StatelessWidget {
             ? AppColors.orange
             : AppColors.green;
     final label = isOut
-        ? 'Out of stock'
+        ? (stock < 0 ? '$stock in stock' : 'Out of stock')
         : isLow
             ? '$stock left'
             : '$stock in stock';

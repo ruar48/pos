@@ -54,6 +54,7 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
   late int selectedBranchId;
   bool saving = false;
   bool settingCashDrawerPin = false;
+  bool settingRefundPin = false;
 
   @override
   void initState() {
@@ -296,6 +297,27 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
       showTopError(context, error.toString());
     } finally {
       if (mounted) setState(() => settingCashDrawerPin = false);
+    }
+  }
+
+  Future<void> _setRefundPin() async {
+    final pin = await showDialog<String>(
+      context: context,
+      builder: (_) => const _SetRefundPinDialog(),
+    );
+    if (pin == null) return;
+
+    setState(() => settingRefundPin = true);
+    try {
+      await widget.pageState.updateSettings(settings, refundPin: pin);
+      if (!mounted) return;
+      setState(() => settings = widget.pageState.settings);
+      showTopSuccess(context, 'Refund PIN updated');
+    } catch (error) {
+      if (!mounted) return;
+      showTopError(context, error.toString());
+    } finally {
+      if (mounted) setState(() => settingRefundPin = false);
     }
   }
 
@@ -647,6 +669,50 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
                 settings.hasCashDrawerPin
                     ? 'Change Cash Drawer PIN'
                     : 'Set Cash Drawer PIN',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _SettingsSection(
+          title: 'Refund Security',
+          subtitle: 'Require a separate PIN to approve refunds',
+          icon: Icons.lock_outline,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  settings.hasRefundPin
+                      ? Icons.verified_user_outlined
+                      : Icons.warning_amber_outlined,
+                  color: settings.hasRefundPin
+                      ? AppColors.green
+                      : AppColors.amber,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    settings.hasRefundPin
+                        ? 'Refund PIN is set. Staff need this PIN to process a refund. This is separate from the cash drawer PIN.'
+                        : 'No refund PIN set. Refunds do not require a PIN until you set one here.',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: settingRefundPin ? null : _setRefundPin,
+              icon: settingRefundPin
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.pin_outlined),
+              label: Text(
+                settings.hasRefundPin
+                    ? 'Change Refund PIN'
+                    : 'Set Refund PIN',
               ),
             ),
           ],
@@ -1259,6 +1325,109 @@ class _SetCashDrawerPinDialogState extends State<_SetCashDrawerPinDialog> {
           children: [
             const Text(
               'Staff will need this PIN to add cash, record expenses, or edit cash drawer entries.',
+              style: TextStyle(color: AppColors.muted),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _pinController,
+              autofocus: true,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              decoration: const InputDecoration(
+                labelText: 'New PIN (4-6 digits)',
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _confirmController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              decoration: const InputDecoration(
+                labelText: 'Confirm PIN',
+                counterText: '',
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Save PIN'),
+        ),
+      ],
+    );
+  }
+}
+
+class _SetRefundPinDialog extends StatefulWidget {
+  const _SetRefundPinDialog();
+
+  @override
+  State<_SetRefundPinDialog> createState() => _SetRefundPinDialogState();
+}
+
+class _SetRefundPinDialogState extends State<_SetRefundPinDialog> {
+  final _pinController = TextEditingController();
+  final _confirmController = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _pinController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final pin = _pinController.text.trim();
+    final confirm = _confirmController.text.trim();
+
+    if (!RegExp(r'^\d{4,6}$').hasMatch(pin)) {
+      setState(() => _error = 'PIN must be 4 to 6 digits.');
+      return;
+    }
+    if (pin != confirm) {
+      setState(() => _error = 'PINs do not match.');
+      return;
+    }
+
+    Navigator.pop(context, pin);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Set Refund PIN'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Staff will need this PIN to process a refund. It is separate from the cash drawer PIN.',
               style: TextStyle(color: AppColors.muted),
             ),
             const SizedBox(height: 16),

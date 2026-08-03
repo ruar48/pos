@@ -203,6 +203,18 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
     super.initState();
     customerName.addListener(_onCustomerNameChanged);
     existingSearch.addListener(() => setState(() {}));
+    _refreshExistingCustomers();
+  }
+
+  Future<void> _refreshExistingCustomers() async {
+    try {
+      await widget.pageState.reloadCustomers();
+      if (mounted) setState(() {});
+    } catch (_) {
+      if (mounted) {
+        showAppTopError('Failed to refresh customer list. Showing last saved list.');
+      }
+    }
   }
 
   void _onCustomerNameChanged() {

@@ -197,6 +197,7 @@ class OfflineCatalogStore {
         'attendance_timeout_start': settings.attendanceTimeoutStart,
         'settings_revision': settings.settingsRevision,
         'has_cash_drawer_pin': settings.hasCashDrawerPin,
+        'has_refund_pin': settings.hasRefundPin,
       };
 
   static Map<String, dynamic> _couponToJson(Coupon coupon) => {

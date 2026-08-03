@@ -61,6 +61,7 @@ export type StoreSettings = {
     attendance_afternoon_cutoff: string;
     attendance_timeout_start: string;
     has_cash_drawer_pin: boolean;
+    has_refund_pin: boolean;
 };
 
 export const DEFAULT_RECEIPT_STORE: ReceiptStore = {
@@ -81,7 +82,10 @@ export const DEFAULT_RECEIPT_STORE: ReceiptStore = {
 };
 
 export async function saveStoreSettings(
-    input: Partial<StoreSettings> & { cash_drawer_pin?: string },
+    input: Partial<StoreSettings> & {
+        cash_drawer_pin?: string;
+        refund_pin?: string;
+    },
 ): Promise<StoreSettings> {
     const body = await laravelFetch<{
         settings: StoreSettings;

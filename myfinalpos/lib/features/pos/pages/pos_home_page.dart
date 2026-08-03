@@ -1717,6 +1717,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     ReceiptStoreConfig? receiptStore,
     int? defaultBranchId,
     String? cashDrawerPin,
+    String? refundPin,
   }) async {
     final receiptPayload =
         receiptStore != null ? await receiptStore.toJson() : null;
@@ -1726,6 +1727,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       defaultBranchId: defaultBranchId,
       actorUserId: widget.currentUser.id,
       cashDrawerPin: cashDrawerPin,
+      refundPin: refundPin,
     );
     if (!mounted) return;
     final host = saved.printerHost.trim();
@@ -2215,20 +2217,31 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _reloadCustomerLists() async {
-    final results = await Future.wait<dynamic>([
-      api.fetchCustomers(),
-      api.fetchLoyaltyCards(),
-    ]);
+    Object? firstError;
 
-    customers
-      ..clear()
-      ..addAll(
-        (results[0] as List<Customer>).where((customer) => !customer.isWalkIn),
-      );
-    loyaltyCards
-      ..clear()
-      ..addAll(results[1] as List<LoyaltyCard>);
+    try {
+      final loadedCustomers = await api.fetchCustomers();
+      customers
+        ..clear()
+        ..addAll(loadedCustomers.where((customer) => !customer.isWalkIn));
+    } catch (e) {
+      firstError = e;
+    }
+
+    try {
+      final loadedLoyaltyCards = await api.fetchLoyaltyCards();
+      loyaltyCards
+        ..clear()
+        ..addAll(loadedLoyaltyCards);
+    } catch (e) {
+      firstError ??= e;
+    }
+
     if (mounted) setState(() {});
+
+    if (firstError != null) {
+      throw firstError;
+    }
   }
 
   Future<void> reloadSalesHistory() async {

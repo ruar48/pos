@@ -174,14 +174,20 @@ class ItemsPageController extends Controller
             ], 500);
         }
 
+        $message = sprintf(
+            'Import complete: %d created, %d updated, %d skipped',
+            $result['created'],
+            $result['updated'],
+            $result['skipped'],
+        );
+
+        if (! empty($result['warnings'])) {
+            $message .= sprintf(' (%d possible duplicate item%s — please review)', count($result['warnings']), count($result['warnings']) === 1 ? '' : 's');
+        }
+
         return response()->json([
             'success' => true,
-            'message' => sprintf(
-                'Import complete: %d created, %d updated, %d skipped',
-                $result['created'],
-                $result['updated'],
-                $result['skipped'],
-            ),
+            'message' => $message,
             'data' => $result,
         ]);
     }

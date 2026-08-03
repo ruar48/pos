@@ -39,6 +39,7 @@ class AppSettingsModel {
     this.attendanceTimeoutStart = '16:30',
     this.settingsRevision = '0',
     this.hasCashDrawerPin = false,
+    this.hasRefundPin = false,
   });
 
   final double taxRate;
@@ -78,6 +79,7 @@ class AppSettingsModel {
   final String attendanceTimeoutStart;
   final String settingsRevision;
   final bool hasCashDrawerPin;
+  final bool hasRefundPin;
 
   static String _timeField(
     Map<String, dynamic> json,
@@ -204,8 +206,8 @@ class AppSettingsModel {
       ),
       settingsRevision: (json['settings_revision'] ?? '0').toString(),
       hasCashDrawerPin: json['has_cash_drawer_pin'] == true ||
-          json['has_cash_drawer_pin'].toString() == '1' ||
-          json['has_refund_pin'] == true ||
+          json['has_cash_drawer_pin'].toString() == '1',
+      hasRefundPin: json['has_refund_pin'] == true ||
           json['has_refund_pin'].toString() == '1',
     );
   }
@@ -266,6 +268,7 @@ class AppSettingsModel {
     String? attendanceTimeoutStart,
     String? settingsRevision,
     bool? hasCashDrawerPin,
+    bool? hasRefundPin,
   }) {
     return AppSettingsModel(
       taxRate: taxRate ?? this.taxRate,
@@ -324,6 +327,7 @@ class AppSettingsModel {
           attendanceTimeoutStart ?? this.attendanceTimeoutStart,
       settingsRevision: settingsRevision ?? this.settingsRevision,
       hasCashDrawerPin: hasCashDrawerPin ?? this.hasCashDrawerPin,
+      hasRefundPin: hasRefundPin ?? this.hasRefundPin,
     );
   }
 }

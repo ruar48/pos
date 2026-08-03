@@ -952,7 +952,7 @@ class CashDrawerService
 
     private function requireCashDrawerPin(Request $request): void
     {
-        $pin = trim((string) ($request->input('cash_drawer_pin') ?? $request->input('refund_pin') ?? ''));
+        $pin = trim((string) ($request->input('cash_drawer_pin') ?? ''));
         if (! PosHelpers::verifyCashDrawerPin($pin)) {
             throw new \InvalidArgumentException('Invalid or missing cash drawer PIN');
         }

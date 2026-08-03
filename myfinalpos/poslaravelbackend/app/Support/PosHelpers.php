@@ -895,6 +895,33 @@ class PosHelpers
 
     public static function verifyCashDrawerPin(string $pin): bool
     {
+        if (! self::tableExists('app_settings') || ! self::columnExists('app_settings', 'cash_drawer_pin_hash')) {
+            return false;
+        }
+
+        $row = DB::selectOne('SELECT cash_drawer_pin_hash FROM app_settings WHERE id = 1 LIMIT 1');
+        $hash = trim((string) ($row->cash_drawer_pin_hash ?? ''));
+
+        if ($hash === '' || $pin === '') {
+            return false;
+        }
+
+        return password_verify($pin, $hash);
+    }
+
+    public static function isRefundPinRequired(): bool
+    {
+        if (! self::tableExists('app_settings') || ! self::columnExists('app_settings', 'refund_pin_hash')) {
+            return false;
+        }
+
+        $row = DB::selectOne('SELECT refund_pin_hash FROM app_settings WHERE id = 1 LIMIT 1');
+
+        return trim((string) ($row->refund_pin_hash ?? '')) !== '';
+    }
+
+    public static function verifyRefundPin(string $pin): bool
+    {
         if (! self::tableExists('app_settings') || ! self::columnExists('app_settings', 'refund_pin_hash')) {
             return false;
         }

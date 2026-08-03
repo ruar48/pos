@@ -8,6 +8,7 @@ import '../management/widgets/management_widgets.dart';
 import '../pos/pages/pos_home_page.dart';
 import '../pos/widgets/app_drawer_section.dart';
 import '../transactions/refund_dialog.dart';
+import '../transactions/refund_pin_dialog.dart';
 import '../transactions/transaction_model.dart';
 import '../transactions/transaction_service.dart';
 import 'transactions_report_models.dart';
@@ -224,12 +225,20 @@ class _TransactionsReportContentState extends State<TransactionsReportContent>
     if (result == null) return;
     if (!mounted) return;
 
+    String? refundPin;
+    if (widget.pageState.settings.hasRefundPin) {
+      refundPin = await showRefundPinDialog(context);
+      if (refundPin == null) return;
+      if (!mounted) return;
+    }
+
     final apiResult = await _refundService.processRefund(
       orderId: row.id,
       reason: result.reason,
       refundType: result.refundType,
       items: result.items,
       actorUserId: widget.pageState.widget.currentUser.id,
+      refundPin: refundPin,
     );
 
     if (!mounted) return;

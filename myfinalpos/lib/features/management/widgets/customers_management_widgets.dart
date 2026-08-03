@@ -69,7 +69,9 @@ class _CustomersManagementContentState extends State<CustomersManagementContent>
     try {
       await widget.pageState.reloadCustomers();
     } catch (_) {
-      // Keep existing list on failure.
+      if (mounted) {
+        showAppTopError('Failed to load customers. Pull down to try again.');
+      }
     } finally {
       if (mounted) setState(() => refreshing = false);
     }

@@ -87,6 +87,7 @@ class TransactionService {
     required String refundType,
     required List<RefundItemRequest> items,
     int? actorUserId,
+    String? refundPin,
   }) async {
     final uri = _buildUri('process_refund.php');
     final response = await http.post(
@@ -98,6 +99,7 @@ class TransactionService {
         'reason': reason,
         'items': items.map((item) => item.toJson()).toList(),
         'actor_user_id': actorUserId,
+        if (refundPin != null && refundPin.isNotEmpty) 'refund_pin': refundPin,
       }),
     );
 

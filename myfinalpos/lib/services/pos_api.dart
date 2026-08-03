@@ -1001,6 +1001,7 @@ class PosApi {
     required int orderId,
     required String reason,
     int? actorUserId,
+    String? refundPin,
   }) async {
     return _postRefund(
       orderId: orderId,
@@ -1008,6 +1009,7 @@ class PosApi {
       refundType: 'all',
       items: const [],
       actorUserId: actorUserId,
+      refundPin: refundPin,
     );
   }
 
@@ -1016,6 +1018,7 @@ class PosApi {
     required String reason,
     required List<RefundItemRequest> items,
     int? actorUserId,
+    String? refundPin,
   }) async {
     return _postRefund(
       orderId: orderId,
@@ -1023,6 +1026,7 @@ class PosApi {
       refundType: 'items',
       items: items,
       actorUserId: actorUserId,
+      refundPin: refundPin,
     );
   }
 
@@ -1032,6 +1036,7 @@ class PosApi {
     required String refundType,
     required List<RefundItemRequest> items,
     int? actorUserId,
+    String? refundPin,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/process_refund.php');
     final response = await http.post(
@@ -1043,6 +1048,7 @@ class PosApi {
         'reason': reason,
         'items': items.map((item) => item.toJson()).toList(),
         'actor_user_id': actorUserId,
+        if (refundPin != null && refundPin.isNotEmpty) 'refund_pin': refundPin,
       }),
     );
 
@@ -1304,6 +1310,7 @@ class PosApi {
     Map<String, dynamic>? receiptStore,
     int? defaultBranchId,
     String? cashDrawerPin,
+    String? refundPin,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/settings.php');
     final payload = <String, dynamic>{
@@ -1352,6 +1359,9 @@ class PosApi {
     }
     if (cashDrawerPin != null && cashDrawerPin.isNotEmpty) {
       payload['cash_drawer_pin'] = cashDrawerPin;
+    }
+    if (refundPin != null && refundPin.isNotEmpty) {
+      payload['refund_pin'] = refundPin;
     }
 
     final response = await http.post(

@@ -165,6 +165,7 @@ class TransactionState extends ChangeNotifier {
     required String reason,
     required String refundType,
     required List<RefundItemRequest> items,
+    String? refundPin,
   }) async {
     final transaction = selectedTransaction;
     if (transaction == null) {
@@ -180,6 +181,7 @@ class TransactionState extends ChangeNotifier {
       refundType: refundType,
       items: items,
       actorUserId: actorUserId,
+      refundPin: refundPin,
     );
 
     if (result.success) {

@@ -142,6 +142,9 @@ class AppSettingsService
         if (PosHelpers::columnExists('app_settings', 'low_stock_email_recipients')) {
             $columns[] = 'low_stock_email_recipients';
         }
+        if (PosHelpers::columnExists('app_settings', 'cash_drawer_pin_hash')) {
+            $columns[] = 'cash_drawer_pin_hash';
+        }
         if (PosHelpers::columnExists('app_settings', 'refund_pin_hash')) {
             $columns[] = 'refund_pin_hash';
         }
@@ -381,9 +384,9 @@ class AppSettingsService
             ]);
         }
 
-        $cashDrawerPin = trim((string) ($input['cash_drawer_pin'] ?? $input['refund_pin'] ?? ''));
+        $cashDrawerPin = trim((string) ($input['cash_drawer_pin'] ?? ''));
         if (
-            PosHelpers::columnExists('app_settings', 'refund_pin_hash')
+            PosHelpers::columnExists('app_settings', 'cash_drawer_pin_hash')
             && $cashDrawerPin !== ''
         ) {
             PosHelpers::requireAdminActor($actorUserId);
@@ -391,7 +394,22 @@ class AppSettingsService
                 throw new \RuntimeException('Cash drawer PIN must be 4 to 6 digits.');
             }
             DB::table('app_settings')->where('id', 1)->update([
-                'refund_pin_hash' => password_hash($cashDrawerPin, PASSWORD_DEFAULT),
+                'cash_drawer_pin_hash' => password_hash($cashDrawerPin, PASSWORD_DEFAULT),
+                'updated_by' => $actorUserId,
+            ]);
+        }
+
+        $refundPin = trim((string) ($input['refund_pin'] ?? ''));
+        if (
+            PosHelpers::columnExists('app_settings', 'refund_pin_hash')
+            && $refundPin !== ''
+        ) {
+            PosHelpers::requireAdminActor($actorUserId);
+            if (preg_match('/^\d{4,6}$/', $refundPin) !== 1) {
+                throw new \RuntimeException('Refund PIN must be 4 to 6 digits.');
+            }
+            DB::table('app_settings')->where('id', 1)->update([
+                'refund_pin_hash' => password_hash($refundPin, PASSWORD_DEFAULT),
                 'updated_by' => $actorUserId,
             ]);
         }
@@ -462,6 +480,7 @@ class AppSettingsService
             'low_stock_email_enabled' => true,
             'low_stock_email_recipients' => '',
             'has_cash_drawer_pin' => false,
+            'has_refund_pin' => false,
         ];
 
         $payload['settings_revision'] = AppSettingsRevision::current();
@@ -527,7 +546,8 @@ class AppSettingsService
             'low_stock_email_recipients' => trim(
                 (string) ($data['low_stock_email_recipients'] ?? $defaults['low_stock_email_recipients']),
             ),
-            'has_cash_drawer_pin' => trim((string) ($data['refund_pin_hash'] ?? '')) !== '',
+            'has_cash_drawer_pin' => trim((string) ($data['cash_drawer_pin_hash'] ?? '')) !== '',
+            'has_refund_pin' => trim((string) ($data['refund_pin_hash'] ?? '')) !== '',
         ];
 
         foreach ($this->attendanceSessionColumns() as $column) {

@@ -13,6 +13,7 @@ import '../pos/widgets/app_shell_scaffold.dart';
 import '../receipt/receipt_preview_widget.dart';
 import '../receipt/receipt_printer.dart';
 import '../transactions/refund_dialog.dart';
+import '../transactions/refund_pin_dialog.dart';
 import '../transactions/transaction_model.dart';
 import '../transactions/transaction_payment_summary.dart';
 import '../transactions/transaction_service.dart';
@@ -665,10 +666,18 @@ class _OrderDetailPane extends StatelessWidget {
     if (result == null) return;
     if (!context.mounted) return;
 
+    String? refundPin;
+    if (pageState.settings.hasRefundPin) {
+      refundPin = await showRefundPinDialog(context);
+      if (refundPin == null) return;
+      if (!context.mounted) return;
+    }
+
     final apiResult = await state.refundSelectedTransaction(
       reason: result.reason,
       refundType: result.refundType,
       items: result.items,
+      refundPin: refundPin,
     );
 
     if (!context.mounted) return;
