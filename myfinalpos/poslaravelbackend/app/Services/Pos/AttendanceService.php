@@ -902,9 +902,19 @@ class AttendanceService
             $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
                 ->diffInMinutes(Carbon::parse($punchState['day_out_at']));
         } elseif ($isClockedIn && $punchState['morning_in_at'] !== null) {
+            // While on break, freeze at the moment the break started instead
+            // of "now" - the duty clock pauses during break and resumes once
+            // break_out is punched.
+            $reference = $isOnBreak && $openBreakStart !== null
+                ? $openBreakStart
+                : Carbon::now('UTC');
             $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
-                ->diffInMinutes(Carbon::now('UTC'));
+                ->diffInMinutes($reference);
         }
+
+        // Break time is unpaid/non-working time - never counted toward
+        // worked hours (attendance duty span, payroll totals, etc.).
+        $totalMinutes = max(0, $totalMinutes - $totalBreakMinutes);
 
         $sessionAttendance = $this->evaluateSessionAttendance(
             $punchState['morning_in_at'],

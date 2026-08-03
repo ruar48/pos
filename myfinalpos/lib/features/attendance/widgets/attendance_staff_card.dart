@@ -55,12 +55,29 @@ class AttendanceStaffCard extends StatelessWidget {
     final isDayDone = attendanceIsDayComplete(row);
     final canTimeIn = attendanceCanTimeIn(row, punchEnabled: punchEnabled);
     final canTimeOut = attendanceCanTimeOut(row, punchEnabled: punchEnabled);
-    final inDone = isClockedIn || isDayDone;
-    final outDone = isDayDone;
     final isOnBreak = attendanceIsOnBreak(row);
     final canBreak = isOnBreak
         ? attendanceCanBreakOut(row, punchEnabled: punchEnabled)
         : attendanceCanBreakIn(row, punchEnabled: punchEnabled);
+
+    final punchLabel = attendancePunchButtonLabel(
+      dayComplete: isDayDone,
+      isClockedIn: isClockedIn,
+    );
+    final punchCaption = punchLabel == 'DONE'
+        ? 'Done'
+        : punchLabel == 'OUT'
+            ? 'Time Out'
+            : 'Time In';
+    final punchColor = punchLabel == 'OUT' ? AppColors.orange : AppColors.green;
+    final canPunchNow = punchLabel == 'IN'
+        ? canTimeIn
+        : punchLabel == 'OUT'
+            ? canTimeOut
+            : false;
+    final onPunchTap = canPunchNow && !punchBusy
+        ? (punchLabel == 'IN' ? onTimeIn : onTimeOut)
+        : null;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -69,138 +86,115 @@ class AttendanceStaffCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Text(
-            row.fullName.toUpperCase(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-              letterSpacing: 0.2,
-              color: AppColors.text,
+          SizedBox(
+            width: 150,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  row.fullName.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    letterSpacing: 0.2,
+                    color: AppColors.text,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                _DutyHoursText(row: row),
+              ],
             ),
           ),
-          const SizedBox(height: 2),
-          _DutyHoursText(row: row),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _LabeledPhotoCircle(
-                  label: 'In',
-                  photoUrl: inUrl,
-                  hasRecord: hasIn,
-                  emptyIcon: Icons.login_rounded,
-                  accent: const Color(0xFF0D9488),
-                ),
-              ),
-              if (hasSelfieBreak) ...[
-                Expanded(
-                  child: _LabeledPhotoCircle(
-                    label: 'Break',
-                    photoUrl: breakInUrl,
-                    hasRecord: breakInUrl != null || breakInTime != '—',
-                    emptyIcon: Icons.free_breakfast_outlined,
-                    accent: AppColors.amber,
-                  ),
-                ),
-                Expanded(
-                  child: _LabeledPhotoCircle(
-                    label: 'Break Out',
-                    photoUrl: breakOutUrl,
-                    hasRecord: breakOutUrl != null || breakOutTime != '—',
-                    emptyIcon: Icons.free_breakfast_outlined,
-                    accent: AppColors.amber,
-                  ),
-                ),
-              ],
-              Expanded(
-                child: _LabeledPhotoCircle(
-                  label: 'Out',
-                  photoUrl: outUrl,
-                  hasRecord: hasOut,
-                  emptyIcon: Icons.logout_rounded,
-                  accent: AppColors.orange,
-                ),
-              ),
-            ],
+          _LabeledPhotoCircle(
+            label: 'In',
+            photoUrl: inUrl,
+            hasRecord: hasIn,
+            emptyIcon: Icons.login_rounded,
+            accent: const Color(0xFF0D9488),
           ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _ActionCircle(
-                label: 'IN',
-                caption: 'Time In',
-                color: AppColors.green,
-                enabled: canTimeIn,
-                done: inDone && !canTimeIn,
-                busy: punchBusy,
-                onTap:
-                    canTimeIn && !punchBusy && onTimeIn != null ? onTimeIn : null,
-              ),
-              const SizedBox(width: 8),
-              _ActionCircle(
-                label: 'OUT',
-                caption: 'Time Out',
-                color: AppColors.orange,
-                enabled: canTimeOut,
-                done: outDone && !canTimeOut,
-                busy: punchBusy,
-                onTap: canTimeOut && !punchBusy && onTimeOut != null
-                    ? onTimeOut
-                    : null,
-              ),
-              const SizedBox(width: 8),
-              _ActionCircle(
-                label: isOnBreak ? 'END' : 'BRK',
-                caption: isOnBreak ? 'End Break' : 'Break',
+          if (hasSelfieBreak) ...[
+            _LabeledPhotoCircle(
+              label: 'Break',
+              photoUrl: breakInUrl,
+              hasRecord: breakInUrl != null || breakInTime != '—',
+              emptyIcon: Icons.free_breakfast_outlined,
+              accent: AppColors.amber,
+            ),
+            _LabeledPhotoCircle(
+              label: 'Break Out',
+              photoUrl: breakOutUrl,
+              hasRecord: breakOutUrl != null || breakOutTime != '—',
+              emptyIcon: Icons.free_breakfast_outlined,
+              accent: AppColors.amber,
+            ),
+          ],
+          _LabeledPhotoCircle(
+            label: 'Out',
+            photoUrl: outUrl,
+            hasRecord: hasOut,
+            emptyIcon: Icons.logout_rounded,
+            accent: AppColors.orange,
+          ),
+          _ActionCircle(
+            label: punchLabel,
+            caption: punchCaption,
+            color: punchColor,
+            enabled: canPunchNow,
+            done: false,
+            busy: punchBusy,
+            onTap: onPunchTap,
+          ),
+          _ActionCircle(
+            label: isOnBreak ? 'END' : 'BRK',
+            caption: isOnBreak ? 'End Break' : 'Break',
+            color: AppColors.amber,
+            enabled: canBreak,
+            done: isOnBreak,
+            busy: punchBusy,
+            onTap: canBreak && !punchBusy && onBreak != null ? onBreak : null,
+          ),
+          SizedBox(
+            width: 100,
+            child: _SelfieInfo(
+              label: 'Selfie-In',
+              time: inTime,
+              color: const Color(0xFF0D9488),
+            ),
+          ),
+          SizedBox(
+            width: 100,
+            child: _SelfieInfo(
+              label: 'Selfie-Out',
+              time: outTime,
+              color: AppColors.orange,
+            ),
+          ),
+          if (hasSelfieBreak) ...[
+            SizedBox(
+              width: 100,
+              child: _SelfieInfo(
+                label: 'Break-In',
+                time: breakInTime,
                 color: AppColors.amber,
-                enabled: canBreak,
-                done: isOnBreak,
-                busy: punchBusy,
-                onTap: canBreak && !punchBusy && onBreak != null ? onBreak : null,
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _SelfieInfo(
-                  label: 'Selfie-In',
-                  time: inTime,
-                  color: const Color(0xFF0D9488),
-                ),
+            ),
+            SizedBox(
+              width: 100,
+              child: _SelfieInfo(
+                label: 'Break-Out',
+                time: breakOutTime,
+                color: AppColors.amber,
               ),
-              Expanded(
-                child: _SelfieInfo(
-                  label: 'Selfie-Out',
-                  time: outTime,
-                  color: AppColors.orange,
-                ),
-              ),
-              if (hasSelfieBreak) ...[
-                Expanded(
-                  child: _SelfieInfo(
-                    label: 'Break-In',
-                    time: breakInTime,
-                    color: AppColors.amber,
-                  ),
-                ),
-                Expanded(
-                  child: _SelfieInfo(
-                    label: 'Break-Out',
-                    time: breakOutTime,
-                    color: AppColors.amber,
-                  ),
-                ),
-              ],
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
@@ -489,11 +483,14 @@ class _SelfieThumb extends StatelessWidget {
           ? Image.network(
               photoUrl!,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Icon(
-                emptyIcon,
-                color: AppColors.muted,
-                size: 22,
-              ),
+              errorBuilder: (_, __, error) {
+                debugPrint('[attendance] photo failed to load: $photoUrl ($error)');
+                return Icon(
+                  emptyIcon,
+                  color: AppColors.muted,
+                  size: 22,
+                );
+              },
             )
           : Icon(
               emptyIcon,

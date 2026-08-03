@@ -126,19 +126,12 @@ String formatDutyDuration(int minutes) {
 }
 
 String attendanceDutyHoursLabel(AttendanceBoardRow row) {
-  final timeIn = attendanceTimeIn(row);
-  final timeOut = attendanceTimeOut(row);
-
-  if (timeIn != null && timeOut != null) {
-    return formatDutyDuration(timeOut.difference(timeIn).inMinutes);
-  }
-
-  if (timeIn != null && attendanceIsClockedIn(row)) {
-    return '${formatDutyDuration(DateTime.now().difference(timeIn).inMinutes)} · on duty';
-  }
-
-  if (row.totalMinutes > 0) {
-    return formatDutyDuration(row.totalMinutes);
+  final minutes = attendanceDutyMinutes(row);
+  if (minutes != null) {
+    final onBreakSuffix = row.isOnBreak ? ' · on break' : '';
+    final onDutySuffix =
+        !row.isOnBreak && attendanceIsClockedIn(row) ? ' · on duty' : '';
+    return '${formatDutyDuration(minutes)}$onBreakSuffix$onDutySuffix';
   }
 
   final backendLabel = row.totalHoursLabel.trim();
@@ -149,15 +142,25 @@ String attendanceDutyHoursLabel(AttendanceBoardRow row) {
   return '0 hours 0 minutes';
 }
 
+/// Worked minutes, excluding break time - the duty clock pauses while
+/// [AttendanceBoardRow.isOnBreak] and resumes once break ends.
 int? attendanceDutyMinutes(AttendanceBoardRow row) {
   final timeIn = attendanceTimeIn(row);
   final timeOut = attendanceTimeOut(row);
+  final breakMinutes = row.totalBreakMinutes;
+
   if (timeIn != null && timeOut != null) {
-    return timeOut.difference(timeIn).inMinutes;
+    final raw = timeOut.difference(timeIn).inMinutes - breakMinutes;
+    return raw < 0 ? 0 : raw;
   }
+
   if (timeIn != null && attendanceIsClockedIn(row)) {
-    return DateTime.now().difference(timeIn).inMinutes;
+    final reference =
+        row.isOnBreak && row.breakStartAt != null ? row.breakStartAt! : DateTime.now();
+    final raw = reference.difference(timeIn).inMinutes - breakMinutes;
+    return raw < 0 ? 0 : raw;
   }
+
   if (row.totalMinutes > 0) return row.totalMinutes;
   return null;
 }
