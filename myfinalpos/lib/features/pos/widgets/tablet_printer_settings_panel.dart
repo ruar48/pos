@@ -28,7 +28,7 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
   late TextEditingController printerDeviceController;
   late TextEditingController printerPortController;
   PrinterConnectionType printerType = PrinterConnectionType.network;
-  int paperWidthChars = 42;
+  int paperWidthChars = 32;
   bool saving = false;
   bool bluetoothTesting = false;
 
@@ -48,7 +48,7 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
     printerType = draft.type;
     paperWidthChars = _paperWidthOptions.contains(draft.paperWidthChars)
         ? draft.paperWidthChars
-        : 42;
+        : 32;
     printerHostController = TextEditingController(text: draft.host);
     printerDeviceController = TextEditingController(text: draft.device);
     printerPortController = TextEditingController(

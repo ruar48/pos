@@ -15,10 +15,10 @@ import 'receipt_print_exception.dart';
 export 'receipt_print_exception.dart';
 
 /// Characters per line for the printer currently being printed to.
-/// 80mm thermal paper ≈ 42 characters per line by default, but
+/// 58mm thermal paper ≈ 32 characters per line (Font A) by default, but
 /// this varies by printer model/font, so it's set from [PrinterConfig]
 /// right before each print job (see [PosReceiptService.printReceipt]).
-int kThermalWidth = 42;
+int kThermalWidth = 32;
 const String kReceiptFooterThanks = 'MARAMING SALAMAT PO!';
 
 class ReceiptStoreConfig {
@@ -242,14 +242,12 @@ class ReceiptLineItem {
     required this.quantity,
     required this.unitPrice,
     required this.total,
-    this.unit = '',
   });
 
   final String name;
   final int quantity;
   final double unitPrice;
   final double total;
-  final String unit;
 }
 
 class ReceiptData {
@@ -740,11 +738,7 @@ class ThermalReceiptLayout {
   /// out jumbled for long product names.
   List<String> _formatItemLines(ReceiptLineItem item) {
     final amount = _money(item.total);
-    final unit = item.unit.trim();
-    final quantityLabel = unit.isEmpty
-        ? '${item.quantity}'
-        : '${item.quantity} $unit';
-    final meta = '$quantityLabel x @${_formatUnitPrice(item.unitPrice)}';
+    final meta = '${item.quantity} x @${_formatUnitPrice(item.unitPrice)}';
     final result = <String>[];
 
     var remaining = item.name.trim();
@@ -820,7 +814,7 @@ class ThermalReceiptLayout {
 class _EscPosBuilder {
   final List<int> _bytes = <int>[];
 
-  void init() => _bytes.addAll(<int>[0x1B, 0x40, 0x1B, 0x61, 0x00]);
+  void init() => _bytes.addAll(<int>[0x1B, 0x40]);
 
   void text(
     String value, {
@@ -923,7 +917,7 @@ class PosReceiptService {
       );
     }
 
-    kThermalWidth = config.paperWidthChars > 0 ? config.paperWidthChars : 42;
+    kThermalWidth = config.paperWidthChars > 0 ? config.paperWidthChars : 32;
 
     await PrinterTransport.sendEscPos(
       config: config,
@@ -1010,11 +1004,8 @@ class PosReceiptService {
         continue;
       }
 
-      // Rows contain their own fixed-width spacing.  Sending ESC/POS
-      // justification=center for those rows makes the printer re-centre a
-      // line that is already padded, which can wrap the value column on
-      // 42-column printers.  Only headings above use printer centering.
-      builder.text(line);
+      final centered = line == ThermalReceiptLayout.centerLine(line.trim());
+      builder.text(line, center: centered);
     }
 
     builder.feed(4);

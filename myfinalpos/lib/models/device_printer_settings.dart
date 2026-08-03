@@ -22,7 +22,7 @@ class DevicePrinterSettings {
     final prefs = await SharedPreferences.getInstance();
     final hasLocal = prefs.getBool(_hasLocalKey) ?? false;
     final port = prefs.getInt(_portKey) ?? 9100;
-    final paperWidth = prefs.getInt(_paperWidthKey) ?? 42;
+    final paperWidth = prefs.getInt(_paperWidthKey) ?? 32;
 
     return DevicePrinterSettings(
       hasLocalConfig: hasLocal,
@@ -31,7 +31,7 @@ class DevicePrinterSettings {
         host: (prefs.getString(_hostKey) ?? '').trim(),
         device: (prefs.getString(_deviceKey) ?? '').trim(),
         port: port > 0 ? port : 9100,
-        paperWidthChars: paperWidth > 0 ? paperWidth : 42,
+        paperWidthChars: paperWidth > 0 ? paperWidth : 32,
       ),
     );
   }
@@ -45,7 +45,7 @@ class DevicePrinterSettings {
     await prefs.setInt(_portKey, config.port > 0 ? config.port : 9100);
     await prefs.setInt(
       _paperWidthKey,
-      config.paperWidthChars > 0 ? config.paperWidthChars : 42,
+      config.paperWidthChars > 0 ? config.paperWidthChars : 32,
     );
   }
 }

@@ -188,7 +188,6 @@ class _ChargePaymentSectionState extends State<ChargePaymentSection> {
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
                 total: item.total,
-                unit: item.receiptUnit,
               ),
             )
             .toList(),
