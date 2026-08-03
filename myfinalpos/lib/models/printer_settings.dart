@@ -36,7 +36,7 @@ class PrinterConfig {
     this.host = '',
     this.port = 9100,
     this.device = '',
-    this.paperWidthChars = 32,
+    this.paperWidthChars = 42,
   });
 
   final PrinterConnectionType type;

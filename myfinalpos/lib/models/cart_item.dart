@@ -10,6 +10,13 @@ class CartItem {
 
   double get unitPrice => variety?.price ?? product.price;
 
+  /// Unit shown alongside the quantity on printed receipts. A variety's unit
+  /// takes precedence over the product's default unit.
+  String get receiptUnit {
+    final varietyUnit = variety?.unit?.trim() ?? '';
+    return varietyUnit.isNotEmpty ? varietyUnit : product.primaryUnit;
+  }
+
   int? get availableStock => variety?.stock ?? product.stock;
 
   String get displayName {
