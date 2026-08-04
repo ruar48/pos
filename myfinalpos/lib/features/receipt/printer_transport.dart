@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -33,24 +33,33 @@ class PrinterTransport {
     return _macPattern.hasMatch(normalizeMacAddress(raw));
   }
 
+  /// Deliberately plain: no init, no bold/center ESC sequences, no feed/cut
+  /// - just ASCII text and line feeds. This receipt keeps garbling even on
+  /// this short 4-line test regardless of chunk pacing, so the next thing
+  /// to rule out is whether the ESC/POS control bytes themselves (which a
+  /// non-standard clone controller could be misinterpreting as literal
+  /// characters) are the source, rather than the transport layer. If this
+  /// still garbles too, the corruption is happening below the byte content
+  /// entirely (plugin/OS/RF), not from anything this app is sending.
   static List<int> buildBluetoothTestReceiptBytes() {
     const title = '${AppBrand.shortName} BT Test';
     const subtitle = 'Bluetooth printer OK';
-    final bytes = <int>[0x1B, 0x40];
+    final bytes = <int>[];
 
-    void line(String text, {bool center = false, bool bold = false}) {
-      if (center) bytes.addAll(const [0x1B, 0x61, 0x01]);
-      if (bold) bytes.addAll(const [0x1B, 0x45, 0x01]);
-      bytes.addAll('$text\n'.codeUnits);
-      if (bold) bytes.addAll(const [0x1B, 0x45, 0x00]);
-      if (center) bytes.addAll(const [0x1B, 0x61, 0x00]);
+    void line(String text) {
+      // utf8.encode, not .codeUnits - AppBrand.shortName contains 'ñ'
+      // (U+00F1), and .codeUnits would emit that as a single raw byte 241
+      // instead of its correct 2-byte UTF-8 sequence, which is exactly the
+      // kind of single bad byte that can desync a cheap printer's parser.
+      bytes.addAll(utf8.encode('$text\n'));
     }
 
-    line(title, center: true, bold: true);
-    line(subtitle, center: true);
+    line(title);
+    line(subtitle);
     line('');
     line('If you can read this, Bluetooth printing works.');
-    bytes.addAll(const [0x1B, 0x64, 0x03]);
+    line('');
+    line('');
     return bytes;
   }
 

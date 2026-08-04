@@ -402,13 +402,13 @@ class ThermalReceiptLayout {
       if (line != null && line.isNotEmpty) lines.add(line);
     }
 
-    add(_center(s.logoText.trim().isEmpty ? '[ Store ]' : s.logoText.trim()));
+    add(s.logoText.trim().isEmpty ? '[ Store ]' : s.logoText.trim());
     add('');
-    add(_center(s.storeName));
-    add(_center(s.storeSubtitle));
-    add(_center(s.addressLine1));
-    add(_center(s.addressLine2));
-    add(_center('INVOICE'));
+    add(s.storeName);
+    add(s.storeSubtitle);
+    add(s.addressLine1);
+    add(s.addressLine2);
+    add('INVOICE');
     add(_labelValue('INV NO', data.invoiceNumber));
     add(_labelValue('DATE', _formatDate(data.dateTime)));
     add(_labelValue('TIME', _formatTime(data.dateTime)));
@@ -587,22 +587,18 @@ class ThermalReceiptLayout {
     add('');
     final note = receiptNote.trim();
     if (note.isNotEmpty) {
-      add(_center('NOTE:'));
-      for (final line in _wrapCenteredLines(note, kThermalWidth)) {
+      add('NOTE:');
+      for (final line in _wordWrapLines(note, kThermalWidth)) {
         add(line);
       }
       add('');
     }
-    add(_center(kReceiptFooterThanks));
+    add(kReceiptFooterThanks);
     add('');
-    add(_center('NO REFUND POLICY'));
-    add(_center('3 DAYS EXCHANGE POLICY'));
-    add(_center('WITH PENALTY'));
+    add('NO REFUND POLICY');
+    add('3 DAYS EXCHANGE POLICY');
+    add('WITH PENALTY');
     add('');
-  }
-
-  static String centerLine(String text) {
-    return _center(text);
   }
 
   static bool _isGrandTotalLine(String line, String totalText) {
@@ -619,50 +615,6 @@ class ThermalReceiptLayout {
   }
 
   String formatMoney(double value) => _money(value);
-
-  static String _center(String text) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return '';
-    if (trimmed.length >= kThermalWidth) {
-      return trimmed.substring(0, kThermalWidth);
-    }
-    final pad = ((kThermalWidth - trimmed.length) / 2).floor();
-    return '${' ' * pad}$trimmed'.padRight(kThermalWidth);
-  }
-
-  static List<String> _wrapCenteredLines(String text, int width) {
-    final words = text.trim().split(RegExp(r'\s+'));
-    final wrapped = <String>[];
-    var current = '';
-
-    for (final word in words) {
-      if (word.isEmpty) continue;
-      final candidate = current.isEmpty ? word : '$current $word';
-      if (candidate.length <= width) {
-        current = candidate;
-        continue;
-      }
-      if (current.isNotEmpty) {
-        wrapped.add(_center(current));
-      }
-      if (word.length > width) {
-        var remaining = word;
-        while (remaining.length > width) {
-          wrapped.add(_center(remaining.substring(0, width)));
-          remaining = remaining.substring(width);
-        }
-        current = remaining;
-      } else {
-        current = word;
-      }
-    }
-
-    if (current.isNotEmpty) {
-      wrapped.add(_center(current));
-    }
-
-    return wrapped;
-  }
 
   static String _divider() => '-' * kThermalWidth;
 
@@ -688,23 +640,18 @@ class ThermalReceiptLayout {
 
   static const _amountColWidth = 10;
 
-  /// Label stays flush left; the amount is centered in the remaining space
-  /// to its right rather than pushed flush to the very last column - keeps
-  /// it away from the extreme right edge, where some printers are more
-  /// prone to cutting off or corrupting the last few characters of a line.
+  /// Label stays flush left, amount stays flush right against the same
+  /// column on every row - a fixed-position center formula here (padding
+  /// based on each row's label length) made every row's amount land at a
+  /// different horizontal offset instead of lining up in one column, which
+  /// is what actually read as "misaligned" on paper.
   static String _amountRow(String label, String amount, {bool emphasize = false}) {
     final amountCol = amount.length > _amountColWidth
         ? amount
         : amount.padLeft(_amountColWidth);
-    final available = kThermalWidth - label.length;
-    if (available > amountCol.length) {
-      final totalPad = available - amountCol.length;
-      final leftPad = totalPad ~/ 2;
-      final rightPad = totalPad - leftPad;
-      return '$label${' ' * leftPad}$amountCol${' ' * rightPad}'.trimRight();
-    }
-    if (available == amountCol.length) {
-      return '$label$amountCol';
+    final space = kThermalWidth - label.length - amountCol.length;
+    if (space >= 1) {
+      return '$label${' ' * space}$amountCol';
     }
     final maxLabel = (kThermalWidth - amountCol.length - 1).clamp(0, label.length);
     final trimmedLabel = label.substring(0, maxLabel);
@@ -818,7 +765,7 @@ class ThermalReceiptLayout {
     if (!data.hasRefunds) return;
 
     add('');
-    add(_center('REFUNDED ITEMS'));
+    add('REFUNDED ITEMS');
     for (final item in data.refundItems) {
       for (final line in _formatRefundItemLines(item, money)) {
         add(line);
@@ -1050,47 +997,15 @@ class PosReceiptService {
   static List<int> _buildEscPosBytes(ReceiptData receipt) {
     final layout = ThermalReceiptLayout(receipt);
     final lines = layout.buildLines();
-    final totalText = layout.formatMoney(receipt.total);
     final builder = _EscPosBuilder()..init();
 
+    // Plain text only - no ESC align/bold/double-height bytes. A bare
+    // no-formatting test print still garbled on the reported printer, so
+    // those control bytes weren't the cause, but every extra byte is one
+    // more thing a non-standard clone controller can mishandle - keep the
+    // payload as simple as possible.
     for (final line in lines) {
-      if (line.isEmpty) {
-        builder.text('');
-        continue;
-      }
-      if (line == ThermalReceiptLayout.centerLine(receipt.store.storeName)) {
-        builder.text(
-          receipt.store.storeName,
-          center: true,
-          bold: true,
-          doubleHeight: true,
-        );
-        continue;
-      }
-      if (line == ThermalReceiptLayout.centerLine('INVOICE')) {
-        builder.text('INVOICE', center: true, bold: true);
-        continue;
-      }
-      final remainingText = layout.formatMoney(receipt.remainingTotal);
-      if (ThermalReceiptLayout._isGrandTotalLine(line, totalText) ||
-          (receipt.hasRefunds && line.contains('REMAINING TOTAL $remainingText'))) {
-        // Every other row in the receipt is exactly kThermalWidth chars, so
-        // the generic branch below always computes centered=true for it
-        // (centering an already-full-width string is a no-op) and sends the
-        // ESC align-center byte. This branch was the one line NOT sending
-        // that byte — on some thermal printers that alone shifts the pitch
-        // enough to throw the amount column out of alignment. Match the
-        // rest of the receipt exactly: bold off, center on.
-        builder.text(line, center: true);
-        continue;
-      }
-      if (line == ThermalReceiptLayout.centerLine(kReceiptFooterThanks)) {
-        builder.text(kReceiptFooterThanks, center: true, bold: true);
-        continue;
-      }
-
-      final centered = line == ThermalReceiptLayout.centerLine(line.trim());
-      builder.text(line, center: centered);
+      builder.text(line);
     }
 
     builder.feed(4);
