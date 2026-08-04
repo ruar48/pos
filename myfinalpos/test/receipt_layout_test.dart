@@ -289,4 +289,46 @@ void main() {
     expect(totalIndex, greaterThan(earnedIndex));
     expect(lines.any((line) => line.contains('35')), isTrue);
   });
+
+  test('refund receipt wraps long item names instead of truncating them', () {
+    kThermalWidth = 32;
+
+    final receipt = ReceiptData(
+      orderId: 9,
+      invoiceNumber: 'RCP-000030',
+      customerName: 'Walk In Farmer',
+      paymentMethod: 'Cash',
+      items: const [],
+      subtotal: 7739,
+      vat: 0,
+      discount: 0,
+      manualDiscount: 0,
+      couponDiscount: 0,
+      loyaltyDiscount: 0,
+      total: 7739,
+      amountTendered: 7739,
+      change: 0,
+      currencySymbol: 'PHP',
+      cashierName: 'Cashier',
+      itemCount: 10,
+      refundedAmount: 7739,
+      refundItems: const [
+        ReceiptRefundLineItem(
+          name: 'DRAGON CARTAP TAGCHEM - 5 X 100 GRAMS',
+          quantity: 1,
+          amount: 1740,
+        ),
+      ],
+    );
+
+    final lines = ThermalReceiptLayout(receipt).buildLines();
+
+    // The old behavior hard-truncated this to "DRAGON CARTAP TAG" to fit
+    // it and the amount on one line - the full name must survive now,
+    // split across word-wrapped lines instead.
+    expect(lines.any((line) => line == 'DRAGON CARTAP TAG'), isFalse);
+    expect(lines.any((line) => line.contains('DRAGON CARTAP')), isTrue);
+    expect(lines.any((line) => line.contains('TAGCHEM')), isTrue);
+    expect(lines.any((line) => line.trim() == '- 5 X 100 GRAMS'), isTrue);
+  });
 }

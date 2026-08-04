@@ -688,13 +688,23 @@ class ThermalReceiptLayout {
 
   static const _amountColWidth = 10;
 
+  /// Label stays flush left; the amount is centered in the remaining space
+  /// to its right rather than pushed flush to the very last column - keeps
+  /// it away from the extreme right edge, where some printers are more
+  /// prone to cutting off or corrupting the last few characters of a line.
   static String _amountRow(String label, String amount, {bool emphasize = false}) {
     final amountCol = amount.length > _amountColWidth
         ? amount
         : amount.padLeft(_amountColWidth);
-    final space = kThermalWidth - label.length - amountCol.length;
-    if (space >= 1) {
-      return '$label${' ' * space}$amountCol';
+    final available = kThermalWidth - label.length;
+    if (available > amountCol.length) {
+      final totalPad = available - amountCol.length;
+      final leftPad = totalPad ~/ 2;
+      final rightPad = totalPad - leftPad;
+      return '$label${' ' * leftPad}$amountCol${' ' * rightPad}'.trimRight();
+    }
+    if (available == amountCol.length) {
+      return '$label$amountCol';
     }
     final maxLabel = (kThermalWidth - amountCol.length - 1).clamp(0, label.length);
     final trimmedLabel = label.substring(0, maxLabel);
@@ -810,9 +820,39 @@ class ThermalReceiptLayout {
     add('');
     add(_center('REFUNDED ITEMS'));
     for (final item in data.refundItems) {
-      add(_amountRow('${item.name} x${item.quantity}', money(-item.amount)));
+      for (final line in _formatRefundItemLines(item, money)) {
+        add(line);
+      }
     }
     add(_amountRow('REFUNDED', money(-data.refundedAmount)));
+  }
+
+  /// Same layout as [_formatItemLines]: product name on its own
+  /// word-wrapped line(s), then qty with the amount at the far right, then
+  /// the variety/unit on its own line - refund items previously got
+  /// crammed onto a single line and had their name hard-truncated when too
+  /// long to fit, unlike regular sale items.
+  List<String> _formatRefundItemLines(
+    ReceiptRefundLineItem item,
+    String Function(double amount) money,
+  ) {
+    final rawName = item.name.trim().isEmpty ? 'Item' : item.name.trim();
+    final result = <String>[];
+
+    final separatorIndex = rawName.indexOf(' - ');
+    final baseName =
+        separatorIndex > 0 ? rawName.substring(0, separatorIndex) : rawName;
+    final variety = separatorIndex > 0
+        ? rawName.substring(separatorIndex + 3).trim()
+        : null;
+
+    result.addAll(_wordWrapLines(baseName, kThermalWidth));
+    result.add(_amountRow('x${item.quantity}', money(-item.amount)));
+    if (variety != null && variety.isNotEmpty) {
+      result.addAll(_wordWrapLines('- $variety', kThermalWidth));
+    }
+
+    return result;
   }
 
   static String _formatDate(DateTime dt) {
