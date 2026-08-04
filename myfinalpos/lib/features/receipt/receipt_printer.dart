@@ -730,28 +730,30 @@ class ThermalReceiptLayout {
     return rounded.toStringAsFixed(2);
   }
 
-  /// Always: the item name on its own line(s) (wrapped if too long), then
-  /// a separate "qty x @unit price ... amount" line. Keeping these on
-  /// guaranteed-separate lines - rather than trying to cram name, price,
-  /// and amount onto one line when they happen to fit - means the layout
-  /// never depends on exact name length or paper width, so it can't come
-  /// out jumbled for long product names.
+  /// Matches the client's hand-drawn layout: product name, then
+  /// "qty x @price ... amount" with the amount at the far right, then the
+  /// variety/unit (e.g. "- 1000 ML") indented on its own line below - never
+  /// combined onto one line. Product name and variety are joined with
+  /// " - " everywhere they're built (cart, order storage, reprints), so
+  /// splitting on the first " - " recovers them here.
   List<String> _formatItemLines(ReceiptLineItem item) {
     final amount = _money(item.total);
     final meta = '${item.quantity} x @${_formatUnitPrice(item.unitPrice)}';
+    final rawName = item.name.trim().isEmpty ? 'Item' : item.name.trim();
     final result = <String>[];
 
-    var remaining = item.name.trim();
-    if (remaining.isEmpty) {
-      remaining = 'Item';
-    }
-    while (remaining.length > kThermalWidth) {
-      result.add(remaining.substring(0, kThermalWidth));
-      remaining = remaining.substring(kThermalWidth).trimLeft();
-    }
-    result.add(remaining);
+    final separatorIndex = rawName.indexOf(' - ');
+    final baseName =
+        separatorIndex > 0 ? rawName.substring(0, separatorIndex) : rawName;
+    final variety = separatorIndex > 0
+        ? rawName.substring(separatorIndex + 3).trim()
+        : null;
 
+    result.addAll(_wordWrapLines(baseName, kThermalWidth));
     result.add(_amountRow(meta, amount));
+    if (variety != null && variety.isNotEmpty) {
+      result.addAll(_wordWrapLines('- $variety', kThermalWidth));
+    }
 
     final gross = item.unitPrice * item.quantity;
     final lineDiscount = gross - item.total;
@@ -763,6 +765,40 @@ class ThermalReceiptLayout {
     }
 
     return result;
+  }
+
+  /// Wraps [text] to [width] on word boundaries, never slicing a word in
+  /// half (e.g. "50 KILOS" won't come out as "50 KI" / "LOS"). A single
+  /// word longer than [width] on its own is hard-cut as a last resort,
+  /// since there's no word boundary to break on.
+  static List<String> _wordWrapLines(String text, int width) {
+    if (width <= 0) return [text];
+
+    final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    final lines = <String>[];
+    var current = '';
+
+    for (final word in words) {
+      if (current.isEmpty) {
+        current = word;
+      } else if (current.length + 1 + word.length <= width) {
+        current = '$current $word';
+      } else {
+        lines.add(current);
+        current = word;
+      }
+
+      while (current.length > width) {
+        lines.add(current.substring(0, width));
+        current = current.substring(width);
+      }
+    }
+
+    if (current.isNotEmpty) {
+      lines.add(current);
+    }
+
+    return lines.isEmpty ? [text] : lines;
   }
 
   void _addRefundSection(
@@ -827,7 +863,16 @@ class _EscPosBuilder {
     if (doubleHeight) _bytes.addAll(<int>[0x1D, 0x21, 0x10]);
 
     for (final line in value.split('\n')) {
-      _bytes.addAll('$line\n'.codeUnits);
+      // Encode as proper UTF-8 bytes (not raw UTF-16 code units - a
+      // non-ASCII character like ₱ would otherwise turn into a code unit
+      // >255 truncated into a single stray byte, which some printer
+      // firmwares misinterpret as a control byte and start behaving
+      // unpredictably for everything after it). Use CRLF: some cheap/clone
+      // ESC/POS controllers don't reliably reset their column position on a
+      // bare LF and keep wrapping mid-word based on total bytes sent rather
+      // than respecting line breaks.
+      _bytes.addAll(utf8.encode(line));
+      _bytes.addAll(<int>[0x0D, 0x0A]);
     }
 
     if (doubleHeight) _bytes.addAll(<int>[0x1D, 0x21, 0x00]);
