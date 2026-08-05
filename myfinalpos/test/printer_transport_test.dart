@@ -1,3 +1,4 @@
+import 'package:myfinalpos/core/constants/brand.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myfinalpos/features/receipt/printer_transport.dart';
 
@@ -32,7 +33,7 @@ void main() {
 
       expect(bytes.isNotEmpty, isTrue);
       expect(bytes.take(2).toList(), [0x1B, 0x40]);
-      expect(bytes, containsAll('GreenTok BT Test'.codeUnits));
+      expect(bytes, containsAll('${AppBrand.shortName} BT Test'.codeUnits));
       expect(bytes, containsAll('Bluetooth printer OK'.codeUnits));
     });
   });

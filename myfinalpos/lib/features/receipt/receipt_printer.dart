@@ -18,6 +18,8 @@ export 'receipt_print_exception.dart';
 /// 58mm thermal paper ≈ 32 characters per line (Font A) by default, but
 /// this varies by printer model/font, so it's set from [PrinterConfig]
 /// right before each print job (see [PosReceiptService.printReceipt]).
+// Keep the generic on-screen preview at 58 mm until a physical printer is
+// selected. [printReceipt] applies the selected printer's actual width.
 int kThermalWidth = 32;
 const String kReceiptFooterThanks = 'MARAMING SALAMAT PO!';
 
@@ -70,7 +72,8 @@ class ReceiptStoreConfig {
   }) {
     return ReceiptStoreConfig(
       logoText: logoText ?? this.logoText,
-      logoImagePath: clearLogoImage ? null : (logoImagePath ?? this.logoImagePath),
+      logoImagePath:
+          clearLogoImage ? null : (logoImagePath ?? this.logoImagePath),
       storeName: storeName ?? this.storeName,
       storeSubtitle: storeSubtitle ?? this.storeSubtitle,
       addressLine1: addressLine1 ?? this.addressLine1,
@@ -92,7 +95,8 @@ class ReceiptStoreConfig {
       logoText: prefs.getString('store_logo_text') ?? defaults.logoText,
       logoImagePath: prefs.getString('store_logo_image_path'),
       storeName: prefs.getString('store_name') ?? defaults.storeName,
-      storeSubtitle: prefs.getString('store_subtitle') ?? defaults.storeSubtitle,
+      storeSubtitle:
+          prefs.getString('store_subtitle') ?? defaults.storeSubtitle,
       addressLine1:
           prefs.getString('store_address_line1') ?? defaults.addressLine1,
       addressLine2:
@@ -105,7 +109,8 @@ class ReceiptStoreConfig {
       atpNo: prefs.getString('store_atp_no') ?? defaults.atpNo,
       atpDateIssued:
           prefs.getString('store_atp_date_issued') ?? defaults.atpDateIssued,
-      seriesRange: prefs.getString('store_series_range') ?? defaults.seriesRange,
+      seriesRange:
+          prefs.getString('store_series_range') ?? defaults.seriesRange,
     );
   }
 
@@ -153,10 +158,8 @@ class ReceiptStoreConfig {
       storeName: (json['store_name'] ?? defaults.storeName).toString(),
       storeSubtitle:
           (json['store_subtitle'] ?? defaults.storeSubtitle).toString(),
-      addressLine1:
-          (json['address_line1'] ?? defaults.addressLine1).toString(),
-      addressLine2:
-          (json['address_line2'] ?? defaults.addressLine2).toString(),
+      addressLine1: (json['address_line1'] ?? defaults.addressLine1).toString(),
+      addressLine2: (json['address_line2'] ?? defaults.addressLine2).toString(),
       tin: (json['tin'] ?? defaults.tin).toString(),
       taxStatus: (json['tax_status'] ?? defaults.taxStatus).toString(),
       posTerminalId:
@@ -208,9 +211,7 @@ class ReceiptStoreConfig {
     if (logoBase64.isNotEmpty && !kIsWeb) {
       try {
         final bytes = base64Decode(
-          logoBase64.contains(',')
-              ? logoBase64.split(',').last
-              : logoBase64,
+          logoBase64.contains(',') ? logoBase64.split(',').last : logoBase64,
         );
         final path = await saveLogoImage(bytes);
         if (path != null) {
@@ -451,14 +452,14 @@ class ThermalReceiptLayout {
       }
     }
     _addRefundSection(add, _money);
-    add(_shortDivider());
+    add(_divider());
     if (data.hasRefunds) {
       add(_amountRow('ORIGINAL TOTAL', _money(data.total)));
-      add(_amountRow('REMAINING TOTAL', _money(data.remainingTotal), emphasize: true));
+      add(_amountRow('BALANCE', _money(data.remainingTotal), emphasize: true));
     } else {
       add(_amountRow('TOTAL', _money(data.total), emphasize: true));
     }
-    add(_shortDivider());
+    add(_divider());
     if (!data.hasRefunds) {
       // The original cash/change breakdown isn't relevant once refunded —
       // REFUNDED / ORIGINAL TOTAL / REMAINING TOTAL above cover it.
@@ -553,15 +554,16 @@ class ThermalReceiptLayout {
     add(_doubleDivider());
     if (data.hasRefunds) {
       add(previewLabelValue('ORIGINAL TOTAL', previewMoney(data.total)));
-      add(previewLabelValue('REMAINING TOTAL', previewMoney(data.remainingTotal)));
+      add(previewLabelValue('BALANCE', previewMoney(data.remainingTotal)));
     } else {
       add(previewLabelValue('TOTAL', previewMoney(data.total)));
     }
-    add(_shortDivider());
+    add(_divider());
     if (!data.hasRefunds) {
       if (data.hasSplitPayments) {
         for (final payment in data.splitPayments!) {
-          add(previewLabelValue(payment.paymentMethod, previewMoney(payment.amount)));
+          add(previewLabelValue(
+              payment.paymentMethod, previewMoney(payment.amount)));
           if (payment.reference.trim().isNotEmpty) {
             add(previewLabelValue('Ref', payment.reference.trim()));
           }
@@ -608,12 +610,12 @@ class ThermalReceiptLayout {
   static bool _isGrandTotalLine(String line, String totalText) {
     final trimmed = line.trim();
     final isTotalLine = trimmed.startsWith('TOTAL') ||
-        trimmed.startsWith('REMAINING TOTAL') ||
+        trimmed.startsWith('BALANCE') ||
         trimmed.startsWith('ORIGINAL TOTAL');
     return isTotalLine &&
         !trimmed.startsWith('TOTAL POINTS') &&
         !trimmed.startsWith('Total Qty') &&
-        (trimmed.startsWith('REMAINING TOTAL') ||
+        (trimmed.startsWith('BALANCE') ||
             trimmed.startsWith('ORIGINAL TOTAL') ||
             trimmed.contains(totalText));
   }
@@ -668,14 +670,6 @@ class ThermalReceiptLayout {
 
   static String _doubleDivider() => '=' * kThermalWidth;
 
-  static String _shortDivider() {
-    const dots = '-------- --------';
-    final leftPadded = dots.padLeft(
-      ((kThermalWidth + dots.length) ~/ 2).clamp(0, kThermalWidth),
-    );
-    return leftPadded.padRight(kThermalWidth).substring(0, kThermalWidth);
-  }
-
   static String _labelValue(String label, String value) {
     const gap = ': ';
     final prefix = '$label$gap';
@@ -683,26 +677,38 @@ class ThermalReceiptLayout {
     if (space >= 1) {
       return '$prefix${' ' * space}$value';
     }
-    return ('$prefix$value').padRight(kThermalWidth).substring(0, kThermalWidth);
+    return ('$prefix$value')
+        .padRight(kThermalWidth)
+        .substring(0, kThermalWidth);
   }
 
   static const _amountColWidth = 10;
+  static const _safeMoneyRowWidth = 24;
+  static const _safeItemTextWidth = 24;
 
-  static String _amountRow(String label, String amount, {bool emphasize = false}) {
+  static String _amountRow(String label, String amount,
+      {bool emphasize = false}) {
+    // This printer reports 48 columns but wraps plain-text rows after about
+    // 25 characters. Keep money rows in a safe 24-column area
+    // so TOTAL, Cash, Change, and refund amounts never move to a new line.
+    final rowWidth =
+        kThermalWidth > _safeMoneyRowWidth ? _safeMoneyRowWidth : kThermalWidth;
     final amountCol = amount.length > _amountColWidth
         ? amount
         : amount.padLeft(_amountColWidth);
-    final space = kThermalWidth - label.length - amountCol.length;
-    if (space >= 1) {
+    final space = rowWidth - label.length - amountCol.length;
+    if (space >= 0) {
       return '$label${' ' * space}$amountCol';
     }
-    final maxLabel = (kThermalWidth - amountCol.length - 1).clamp(0, label.length);
+    final maxLabel = (rowWidth - amountCol.length - 1).clamp(0, label.length);
     final trimmedLabel = label.substring(0, maxLabel);
-    final gap = kThermalWidth - trimmedLabel.length - amountCol.length;
+    final gap = rowWidth - trimmedLabel.length - amountCol.length;
     if (gap >= 1) {
       return '$trimmedLabel${' ' * gap}$amountCol';
     }
-    return ('$trimmedLabel $amountCol').padRight(kThermalWidth).substring(0, kThermalWidth);
+    return ('$trimmedLabel $amountCol')
+        .padRight(rowWidth)
+        .substring(0, rowWidth);
   }
 
   String _money(double value) {
@@ -741,15 +747,7 @@ class ThermalReceiptLayout {
     final meta = '${item.quantity} x @${_formatUnitPrice(item.unitPrice)}';
     final result = <String>[];
 
-    var remaining = item.name.trim();
-    if (remaining.isEmpty) {
-      remaining = 'Item';
-    }
-    while (remaining.length > kThermalWidth) {
-      result.add(remaining.substring(0, kThermalWidth));
-      remaining = remaining.substring(kThermalWidth).trimLeft();
-    }
-    result.add(remaining);
+    result.addAll(_wrapItemText(item.name, fallback: 'Item'));
 
     result.add(_amountRow(meta, amount));
 
@@ -765,6 +763,44 @@ class ThermalReceiptLayout {
     return result;
   }
 
+  static List<String> _wrapItemText(String value, {required String fallback}) {
+    final text = value.trim().isEmpty ? fallback : value.trim();
+    final words = text.split(RegExp(r'\s+'));
+    final lines = <String>[];
+    var current = '';
+
+    void addLongWord(String word) {
+      var remaining = word;
+      while (remaining.length > _safeItemTextWidth) {
+        lines.add(remaining.substring(0, _safeItemTextWidth));
+        remaining = remaining.substring(_safeItemTextWidth);
+      }
+      current = remaining;
+    }
+
+    for (final word in words) {
+      if (word.length > _safeItemTextWidth) {
+        if (current.isNotEmpty) {
+          lines.add(current);
+          current = '';
+        }
+        addLongWord(word);
+        continue;
+      }
+
+      final candidate = current.isEmpty ? word : '$current $word';
+      if (candidate.length <= _safeItemTextWidth) {
+        current = candidate;
+      } else {
+        lines.add(current);
+        current = word;
+      }
+    }
+
+    if (current.isNotEmpty) lines.add(current);
+    return lines;
+  }
+
   void _addRefundSection(
     void Function(String? line) add,
     String Function(double amount) money,
@@ -773,8 +809,12 @@ class ThermalReceiptLayout {
 
     add('');
     add(_center('REFUNDED ITEMS'));
+    add(_divider());
     for (final item in data.refundItems) {
-      add(_amountRow('${item.name} x${item.quantity}', money(-item.amount)));
+      for (final line in _wrapItemText(item.name, fallback: 'Refunded item')) {
+        add(line);
+      }
+      add(_amountRow('Qty ${item.quantity}', money(-item.amount)));
     }
     add(_amountRow('REFUNDED', money(-data.refundedAmount)));
   }
@@ -798,7 +838,9 @@ class ThermalReceiptLayout {
     if (trimmed.isEmpty) return 'CASHIER';
     final parts = trimmed.split(RegExp(r'\s+'));
     if (parts.length == 1) {
-      return parts.first.toUpperCase().substring(0, parts.first.length.clamp(0, 8));
+      return parts.first
+          .toUpperCase()
+          .substring(0, parts.first.length.clamp(0, 8));
     }
     return parts.first.toUpperCase();
   }
@@ -917,7 +959,9 @@ class PosReceiptService {
       );
     }
 
-    kThermalWidth = config.paperWidthChars > 0 ? config.paperWidthChars : 32;
+    kThermalWidth = config.paperWidthChars > 0
+        ? config.paperWidthChars
+        : kDefaultThermalPaperWidthChars;
 
     await PrinterTransport.sendEscPos(
       config: config,
@@ -986,17 +1030,14 @@ class PosReceiptService {
         builder.text('INVOICE', center: true, bold: true);
         continue;
       }
+      if (line == ThermalReceiptLayout.centerLine('REFUNDED ITEMS')) {
+        builder.text('REFUNDED ITEMS', center: true, bold: true);
+        continue;
+      }
       final remainingText = layout.formatMoney(receipt.remainingTotal);
       if (ThermalReceiptLayout._isGrandTotalLine(line, totalText) ||
-          (receipt.hasRefunds && line.contains('REMAINING TOTAL $remainingText'))) {
-        // Every other row in the receipt is exactly kThermalWidth chars, so
-        // the generic branch below always computes centered=true for it
-        // (centering an already-full-width string is a no-op) and sends the
-        // ESC align-center byte. This branch was the one line NOT sending
-        // that byte — on some thermal printers that alone shifts the pitch
-        // enough to throw the amount column out of alignment. Match the
-        // rest of the receipt exactly: bold off, center on.
-        builder.text(line, center: true);
+          (receipt.hasRefunds && line.contains('BALANCE $remainingText'))) {
+        builder.text(line.trimRight());
         continue;
       }
       if (line == ThermalReceiptLayout.centerLine(kReceiptFooterThanks)) {
@@ -1004,8 +1045,10 @@ class PosReceiptService {
         continue;
       }
 
-      final centered = line == ThermalReceiptLayout.centerLine(line.trim());
-      builder.text(line, center: centered);
+      // Detail rows are already padded for their amount column. Sending them
+      // with ESC/POS center alignment can make printers discard padding or
+      // wrap final characters (for example, splitting "AM" in a time).
+      builder.text(line.trimRight());
     }
 
     builder.feed(4);
