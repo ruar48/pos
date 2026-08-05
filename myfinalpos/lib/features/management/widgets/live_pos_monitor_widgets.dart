@@ -698,7 +698,7 @@ class _LiveTerminalCard extends StatelessWidget {
                             (item) => Padding(
                               padding: const EdgeInsets.only(bottom: 6),
                               child: Text(
-                                '${item.quantity}× ${item.name}',
+                                '${formatQuantity(item.quantity)}× ${item.name}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -771,7 +771,7 @@ class _LiveTerminalCard extends StatelessWidget {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      '${item.quantity}× ${item.name}',
+                                      '${formatQuantity(item.quantity)}× ${item.name}',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(

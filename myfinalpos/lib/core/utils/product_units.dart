@@ -88,6 +88,14 @@ String primaryProductUnit(String? raw) {
   return parseProductUnits(raw).first;
 }
 
+/// Units that are commonly sold by fractional amount (e.g. "1.5 kg").
+/// Piece-style units (pc, box, sack, etc.) stay whole-number only.
+const Set<String> _fractionalProductUnits = {'kg', 'g', 'liter', 'ton'};
+
+bool isFractionalProductUnit(String unit) {
+  return _fractionalProductUnits.contains(normalizeProductUnit(unit));
+}
+
 String productUnitLabel(String value) {
   final normalized = normalizeProductUnit(value);
   for (final option in productUnitOptions) {

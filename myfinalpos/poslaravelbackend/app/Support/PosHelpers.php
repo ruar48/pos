@@ -281,7 +281,7 @@ class PosHelpers
      */
     public static function restoreRefundedStock(
         object $orderItem,
-        int $quantity,
+        float $quantity,
         int $refundId,
         ?int $actorUserId = null,
         string $note = 'Refund',
@@ -334,7 +334,7 @@ class PosHelpers
                 'SELECT stock FROM product_varieties WHERE id = ? LIMIT 1',
                 [$varietyId],
             );
-            $varietyStockAfter = $varietyRow ? (int) $varietyRow->stock : null;
+            $varietyStockAfter = $varietyRow ? (float) $varietyRow->stock : null;
         }
 
         $productUpdated = DB::update(
@@ -350,7 +350,7 @@ class PosHelpers
             'SELECT stock FROM products WHERE id = ? LIMIT 1',
             [$productId],
         );
-        $productStockAfter = $productRow ? (int) $productRow->stock : null;
+        $productStockAfter = $productRow ? (float) $productRow->stock : null;
 
         StockLedger::record(
             productId: $productId,

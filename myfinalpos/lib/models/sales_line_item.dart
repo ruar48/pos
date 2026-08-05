@@ -13,7 +13,7 @@ class SalesLineItem {
 
   final int productId;
   final String productName;
-  final int quantity;
+  final double quantity;
   final double price;
   final double total;
   final int? varietyId;
@@ -31,7 +31,7 @@ class SalesLineItem {
     return SalesLineItem(
       productId: toInt(json['product_id']),
       productName: (json['product_name'] ?? '').toString(),
-      quantity: toInt(json['quantity']),
+      quantity: toDouble(json['quantity']),
       price: toDouble(json['price']),
       total: toDouble(json['total']),
       varietyId: varietyId != null && varietyId > 0 ? varietyId : null,

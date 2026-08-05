@@ -423,7 +423,7 @@ class _VarietyDraft {
       if (id != null) 'id': id,
       'name': nameController.text.trim(),
       'price': toDouble(priceController.text),
-      'stock': int.tryParse(stockController.text.trim()) ?? 0,
+      'stock': double.tryParse(stockController.text.trim()) ?? 0,
       'reorder_level':
           int.tryParse(reorderController.text.trim()) ?? Product.defaultReorderLevel,
     };
@@ -498,7 +498,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         costPriceController.text = existing.costPrice!.toStringAsFixed(2);
       }
       if (existing.stock != null) {
-        stockController.text = existing.stock.toString();
+        stockController.text = formatQuantity(existing.stock!);
       }
       reorderLevelController.text = existing.reorderLevel.toString();
       descriptionController.text = existing.description ?? '';
@@ -511,7 +511,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
             name: variety.name,
             price: variety.price.toStringAsFixed(2),
             cost: variety.costPrice?.toStringAsFixed(2) ?? '',
-            stock: variety.stock?.toString() ?? '',
+            stock: variety.stock == null ? '' : formatQuantity(variety.stock!),
             reorder: variety.reorderLevel.toString(),
             sku: variety.sku ?? '',
             barcode: variety.barcode ?? '',
@@ -676,7 +676,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       final stockText = stockController.text.trim();
       final stock = hasVarieties
           ? null
-          : (stockText.isEmpty ? null : int.tryParse(stockText));
+          : (stockText.isEmpty ? null : double.tryParse(stockText));
       final reorderText = reorderLevelController.text.trim();
       final reorderLevel = reorderText.isEmpty
           ? Product.defaultReorderLevel
@@ -1490,7 +1490,7 @@ class _ProductsManagementContentState extends State<ProductsManagementContent> {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
-                            '$stock',
+                            formatQuantity(stock),
                             style: TextStyle(
                               color: low ? AppColors.danger : AppColors.green,
                               fontWeight: FontWeight.w700,
@@ -1531,7 +1531,7 @@ class _ProductsManagementContentState extends State<ProductsManagementContent> {
                       width: colStock,
                       align: Alignment.centerRight,
                       child: Text(
-                        '${tableRows.fold<int>(0, (sum, row) => sum + (row.variety?.stock ?? row.product.stock ?? 0))}',
+                        formatQuantity(tableRows.fold<double>(0, (sum, row) => sum + (row.variety?.stock ?? row.product.stock ?? 0))),
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ),
@@ -2133,7 +2133,7 @@ class _ProductCatalogTile extends StatelessWidget {
                       ? '${product.varieties.length} varieties'
                       : stock == null
                           ? 'Stock: —'
-                          : 'Stock: $stock ${product.displayUnit}',
+                          : 'Stock: ${formatQuantity(stock)} ${product.displayUnit}',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -2425,7 +2425,7 @@ class _ProductDetailsDialog extends StatelessWidget {
                                           Text(
                                             variety.stock == null
                                                 ? '—'
-                                                : '${variety.stock} in stock',
+                                                : '${formatQuantity(variety.stock!)} in stock',
                                             style: const TextStyle(
                                               fontSize: 11,
                                               color: AppColors.muted,
@@ -2484,7 +2484,9 @@ class _ProductDetailsDialog extends StatelessWidget {
                                 child: _DetailInfoChip(
                                   icon: Icons.inventory_2_outlined,
                                   label: 'Stock',
-                                  value: product.stock?.toString() ?? '—',
+                                  value: product.stock == null
+                                      ? '—'
+                                      : formatQuantity(product.stock!),
                                   valueColor: _stockColor,
                                 ),
                               ),

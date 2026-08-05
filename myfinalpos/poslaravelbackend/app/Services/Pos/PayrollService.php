@@ -40,11 +40,18 @@ class PayrollService
                         'branch_name' => (string) $row['branch_name'],
                         'total_minutes' => 0,
                         'break_minutes' => 0,
+                        'has_missing_time_out' => false,
+                        'missing_time_out_dates' => [],
                     ];
                 }
 
                 $totals[$userId]['total_minutes'] += (int) ($row['total_minutes'] ?? 0);
                 $totals[$userId]['break_minutes'] += (int) ($row['total_break_minutes'] ?? 0);
+
+                if (! empty($row['missing_time_out'])) {
+                    $totals[$userId]['has_missing_time_out'] = true;
+                    $totals[$userId]['missing_time_out_dates'][] = $date;
+                }
             }
         }
 
@@ -67,6 +74,8 @@ class PayrollService
                 'total_hours_label' => $this->formatDuration($totalRow['total_minutes']),
                 'hourly_rate' => $rate,
                 'total_pay' => $totalPay,
+                'has_missing_time_out' => $totalRow['has_missing_time_out'],
+                'missing_time_out_dates' => $totalRow['missing_time_out_dates'],
             ];
         }
 

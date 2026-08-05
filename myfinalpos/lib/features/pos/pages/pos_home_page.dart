@@ -823,7 +823,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
         variety: variety);
   }
 
-  int quantityInCart(Product product, {ProductVariety? variety}) {
+  double quantityInCart(Product product, {ProductVariety? variety}) {
     final liveProduct = _productById(product.id) ?? product;
     final liveVariety = variety == null
         ? null
@@ -836,7 +836,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     return index == -1 ? 0 : cart[index].quantity;
   }
 
-  int? maxCartQuantity(Product product, {ProductVariety? variety}) {
+  double? maxCartQuantity(Product product, {ProductVariety? variety}) {
     if (settings.allowNegativeStock) return null;
     final liveProduct = _productById(product.id) ?? product;
     if (variety != null) {
@@ -848,7 +848,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
 
   void setCartQuantity(
     Product product,
-    int quantity, {
+    double quantity, {
     ProductVariety? variety,
   }) {
     if (completedReceipt != null) {
@@ -908,7 +908,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     _publishMonitorNow();
   }
 
-  void updateQuantity(CartItem item, int delta) {
+  void updateQuantity(CartItem item, double delta) {
     final liveProduct = _productById(item.product.id) ?? item.product;
     final nextQty = item.quantity + delta;
     if (delta > 0) {
@@ -927,7 +927,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     _publishMonitorNow();
   }
 
-  void setQuantity(CartItem item, int quantity) {
+  void setQuantity(CartItem item, double quantity) {
     final liveProduct = _productById(item.product.id) ?? item.product;
     if (quantity > 0) {
       final stockMessage =
@@ -979,7 +979,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
 
   String? _stockLimitMessage(
     Product product,
-    int requestedQty, {
+    double requestedQty, {
     ProductVariety? variety,
   }) {
     if (settings.allowNegativeStock) return null;
@@ -993,7 +993,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       if (requestedQty <= stock) return null;
       final label = '${live.name} - ${liveVariety.name}';
       if (stock <= 0) return '$label is out of stock';
-      return 'Only $stock in stock for $label';
+      return 'Only ${formatQuantity(stock)} in stock for $label';
     }
 
     final stock = live.stock;
@@ -1001,7 +1001,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
 
     if (requestedQty <= stock) return null;
     if (stock <= 0) return '${live.name} is out of stock';
-    return 'Only $stock in stock for ${live.name}';
+    return 'Only ${formatQuantity(stock)} in stock for ${live.name}';
   }
 
   void removeItem(CartItem item) {
@@ -1409,6 +1409,13 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     _scheduleMonitorPublish();
   }
 
+  void applyItemDiscount(CartItem item, double value) {
+    setState(() {
+      item.discount = value.clamp(0, item.grossTotal).toDouble();
+    });
+    _scheduleMonitorPublish();
+  }
+
   Future<String?> applyCoupon(String code) async {
     final normalized = code.trim().toUpperCase();
     if (normalized.isEmpty) return 'Enter a coupon code';
@@ -1596,7 +1603,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     String? barcode,
     String? description,
     double? costPrice,
-    int? stock,
+    double? stock,
     int? reorderLevel,
     String? unit,
     String? imageUrl,
@@ -1637,7 +1644,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     String? barcode,
     String? description,
     double? costPrice,
-    int? stock,
+    double? stock,
     int? reorderLevel,
     String? unit,
     String? imageUrl,
@@ -1672,8 +1679,8 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   Future<void> updateManagedStock({
     required int productId,
     int? varietyId,
-    int? stock,
-    int? delta,
+    double? stock,
+    double? delta,
   }) async {
     await api.updateProductStock(
       productId: productId,
@@ -2070,8 +2077,8 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   }
 
   bool _applyRemoteStockLevels(
-    Map<String, int> productStock,
-    Map<String, int> varietyStock,
+    Map<String, double> productStock,
+    Map<String, double> varietyStock,
   ) {
     var changed = false;
     final updatedProducts = <Product>[];

@@ -503,7 +503,7 @@ class _RefundHistoryCardState extends State<_RefundHistoryCard> {
   @override
   Widget build(BuildContext context) {
     final itemCount =
-        refund.items.fold<int>(0, (sum, item) => sum + item.quantity);
+        refund.items.fold<double>(0, (sum, item) => sum + item.quantity);
 
     return Container(
       decoration: BoxDecoration(
@@ -597,7 +597,7 @@ class _RefundHistoryCardState extends State<_RefundHistoryCard> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${refund.displayTime} • ${refund.paymentMethod} • $itemCount item${itemCount == 1 ? '' : 's'}',
+                            '${refund.displayTime} • ${refund.paymentMethod} • ${formatQuantity(itemCount)} item${itemCount == 1 ? '' : 's'}',
                             style: const TextStyle(
                               fontSize: 12,
                               color: AppColors.muted,
@@ -733,7 +733,7 @@ class _RefundItemRow extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '${item.quantity}',
+                  formatQuantity(item.quantity),
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,

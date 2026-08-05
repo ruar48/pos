@@ -7,6 +7,7 @@ import '../../../core/theme/agri_admin_widgets.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/format_utils.dart';
 import '../../../core/utils/image_utils.dart';
+import '../../../core/utils/product_units.dart';
 import '../../../core/utils/top_toast.dart';
 import '../../../models/inventory_report.dart';
 import '../../../models/product.dart';
@@ -706,7 +707,7 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
   void initState() {
     super.initState();
     stockController = TextEditingController(
-      text: '${widget.product.stock ?? 0}',
+      text: formatQuantity(widget.product.stock ?? 0),
     );
   }
 
@@ -716,16 +717,16 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
     super.dispose();
   }
 
-  int get _currentInput => int.tryParse(stockController.text.trim()) ?? 0;
+  double get _currentInput => double.tryParse(stockController.text.trim()) ?? 0;
 
   void _adjustBy(int delta) {
     final next = (_currentInput + delta).clamp(0, 999999);
-    stockController.text = '$next';
+    stockController.text = formatQuantity(next);
     setState(() {});
   }
 
   Future<void> _save() async {
-    final newStock = int.tryParse(stockController.text.trim());
+    final newStock = double.tryParse(stockController.text.trim());
     if (newStock == null || newStock < 0) {
       showTopWarning(context, 'Enter a valid stock quantity.');
       return;
@@ -790,8 +791,14 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
             const SizedBox(height: 16),
             TextField(
               controller: stockController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: TextInputType.numberWithOptions(
+                decimal: isFractionalProductUnit(product.primaryUnit),
+              ),
+              inputFormatters: [
+                isFractionalProductUnit(product.primaryUnit)
+                    ? FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}'))
+                    : FilteringTextInputFormatter.digitsOnly,
+              ],
               decoration: InputDecoration(
                 labelText: 'Stock Quantity',
                 suffixText: unit,

@@ -206,7 +206,7 @@ class _ChargePaymentSectionState extends State<ChargePaymentSection> {
         change: isSplit ? 0 : (paymentMethod == 'Cash' ? changeAmount : 0),
         currencySymbol: currency,
         cashierName: widget.pageState.widget.currentUser.fullName,
-        itemCount: widget.pageState.cart.fold(0, (sum, item) => sum + item.quantity),
+        itemCount: widget.pageState.cart.fold<double>(0, (sum, item) => sum + item.quantity),
         orderType: widget.pageState.orderType,
         reference: referenceController.text.trim(),
         receiptNote: checkout.isOfflinePending

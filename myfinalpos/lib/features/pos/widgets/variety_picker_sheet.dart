@@ -63,7 +63,7 @@ Future<void> showProductVarietyPicker(
                           ? ''
                           : isOut
                               ? 'Out of stock'
-                              : '$stock in stock';
+                              : '${formatQuantity(stock)} in stock';
                       final deal = variety.deal?.trim();
                       final subtitleParts = <String>[];
                       if (stockLabel.isNotEmpty) {

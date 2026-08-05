@@ -17,7 +17,7 @@ class LowStockAlertMail extends Mailable
      *     product_id: int,
      *     name: string,
      *     sku: ?string,
-     *     stock: int,
+     *     stock: float,
      *     reorder_level: int,
      *     store_name: string
      * }  $product
@@ -29,7 +29,7 @@ class LowStockAlertMail extends Mailable
     public function envelope(): Envelope
     {
         $name = (string) ($this->product['name'] ?? 'Product');
-        $stock = (int) ($this->product['stock'] ?? 0);
+        $stock = (float) ($this->product['stock'] ?? 0);
 
         return new Envelope(
             subject: 'Low stock: '.$name.' ('.$stock.' left)',

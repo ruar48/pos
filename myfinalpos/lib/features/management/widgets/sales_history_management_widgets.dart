@@ -655,7 +655,7 @@ class _SalesOrderDetailsDialog extends StatelessWidget {
                                             ),
                                           ),
                                           Text(
-                                            '${item.quantity} x ${formatMoney(currencySymbol, item.price)}',
+                                            '${formatQuantity(item.quantity)} x ${formatMoney(currencySymbol, item.price)}',
                                             style: const TextStyle(
                                               fontSize: 12,
                                               color: AppColors.muted,

@@ -11,6 +11,8 @@ export type PayrollRow = {
     total_hours_label: string;
     hourly_rate: number;
     total_pay: number;
+    has_missing_time_out: boolean;
+    missing_time_out_dates: string[];
 };
 
 export async function fetchPayrollReport(

@@ -62,14 +62,14 @@ class InventoryReportController extends Controller
 
         foreach ($products as $p) {
             $productId = (int) $p->id;
-            $live = (int) ($p->stock ?? 0);
+            $live = (float) ($p->stock ?? 0);
 
             $m = $movements[$productId] ?? null;
-            $deltaFromStart = $m ? (int) $m->delta_from_start : 0;
-            $deltaAfterEnd = $m ? (int) $m->delta_after_end : 0;
-            $added = $m ? (int) $m->added : 0;
-            $deducted = $m ? (int) $m->deducted : 0;
-            $sold = $m ? (int) $m->sold : 0;
+            $deltaFromStart = $m ? (float) $m->delta_from_start : 0;
+            $deltaAfterEnd = $m ? (float) $m->delta_after_end : 0;
+            $added = $m ? (float) $m->added : 0;
+            $deducted = $m ? (float) $m->deducted : 0;
+            $sold = $m ? (float) $m->sold : 0;
 
             $beginning = $live - $deltaFromStart;
             $ending = $live - $deltaAfterEnd;

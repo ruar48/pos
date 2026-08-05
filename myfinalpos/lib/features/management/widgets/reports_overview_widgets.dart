@@ -291,7 +291,7 @@ class _ReportsOverviewContentState extends State<ReportsOverviewContent> {
                   .map(
                     (item) => [
                       item.label,
-                      '${item.secondary ?? item.value.toInt()}',
+                      formatQuantity(item.secondary ?? item.value),
                       formatMoney(currency, _revenueForProduct(topByRevenue, item.label)),
                     ],
                   )
@@ -306,7 +306,7 @@ class _ReportsOverviewContentState extends State<ReportsOverviewContent> {
                     (item) => [
                       item.label,
                       formatMoney(currency, item.value),
-                      '${item.secondary ?? 0}',
+                      formatQuantity(item.secondary ?? 0),
                     ],
                   )
                   .toList(),

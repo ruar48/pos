@@ -121,7 +121,7 @@ class RefundController extends Controller
 
                 if ($refundType === 'all') {
                     foreach ($orderItems as $row) {
-                        $remaining = (int) $row->quantity - (int) $row->refunded_quantity;
+                        $remaining = (float) $row->quantity - (float) $row->refunded_quantity;
                         if ($remaining > 0) {
                             $refundLines[] = [
                                 'order_item_id' => (int) $row->id,
@@ -136,7 +136,7 @@ class RefundController extends Controller
 
                     foreach ($itemsInput as $line) {
                         $orderItemId = (int) ($line['order_item_id'] ?? 0);
-                        $qty = (int) ($line['quantity'] ?? 0);
+                        $qty = (float) ($line['quantity'] ?? 0);
 
                         if ($orderItemId <= 0 || $qty <= 0) {
                             continue;
@@ -187,8 +187,8 @@ class RefundController extends Controller
                         $qtyToRefund = $line['quantity'];
                         $row = $itemsById[$orderItemId];
 
-                        $orderedQty = (int) $row->quantity;
-                        $alreadyRefunded = (int) $row->refunded_quantity;
+                        $orderedQty = (float) $row->quantity;
+                        $alreadyRefunded = (float) $row->refunded_quantity;
                         $remaining = $orderedQty - $alreadyRefunded;
 
                         if ($qtyToRefund > $remaining) {
@@ -270,7 +270,7 @@ class RefundController extends Controller
                     $refundRow = $itemsById[$line['order_item_id']];
                     $stockRestored[] = PosHelpers::restoreRefundedStock(
                         $refundRow,
-                        (int) $line['quantity'],
+                        (float) $line['quantity'],
                         $refundId,
                         $actorUserId,
                         ucfirst($action),
@@ -283,7 +283,7 @@ class RefundController extends Controller
                      WHERE order_id = ?',
                     [$orderId],
                 );
-                $remainingQty = (int) ($remainingRow->remaining_qty ?? 0);
+                $remainingQty = (float) ($remainingRow->remaining_qty ?? 0);
 
                 $newRefundedAmount = round($priorRefunded + $totalRefundAmount, 2);
                 $newStatus = $newRefundedAmount >= $orderTotal - 0.01 || $remainingQty <= 0
@@ -331,7 +331,7 @@ class RefundController extends Controller
                 );
 
                 $unitsRestored = array_sum(array_map(
-                    static fn (array $row) => (int) ($row['quantity'] ?? 0),
+                    static fn (array $row) => (float) ($row['quantity'] ?? 0),
                     $stockRestored,
                 ));
 
@@ -388,7 +388,7 @@ class RefundController extends Controller
     private function allItemsFullyRefunded(array $orderItems): bool
     {
         foreach ($orderItems as $row) {
-            if ((int) $row->quantity - (int) $row->refunded_quantity > 0) {
+            if ((float) $row->quantity - (float) $row->refunded_quantity > 0) {
                 return false;
             }
         }
@@ -398,20 +398,20 @@ class RefundController extends Controller
 
     /**
      * @param  array<int, object>  $orderItems
-     * @param  array<int, array{order_item_id: int, quantity: int}>  $refundLines
+     * @param  array<int, array{order_item_id: int, quantity: float}>  $refundLines
      */
     private function allItemsFullyRefundedAfter(array $orderItems, array $refundLines): bool
     {
         $refundQtyByItem = [];
         foreach ($refundLines as $line) {
             $id = (int) $line['order_item_id'];
-            $refundQtyByItem[$id] = ($refundQtyByItem[$id] ?? 0) + (int) $line['quantity'];
+            $refundQtyByItem[$id] = ($refundQtyByItem[$id] ?? 0) + (float) $line['quantity'];
         }
 
         foreach ($orderItems as $row) {
             $id = (int) $row->id;
-            $remainingAfter = (int) $row->quantity
-                - (int) $row->refunded_quantity
+            $remainingAfter = (float) $row->quantity
+                - (float) $row->refunded_quantity
                 - ($refundQtyByItem[$id] ?? 0);
             if ($remainingAfter > 0) {
                 return false;

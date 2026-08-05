@@ -329,7 +329,7 @@ class ReportService
                     .($row->variety_name ? ' · '.(string) $row->variety_name : ''),
                 ),
                 'category' => (string) $row->category_name,
-                'quantity_sold' => (int) $row->quantity_sold,
+                'quantity_sold' => (float) $row->quantity_sold,
                 'revenue' => $revenue,
                 'cogs' => $cogs,
                 'profit' => $profit,
@@ -395,12 +395,12 @@ class ReportService
 
             $categories[$cat]['items'][] = [
                 'name' => $label,
-                'quantity_sold' => (int) $row->quantity_sold,
+                'quantity_sold' => (float) $row->quantity_sold,
                 'revenue' => $revenue,
                 'cogs' => $cogs,
                 'profit' => $profit,
             ];
-            $categories[$cat]['quantity_sold'] += (int) $row->quantity_sold;
+            $categories[$cat]['quantity_sold'] += (float) $row->quantity_sold;
             $categories[$cat]['revenue'] += $revenue;
             $categories[$cat]['cogs'] += $cogs;
             $categories[$cat]['profit'] += $profit;

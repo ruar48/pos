@@ -163,8 +163,8 @@ class TransactionReportLineItem {
   final int productId;
   final String productName;
   final String? varietyName;
-  final int quantity;
-  final int refundedQuantity;
+  final double quantity;
+  final double refundedQuantity;
   final double price;
   final double total;
 
@@ -174,8 +174,8 @@ class TransactionReportLineItem {
       productId: toInt(json['product_id']),
       productName: json['product_name']?.toString() ?? 'Item',
       varietyName: json['variety_name']?.toString(),
-      quantity: toInt(json['quantity']),
-      refundedQuantity: toInt(json['refunded_quantity']),
+      quantity: toDouble(json['quantity']),
+      refundedQuantity: toDouble(json['refunded_quantity']),
       price: toDouble(json['price']),
       total: toDouble(json['total']),
     );

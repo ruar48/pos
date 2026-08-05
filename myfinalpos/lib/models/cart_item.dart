@@ -2,15 +2,23 @@ import 'product.dart';
 import 'product_variety.dart';
 
 class CartItem {
-  CartItem({required this.product, this.variety, this.quantity = 1});
+  CartItem({
+    required this.product,
+    this.variety,
+    this.quantity = 1,
+    this.discount = 0,
+  });
 
   final Product product;
   final ProductVariety? variety;
-  int quantity;
+  double quantity;
+
+  /// Fixed peso amount knocked off this line, entered per item.
+  double discount;
 
   double get unitPrice => variety?.price ?? product.price;
 
-  int? get availableStock => variety?.stock ?? product.stock;
+  double? get availableStock => variety?.stock ?? product.stock;
 
   String get displayName {
     if (variety != null) return '${product.name} - ${variety!.name}';
@@ -20,7 +28,10 @@ class CartItem {
     return option == null ? product.name : '${product.name} - $option';
   }
 
-  double get total => unitPrice * quantity;
+  /// Line total before any per-item discount.
+  double get grossTotal => unitPrice * quantity;
+
+  double get total => (grossTotal - discount).clamp(0, grossTotal).toDouble();
 
   /// Identity key used to deduplicate cart lines. Lines with the same product
   /// but different varieties are tracked separately.
@@ -33,6 +44,7 @@ class CartItem {
         if (variety != null) 'variety_name': variety!.name,
         'quantity': quantity,
         'price': unitPrice,
+        'discount': discount,
         'total': total,
       };
 }

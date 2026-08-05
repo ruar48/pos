@@ -5,7 +5,7 @@ class RefundItemRequest {
   });
 
   final int orderItemId;
-  final int quantity;
+  final double quantity;
 
   Map<String, dynamic> toJson() => {
         'order_item_id': orderItemId,

@@ -52,6 +52,17 @@ String formatMoney(String currencySymbol, double value) {
   return '$currencySymbol${value.toStringAsFixed(2)}';
 }
 
+/// Formats a quantity, trimming trailing zeros (e.g. `6` not `6.000`,
+/// `1.5` stays `1.5`).
+String formatQuantity(num value) {
+  var text = value.toStringAsFixed(3);
+  if (text.contains('.')) {
+    text = text.replaceFirst(RegExp(r'0+$'), '');
+    text = text.replaceFirst(RegExp(r'\.$'), '');
+  }
+  return text;
+}
+
 bool shouldShowRefundedAmount(String status, double value) {
   return status == 'refunded' && value.abs() < 0.01;
 }

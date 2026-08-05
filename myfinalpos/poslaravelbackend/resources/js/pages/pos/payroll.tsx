@@ -1,5 +1,5 @@
 import { Head } from '@inertiajs/react';
-import { Loader2, RefreshCw, Wallet } from 'lucide-react';
+import { AlertTriangle, Loader2, RefreshCw, Wallet } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header';
@@ -173,7 +173,16 @@ export default function PosPayroll() {
                                     {rows.map((row) => (
                                         <tr key={row.user_id}>
                                             <td className="px-4 py-3 font-semibold text-foreground">
-                                                {row.full_name}
+                                                <div className="flex items-center gap-1.5">
+                                                    {row.full_name}
+                                                    {row.has_missing_time_out && (
+                                                        <span
+                                                            title={`Missing time-out on ${row.missing_time_out_dates.join(', ')} — hours for that day were capped at end-of-day. Please verify/correct.`}
+                                                        >
+                                                            <AlertTriangle className="size-3.5 text-amber-500" />
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-4 py-3 text-muted-foreground">
                                                 {row.break_hours_label}

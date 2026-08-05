@@ -228,13 +228,13 @@ class ProductController extends Controller
                 'updated_at' => now(),
             ]);
 
-            if ((int) $payload['stock'] !== 0) {
+            if ((float) $payload['stock'] !== 0.0) {
                 StockLedger::record(
                     productId: $productId,
                     varietyId: null,
                     type: 'initial',
-                    quantityDelta: (int) $payload['stock'],
-                    balanceAfter: (int) $payload['stock'],
+                    quantityDelta: (float) $payload['stock'],
+                    balanceAfter: (float) $payload['stock'],
                     referenceType: 'product',
                     referenceId: $productId,
                     note: 'Initial stock on create',
@@ -260,8 +260,8 @@ class ProductController extends Controller
 
             app(LowStockNotificationService::class)->afterStockChange(
                 $productId,
-                max((int) $payload['stock'] + 1, 1),
-                (int) $payload['stock'],
+                max((float) $payload['stock'] + 1, 1),
+                (float) $payload['stock'],
             );
 
             PosApiLogger::info('product.store.success', [
@@ -331,7 +331,7 @@ class ProductController extends Controller
             return $this->posError('name, category, and valid price are required', 400);
         }
 
-        $previousStock = (int) ($existing->stock ?? 0);
+        $previousStock = (float) ($existing->stock ?? 0);
 
         try {
             DB::beginTransaction();
@@ -354,14 +354,14 @@ class ProductController extends Controller
                     'updated_at' => now(),
                 ]);
 
-            $delta = (int) $payload['stock'] - $previousStock;
-            if ($delta !== 0) {
+            $delta = (float) $payload['stock'] - $previousStock;
+            if ($delta !== 0.0) {
                 StockLedger::record(
                     productId: $productId,
                     varietyId: null,
                     type: 'adjustment',
                     quantityDelta: $delta,
-                    balanceAfter: (int) $payload['stock'],
+                    balanceAfter: (float) $payload['stock'],
                     referenceType: 'product',
                     referenceId: $productId,
                     note: 'Stock edited via product form',
@@ -388,7 +388,7 @@ class ProductController extends Controller
             app(LowStockNotificationService::class)->afterStockChange(
                 $productId,
                 $previousStock,
-                (int) $payload['stock'],
+                (float) $payload['stock'],
             );
 
             return $this->posSuccess([
@@ -516,7 +516,7 @@ class ProductController extends Controller
         if (strlen($deal) > 500) {
             throw new \InvalidArgumentException('Deal must be 500 characters or less');
         }
-        $stock = (int) ($request->input(
+        $stock = (float) ($request->input(
             'stock',
             $existing['stock'] ?? 0,
         ) ?? 0);
@@ -661,7 +661,7 @@ class ProductController extends Controller
         string $name,
         string $categoryName,
         float $price,
-        int $stock,
+        float $stock,
     ): void {
         PosHelpers::insertAuditLog(
             $actorUserId,

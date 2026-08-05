@@ -75,8 +75,8 @@ class InventoryController extends Controller
         $productId = (int) $request->input('product_id', 0);
         $hasStock = $request->exists('stock');
         $hasDelta = $request->exists('delta');
-        $stock = $hasStock ? (int) $request->input('stock') : null;
-        $delta = $hasDelta ? (int) $request->input('delta') : null;
+        $stock = $hasStock ? (float) $request->input('stock') : null;
+        $delta = $hasDelta ? (float) $request->input('delta') : null;
         $actorUserId = PosHelpers::currentActorId($request);
 
         if ($productId <= 0) {
@@ -99,8 +99,8 @@ class InventoryController extends Controller
             return $this->posError('Product not found', 404);
         }
 
-        $currentStock = (int) ($product->stock ?? 0);
-        $newStock = $hasStock ? (int) $stock : ($currentStock + (int) $delta);
+        $currentStock = (float) ($product->stock ?? 0);
+        $newStock = $hasStock ? (float) $stock : ($currentStock + (float) $delta);
 
         if (! $this->allowNegativeStock() && $newStock < 0) {
             PosApiLogger::warning('inventory.update.rejected_negative_stock', [

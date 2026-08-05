@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/format_utils.dart';
 import 'transaction_model.dart';
 import 'transaction_payment_summary.dart';
 
@@ -117,7 +118,7 @@ class TransactionDetailsWidget extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '${item.productName} x${item.quantity}',
+                              '${item.productName} x${formatQuantity(item.quantity)}',
                               style: const TextStyle(fontWeight: FontWeight.w700),
                             ),
                             Text(

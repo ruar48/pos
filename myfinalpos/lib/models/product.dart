@@ -35,7 +35,7 @@ class Product {
   final String? sku;
   final String? barcode;
   final String? unit;
-  final int? stock;
+  final double? stock;
   final int reorderLevel;
   final double? costPrice;
   final String? deal;
@@ -79,20 +79,20 @@ class Product {
   }
 
   /// Stock shown on POS product cards (sums variety stock when applicable).
-  int? get catalogStock {
+  double? get catalogStock {
     if (!hasVarieties) {
       return stock;
     }
 
     final varietyStocks = varieties
         .map((variety) => variety.stock)
-        .whereType<int>()
+        .whereType<double>()
         .toList();
     if (varietyStocks.isEmpty) {
       return stock;
     }
 
-    return varietyStocks.fold<int>(0, (total, value) => total + value);
+    return varietyStocks.fold<double>(0, (total, value) => total + value);
   }
 
   /// Promo/deal line for POS cards (first available deal on variety products).
@@ -132,7 +132,7 @@ class Product {
       sku: json['sku']?.toString(),
       barcode: json['barcode']?.toString(),
       unit: json['unit']?.toString(),
-      stock: json['stock'] == null ? null : toInt(json['stock']),
+      stock: json['stock'] == null ? null : toDouble(json['stock']),
       reorderLevel: json['reorder_level'] == null
           ? defaultReorderLevel
           : toInt(json['reorder_level']),

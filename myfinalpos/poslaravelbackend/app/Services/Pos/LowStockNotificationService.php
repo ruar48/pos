@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
 
 class LowStockNotificationService
 {
-    public function afterStockChange(int $productId, int $previousStock, int $newStock): void
+    public function afterStockChange(int $productId, float $previousStock, float $newStock): void
     {
         if ($productId <= 0 || $previousStock === $newStock) {
             return;
@@ -29,7 +29,7 @@ class LowStockNotificationService
         }
     }
 
-    private function evaluate(int $productId, int $previousStock, int $newStock): void
+    private function evaluate(int $productId, float $previousStock, float $newStock): void
     {
         if (! Schema::hasTable('products')) {
             return;
@@ -49,7 +49,7 @@ class LowStockNotificationService
         }
 
         $reorderLevel = $this->effectiveReorderLevel((int) ($product->reorder_level ?? 0));
-        $currentStock = (int) ($product->stock ?? $newStock);
+        $currentStock = (float) ($product->stock ?? $newStock);
 
         if ($currentStock > $reorderLevel) {
             if (Schema::hasColumn('products', 'low_stock_notified_at') && $product->low_stock_notified_at !== null) {

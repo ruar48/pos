@@ -777,7 +777,7 @@ class _OrderDetailPane extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${transaction.totalQuantity}',
+                        formatQuantity(transaction.totalQuantity),
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w900,

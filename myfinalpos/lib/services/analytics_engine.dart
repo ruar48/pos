@@ -74,7 +74,7 @@ class AnalyticsNamedValue {
 
   final String label;
   final double value;
-  final int? secondary;
+  final double? secondary;
 }
 
 class AnalyticsHourlyCell {
@@ -266,7 +266,7 @@ class AnalyticsEngine {
     int limit = 10,
     bool byRevenue = false,
   }) {
-    final qty = <String, int>{};
+    final qty = <String, double>{};
     final revenue = <String, double>{};
 
     for (final record in records) {

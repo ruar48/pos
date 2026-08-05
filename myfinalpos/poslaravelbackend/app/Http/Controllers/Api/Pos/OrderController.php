@@ -166,7 +166,8 @@ class OrderController extends Controller
                 foreach ($items as $item) {
                     $productId = (int) ($item['product_id'] ?? 0);
                     $varietyId = (int) ($item['variety_id'] ?? 0);
-                    $quantity = (int) ($item['quantity'] ?? 0);
+                    $quantity = (float) ($item['quantity'] ?? 0);
+                    $itemDiscount = round((float) ($item['discount'] ?? 0), 2);
 
                     if ($productId <= 0 || $quantity <= 0) {
                         throw new \RuntimeException('Invalid order item payload');
@@ -199,7 +200,7 @@ class OrderController extends Controller
                             throw new \RuntimeException("Variety #{$varietyId} not found");
                         }
 
-                        $stock = (int) ($variety->stock ?? 0);
+                        $stock = (float) ($variety->stock ?? 0);
                         if (! $allowNegativeStock && $stock < $quantity) {
                             throw new \RuntimeException(
                                 'Insufficient stock for '.$product->name.' - '.$variety->name,
@@ -211,7 +212,9 @@ class OrderController extends Controller
                             (float) ($variety->cost_price ?? $product->cost_price ?? 0),
                             2,
                         );
-                        $lineTotal = round($price * $quantity, 2);
+                        $grossTotal = round($price * $quantity, 2);
+                        $itemDiscount = min($itemDiscount, $grossTotal);
+                        $lineTotal = round($grossTotal - $itemDiscount, 2);
                         $calculatedSubtotal += $lineTotal;
 
                         $validatedItems[] = [
@@ -222,13 +225,14 @@ class OrderController extends Controller
                             'quantity' => $quantity,
                             'price' => $price,
                             'unit_cost' => $unitCost,
+                            'discount' => $itemDiscount,
                             'total' => $lineTotal,
                         ];
 
                         $productIdKey = (int) $product->id;
                         if (! isset($stockChanges[$productIdKey])) {
                             $stockChanges[$productIdKey] = [
-                                'previous' => (int) ($product->stock ?? 0),
+                                'previous' => (float) ($product->stock ?? 0),
                                 'sold' => 0,
                             ];
                         }
@@ -237,14 +241,16 @@ class OrderController extends Controller
                         continue;
                     }
 
-                    $stock = (int) ($product->stock ?? 0);
+                    $stock = (float) ($product->stock ?? 0);
                     if (! $allowNegativeStock && $stock < $quantity) {
                         throw new \RuntimeException('Insufficient stock for '.$product->name);
                     }
 
                     $price = round((float) $product->price, 2);
                     $unitCost = round((float) ($product->cost_price ?? 0), 2);
-                    $lineTotal = round($price * $quantity, 2);
+                    $grossTotal = round($price * $quantity, 2);
+                    $itemDiscount = min($itemDiscount, $grossTotal);
+                    $lineTotal = round($grossTotal - $itemDiscount, 2);
                     $calculatedSubtotal += $lineTotal;
 
                     $flatOption = trim((string) ($product->option ?? ''));
@@ -261,13 +267,14 @@ class OrderController extends Controller
                         'quantity' => $quantity,
                         'price' => $price,
                         'unit_cost' => $unitCost,
+                        'discount' => $itemDiscount,
                         'total' => $lineTotal,
                     ];
 
                     $productIdKey = (int) $product->id;
                     if (! isset($stockChanges[$productIdKey])) {
                         $stockChanges[$productIdKey] = [
-                            'previous' => (int) ($product->stock ?? 0),
+                            'previous' => (float) ($product->stock ?? 0),
                             'sold' => 0,
                         ];
                     }
@@ -337,6 +344,7 @@ class OrderController extends Controller
 
                 $hasVarietyColumns = PosHelpers::columnExists('order_items', 'variety_id');
                 $hasUnitCost = PosHelpers::columnExists('order_items', 'unit_cost');
+                $hasDiscountAmount = PosHelpers::columnExists('order_items', 'discount_amount');
 
                 foreach ($validatedItems as $item) {
                     $itemRow = [
@@ -356,6 +364,9 @@ class OrderController extends Controller
                     }
                     if ($hasUnitCost) {
                         $itemRow['unit_cost'] = $item['unit_cost'];
+                    }
+                    if ($hasDiscountAmount) {
+                        $itemRow['discount_amount'] = $item['discount'];
                     }
 
                     PosHelpers::insertRow('order_items', $itemRow);
@@ -377,7 +388,7 @@ class OrderController extends Controller
                         productId: (int) $item['product_id'],
                         varietyId: $item['variety_id'] !== null ? (int) $item['variety_id'] : null,
                         type: 'sale',
-                        quantityDelta: -1 * (int) $item['quantity'],
+                        quantityDelta: -1 * (float) $item['quantity'],
                         referenceType: 'order',
                         referenceId: $orderId,
                         note: 'Sale',
@@ -464,8 +475,8 @@ class OrderController extends Controller
             $orderId = (int) ($checkout['order_id'] ?? 0);
             $notifier = app(LowStockNotificationService::class);
             foreach (($checkout['stock_changes'] ?? []) as $productId => $change) {
-                $previousStock = (int) ($change['previous'] ?? 0);
-                $sold = (int) ($change['sold'] ?? 0);
+                $previousStock = (float) ($change['previous'] ?? 0);
+                $sold = (float) ($change['sold'] ?? 0);
                 $notifier->afterStockChange((int) $productId, $previousStock, $previousStock - $sold);
             }
 

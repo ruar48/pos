@@ -894,6 +894,15 @@ class AttendanceService
 
         $punchState = $this->analyzePunchState($punchTimes, $date, $isClockedIn);
 
+        // Only extrapolate to "right now" when $date is actually today - for
+        // a past date, "now" could be days/weeks after the shift and would
+        // make the total balloon a little more every time the report is
+        // reopened. A dangling clock_in on a past day means the staff member
+        // forgot to time out, so cap that day's duty span at end-of-day
+        // instead and flag it so payroll/attendance can surface a warning.
+        $isToday = Carbon::parse($date, self::DISPLAY_TIMEZONE)->isToday();
+        $missingTimeOut = false;
+
         if (
             $totalMinutes === 0
             && $punchState['morning_in_at'] !== null
@@ -905,16 +914,24 @@ class AttendanceService
             // While on break, freeze at the moment the break started instead
             // of "now" - the duty clock pauses during break and resumes once
             // break_out is punched.
-            $reference = $isOnBreak && $openBreakStart !== null
-                ? $openBreakStart
-                : Carbon::now('UTC');
+            if ($isOnBreak && $openBreakStart !== null) {
+                $reference = $openBreakStart;
+            } elseif ($isToday) {
+                $reference = Carbon::now('UTC');
+            } else {
+                [, $dayEndUtc] = $this->dayBoundsUtc($date);
+                $reference = Carbon::parse($dayEndUtc, 'UTC');
+                $missingTimeOut = true;
+            }
             $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
                 ->diffInMinutes($reference);
         }
 
         // Break time is unpaid/non-working time - never counted toward
         // worked hours (attendance duty span, payroll totals, etc.).
-        $totalMinutes = max(0, $totalMinutes - $totalBreakMinutes);
+        // The 24h cap is a defensive backstop against any future edge case
+        // producing an out-of-range span for a single calendar day.
+        $totalMinutes = min(24 * 60, max(0, $totalMinutes - $totalBreakMinutes));
 
         $sessionAttendance = $this->evaluateSessionAttendance(
             $punchState['morning_in_at'],
@@ -973,6 +990,8 @@ class AttendanceService
             'total_hours_label' => $this->formatDuration($totalMinutes),
 
             'is_clocked_in' => $isClockedIn,
+
+            'missing_time_out' => $missingTimeOut,
 
             'is_on_break' => $isOnBreak,
 

@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/utils/format_utils.dart';
 import '../../models/printer_settings.dart';
 import 'printer_transport.dart';
 import 'receipt_print_exception.dart';
@@ -232,7 +233,7 @@ class ReceiptRefundLineItem {
   });
 
   final String name;
-  final int quantity;
+  final double quantity;
   final double amount;
 }
 
@@ -245,7 +246,7 @@ class ReceiptLineItem {
   });
 
   final String name;
-  final int quantity;
+  final double quantity;
   final double unitPrice;
   final double total;
 }
@@ -296,7 +297,7 @@ class ReceiptData {
   final String receiptNote;
   final String cashierName;
   final List<ReceiptLineItem> items;
-  final int itemCount;
+  final double itemCount;
   final double subtotal;
   final double vat;
   final double discount;
@@ -475,7 +476,7 @@ class ThermalReceiptLayout {
       }
     }
     add(_amountRow('Payment Type', data.paymentMethod));
-    add(_amountRow('Total Qty', '${data.itemCount}'));
+    add(_amountRow('Total Qty', formatQuantity(data.itemCount)));
     _addReceiptFooter(add, receiptNote: data.receiptNote);
 
     return lines;
@@ -572,7 +573,7 @@ class ThermalReceiptLayout {
       }
     }
     add(previewLabelValue('Payment Type', data.paymentMethod));
-    add(previewLabelValue('Total Qty', '${data.itemCount}'));
+    add(previewLabelValue('Total Qty', formatQuantity(data.itemCount)));
     _addReceiptFooter(add, receiptNote: data.receiptNote);
 
     return lines;
@@ -695,7 +696,8 @@ class ThermalReceiptLayout {
   /// splitting on the first " - " recovers them here.
   List<String> _formatItemLines(ReceiptLineItem item) {
     final amount = _money(item.total);
-    final meta = '${item.quantity} x @${_formatUnitPrice(item.unitPrice)}';
+    final meta =
+        '${formatQuantity(item.quantity)} x @${_formatUnitPrice(item.unitPrice)}';
     final rawName = item.name.trim().isEmpty ? 'Item' : item.name.trim();
     final result = <String>[];
 
@@ -794,7 +796,7 @@ class ThermalReceiptLayout {
         : null;
 
     result.addAll(_wordWrapLines(baseName, kThermalWidth));
-    result.add(_amountRow('x${item.quantity}', money(-item.amount)));
+    result.add(_amountRow('x${formatQuantity(item.quantity)}', money(-item.amount)));
     if (variety != null && variety.isNotEmpty) {
       result.addAll(_wordWrapLines('- $variety', kThermalWidth));
     }

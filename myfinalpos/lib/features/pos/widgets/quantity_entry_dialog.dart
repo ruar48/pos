@@ -3,27 +3,30 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/format_utils.dart';
+import '../../../core/utils/product_units.dart';
 import '../../../models/product.dart';
 import '../../../models/product_variety.dart';
 import '../pages/pos_home_page.dart';
 
 const List<int> kQuantityQuickPicks = [10, 25, 50, 100];
 
-Future<int?> showQuantityEntryDialog(
+Future<double?> showQuantityEntryDialog(
   BuildContext context, {
   required String productName,
   String? subtitle,
-  required int initialQuantity,
-  int? maxQuantity,
+  required double initialQuantity,
+  double? maxQuantity,
+  bool allowDecimal = false,
   String confirmLabel = 'Set quantity',
 }) {
-  return showDialog<int>(
+  return showDialog<double>(
     context: context,
     builder: (dialogContext) => QuantityEntryDialog(
       productName: productName,
       subtitle: subtitle,
       initialQuantity: initialQuantity,
       maxQuantity: maxQuantity,
+      allowDecimal: allowDecimal,
       confirmLabel: confirmLabel,
     ),
   );
@@ -36,13 +39,15 @@ class QuantityEntryDialog extends StatefulWidget {
     this.subtitle,
     required this.initialQuantity,
     this.maxQuantity,
+    this.allowDecimal = false,
     this.confirmLabel = 'Set quantity',
   });
 
   final String productName;
   final String? subtitle;
-  final int initialQuantity;
-  final int? maxQuantity;
+  final double initialQuantity;
+  final double? maxQuantity;
+  final bool allowDecimal;
   final String confirmLabel;
 
   @override
@@ -57,7 +62,7 @@ class _QuantityEntryDialogState extends State<QuantityEntryDialog> {
   void initState() {
     super.initState();
     final initial = widget.initialQuantity > 0 ? widget.initialQuantity : 1;
-    controller = TextEditingController(text: '$initial');
+    controller = TextEditingController(text: formatQuantity(initial));
   }
 
   @override
@@ -66,11 +71,13 @@ class _QuantityEntryDialogState extends State<QuantityEntryDialog> {
     super.dispose();
   }
 
-  int? _parsedQuantity() {
+  double? _parsedQuantity() {
     final raw = controller.text.trim();
     if (raw.isEmpty) return null;
-    final value = int.tryParse(raw);
-    if (value == null || value < 1) return null;
+    final value = double.tryParse(raw);
+    if (value == null || value < (widget.allowDecimal ? 0.001 : 1)) {
+      return null;
+    }
     return value;
   }
 
@@ -84,13 +91,17 @@ class _QuantityEntryDialogState extends State<QuantityEntryDialog> {
   void _submit() {
     final quantity = _parsedQuantity();
     if (quantity == null) {
-      setState(() => errorText = 'Enter a valid quantity of at least 1');
+      setState(
+        () => errorText = widget.allowDecimal
+            ? 'Enter a valid quantity greater than 0'
+            : 'Enter a valid quantity of at least 1',
+      );
       return;
     }
 
     final max = widget.maxQuantity;
     if (max != null && quantity > max) {
-      setState(() => errorText = 'Only $max available in stock');
+      setState(() => errorText = 'Only ${formatQuantity(max)} available in stock');
       return;
     }
 
@@ -127,11 +138,17 @@ class _QuantityEntryDialogState extends State<QuantityEntryDialog> {
             TextField(
               controller: controller,
               autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: TextInputType.numberWithOptions(
+                decimal: widget.allowDecimal,
+              ),
+              inputFormatters: [
+                widget.allowDecimal
+                    ? FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}'))
+                    : FilteringTextInputFormatter.digitsOnly,
+              ],
               decoration: InputDecoration(
                 labelText: 'Quantity',
-                hintText: 'e.g. 100',
+                hintText: widget.allowDecimal ? 'e.g. 1.5' : 'e.g. 100',
                 errorText: errorText,
                 suffixIcon: max != null
                     ? Padding(
@@ -140,7 +157,7 @@ class _QuantityEntryDialogState extends State<QuantityEntryDialog> {
                           alignment: Alignment.centerRight,
                           widthFactor: 1,
                           child: Text(
-                            'Max $max',
+                            'Max ${formatQuantity(max)}',
                             style: const TextStyle(
                               color: AppColors.muted,
                               fontSize: 12,
@@ -192,11 +209,11 @@ class _QuantityEntryDialogState extends State<QuantityEntryDialog> {
 String quantityDialogSubtitle({
   required String currencySymbol,
   required double unitPrice,
-  int? maxQuantity,
+  double? maxQuantity,
 }) {
   final parts = <String>[formatMoney(currencySymbol, unitPrice)];
   if (maxQuantity != null) {
-    parts.add('$maxQuantity in stock');
+    parts.add('${formatQuantity(maxQuantity)} in stock');
   }
   return parts.join(' • ');
 }
@@ -214,6 +231,9 @@ Future<void> openPosQuantityEditor(
   final unitPrice = variety?.price ?? liveProduct.price;
   final currentQty = pageState.quantityInCart(liveProduct, variety: variety);
   final maxQty = pageState.maxCartQuantity(liveProduct, variety: variety);
+  final allowDecimal = isFractionalProductUnit(
+    primaryProductUnit(variety?.unit ?? liveProduct.unit),
+  );
 
   final qty = await showQuantityEntryDialog(
     context,
@@ -225,6 +245,7 @@ Future<void> openPosQuantityEditor(
     ),
     initialQuantity: currentQty > 0 ? currentQty : 1,
     maxQuantity: maxQty,
+    allowDecimal: allowDecimal,
     confirmLabel: currentQty > 0 ? 'Update cart' : 'Add to cart',
   );
 

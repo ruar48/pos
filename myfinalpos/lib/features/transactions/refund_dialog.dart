@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/format_utils.dart';
 import '../../models/refund_item_request.dart';
 import 'transaction_model.dart';
 
@@ -46,7 +47,7 @@ class RefundDialog extends StatefulWidget {
 
 class _RefundDialogState extends State<RefundDialog> {
   int? selectedOrderItemId;
-  int selectedQuantity = 1;
+  double selectedQuantity = 1;
   String? selectedReasonTemplate;
   final TextEditingController reasonController = TextEditingController();
 
@@ -100,7 +101,7 @@ class _RefundDialogState extends State<RefundDialog> {
     return null;
   }
 
-  int get maxQuantity {
+  double get maxQuantity {
     final item = selectedItem;
     if (item == null) return 1;
     return item.quantity - item.refundedQuantity;
@@ -205,7 +206,9 @@ class _RefundDialogState extends State<RefundDialog> {
                   for (final item in refundable)
                     DropdownMenuItem(
                       value: item.orderItemId,
-                      child: Text('${item.productName} x${item.quantity}'),
+                      child: Text(
+                        '${item.productName} x${formatQuantity(item.quantity)}',
+                      ),
                     ),
                 ],
                 onChanged: (value) {
@@ -226,7 +229,7 @@ class _RefundDialogState extends State<RefundDialog> {
                         : null,
                     icon: const Icon(Icons.remove_circle_outline),
                   ),
-                  Text('$selectedQuantity'),
+                  Text(formatQuantity(selectedQuantity)),
                   IconButton(
                     onPressed: selectedQuantity < maxQuantity
                         ? () => setState(() => selectedQuantity++)

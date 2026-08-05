@@ -7,14 +7,14 @@ class PosMonitorItem {
   });
 
   final String name;
-  final int quantity;
+  final double quantity;
   final double price;
   final double total;
 
   factory PosMonitorItem.fromJson(Map<String, dynamic> json) {
     return PosMonitorItem(
       name: json['name']?.toString() ?? '',
-      quantity: (json['quantity'] as num?)?.toInt() ?? 0,
+      quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
       price: (json['price'] as num?)?.toDouble() ?? 0,
       total: (json['total'] as num?)?.toDouble() ?? 0,
     );

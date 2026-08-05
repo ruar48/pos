@@ -1031,7 +1031,8 @@ class _ReportResults extends StatelessWidget {
                 .map(
                   (item) => [
                     item.label,
-                    '${bestSellersByRevenue ? (item.secondary ?? 0) : item.value.toInt()}',
+                    formatQuantity(
+                        bestSellersByRevenue ? (item.secondary ?? 0) : item.value),
                     formatMoney(
                       currency,
                       bestSellersByRevenue

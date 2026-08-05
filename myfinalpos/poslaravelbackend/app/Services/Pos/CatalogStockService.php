@@ -70,7 +70,7 @@ class CatalogStockService
 
     /**
 
-     * @return array<string, int>
+     * @return array<string, float>
 
      */
 
@@ -98,7 +98,7 @@ class CatalogStockService
 
         foreach ($rows as $row) {
 
-            $map[(string) $row->id] = (int) ($row->stock ?? 0);
+            $map[(string) $row->id] = (float) ($row->stock ?? 0);
 
         }
 

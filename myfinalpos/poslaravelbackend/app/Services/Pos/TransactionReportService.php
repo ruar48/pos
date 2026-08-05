@@ -161,7 +161,7 @@ class TransactionReportService
 
             foreach ($items as $item) {
                 $netQty = max(
-                    (int) $item->quantity - (int) ($item->refunded_quantity ?? 0),
+                    (float) $item->quantity - (float) ($item->refunded_quantity ?? 0),
                     0,
                 );
                 $itemsCount += $netQty;
@@ -179,8 +179,8 @@ class TransactionReportService
                     'product_id' => (int) $item->product_id,
                     'product_name' => (string) $item->product_name,
                     'variety_name' => $item->variety_name ? (string) $item->variety_name : null,
-                    'quantity' => (int) $item->quantity,
-                    'refunded_quantity' => (int) ($item->refunded_quantity ?? 0),
+                    'quantity' => (float) $item->quantity,
+                    'refunded_quantity' => (float) ($item->refunded_quantity ?? 0),
                     'price' => round((float) $item->price, 2),
                     'total' => round((float) $item->total, 2),
                 ];

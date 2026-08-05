@@ -37,15 +37,15 @@ class TransactionItem {
   final String productName;
   final String sku;
   final String? varietyName;
-  final int quantity;
-  final int refundedQuantity;
+  final double quantity;
+  final double refundedQuantity;
   final double unitPrice;
   final double discount;
   final double subtotal;
   final String? imageUrl;
 
   factory TransactionItem.fromJson(Map<String, dynamic> json) {
-    final quantity = _toInt(json['quantity']);
+    final quantity = _toDouble(json['quantity']);
     final unitPrice = _toDouble(json['price'] ?? json['unit_price']);
     final subtotal = _toDouble(json['total']);
     final rawSku = json['sku'] ?? json['product_sku'];
@@ -61,9 +61,11 @@ class TransactionItem {
       sku: rawSku?.toString() ?? 'SKU-${json['product_id'] ?? '000'}',
       varietyName: json['variety_name']?.toString(),
       quantity: quantity,
-      refundedQuantity: _toInt(json['refunded_quantity']),
+      refundedQuantity: _toDouble(json['refunded_quantity']),
       unitPrice: unitPrice,
-      discount: max(0.0, (unitPrice * quantity) - subtotal),
+      discount: json['discount_amount'] != null
+          ? _toDouble(json['discount_amount'])
+          : max(0.0, (unitPrice * quantity) - subtotal),
       subtotal: subtotal,
       imageUrl: json['image']?.toString() ?? json['image_url']?.toString(),
     );
@@ -71,7 +73,7 @@ class TransactionItem {
 
   bool get hasRefundableQuantity => quantity - refundedQuantity > 0;
 
-  int get remainingQuantity =>
+  double get remainingQuantity =>
       quantity - refundedQuantity < 0 ? 0 : quantity - refundedQuantity;
 
   double get refundedAmount {
@@ -194,8 +196,8 @@ class TransactionRecord {
   List<TransactionItem> get refundedItems =>
       items.where((item) => item.refundedQuantity > 0).toList(growable: false);
 
-  int get totalQuantity =>
-      items.fold<int>(0, (sum, item) => sum + item.quantity);
+  double get totalQuantity =>
+      items.fold<double>(0, (sum, item) => sum + item.quantity);
 
   String get displayDate {
     final month = createdAt.month.toString().padLeft(2, '0');
@@ -246,7 +248,7 @@ class RefundLineItem {
   final int orderItemId;
   final int productId;
   final String productName;
-  final int quantity;
+  final double quantity;
   final double amount;
 
   factory RefundLineItem.fromJson(Map<String, dynamic> json) {
@@ -255,7 +257,7 @@ class RefundLineItem {
       orderItemId: _toInt(json['order_item_id']),
       productId: _toInt(json['product_id']),
       productName: json['product_name']?.toString() ?? 'Item',
-      quantity: _toInt(json['quantity']),
+      quantity: _toDouble(json['quantity']),
       amount: _toDouble(json['amount']),
     );
   }

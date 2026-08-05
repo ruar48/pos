@@ -80,10 +80,10 @@ class _FrontendDashboardContentState extends State<FrontendDashboardContent> {
           record.couponDiscount +
           record.loyaltyDiscount,
     );
-    final todayItems = today.fold<int>(
+    final todayItems = today.fold<double>(
       0,
       (sum, record) =>
-          sum + record.items.fold<int>(0, (s, item) => s + item.quantity),
+          sum + record.items.fold<double>(0, (s, item) => s + item.quantity),
     );
     final avgOrder = today.isEmpty ? 0.0 : todaySales / today.length;
     final lowStock = pageState.products.where(_isLowStock).toList();
@@ -118,7 +118,7 @@ class _FrontendDashboardContentState extends State<FrontendDashboardContent> {
       ),
       DashboardKpiCard(
         label: 'No. of Items',
-        value: '$todayItems',
+        value: formatQuantity(todayItems),
         tone: AgriKpiTone.teal,
       ),
     ];
@@ -715,7 +715,7 @@ class _LowStockCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${product.stock ?? 0} left',
+                    '${formatQuantity(product.stock ?? 0)} left',
                     style: const TextStyle(
                       color: AppColors.orange,
                       fontWeight: FontWeight.w700,

@@ -63,6 +63,11 @@ class CartSection extends StatelessWidget {
                           product: pageState.cart[index].product,
                           variety: pageState.cart[index].variety,
                         ),
+                        onEditDiscount: () => _showItemDiscountDialog(
+                          context,
+                          pageState,
+                          pageState.cart[index],
+                        ),
                         onRemove: () => pageState.removeItem(pageState.cart[index]),
                       );
                     },
@@ -74,6 +79,18 @@ class CartSection extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> _showItemDiscountDialog(
+  BuildContext context,
+  PosHomePageState pageState,
+  CartItem item,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) =>
+        _ItemDiscountDialog(pageState: pageState, item: item),
+  );
 }
 
 class EmptyCart extends StatelessWidget {
@@ -513,6 +530,7 @@ class CartListTile extends StatelessWidget {
     required this.onIncrement,
     required this.onDecrement,
     required this.onEditQuantity,
+    required this.onEditDiscount,
     required this.onRemove,
     this.canIncrement = true,
   });
@@ -522,13 +540,16 @@ class CartListTile extends StatelessWidget {
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
   final VoidCallback onEditQuantity;
+  final VoidCallback onEditDiscount;
   final VoidCallback onRemove;
   final bool canIncrement;
 
   @override
   Widget build(BuildContext context) {
     final lineTotal = formatMoney(currencySymbol, item.total);
+    final grossTotal = formatMoney(currencySymbol, item.grossTotal);
     final unitPrice = formatMoney(currencySymbol, item.unitPrice);
+    final hasDiscount = item.discount > 0;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
@@ -583,17 +604,50 @@ class CartListTile extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           SizedBox(
-            width: 76,
-            child: Text(
-              lineTotal,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                color: AppColors.text,
+            width: 36,
+            height: 36,
+            child: IconButton(
+              onPressed: onEditDiscount,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              icon: Icon(
+                Icons.discount_outlined,
+                color: hasDiscount ? AppColors.green : AppColors.muted,
+                size: 20,
               ),
+              tooltip: 'Item discount',
+            ),
+          ),
+          SizedBox(
+            width: 84,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasDiscount)
+                  Text(
+                    grossTotal,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.muted,
+                      decoration: TextDecoration.lineThrough,
+                    ),
+                  ),
+                Text(
+                  lineTotal,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AppColors.text,
+                  ),
+                ),
+              ],
             ),
           ),
           SizedBox(
@@ -626,13 +680,13 @@ class QuantityStepper extends StatelessWidget {
     this.canIncrement = true,
   });
 
-  final int quantity;
+  final double quantity;
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
   final bool canIncrement;
 
   double get _width {
-    final digits = quantity.toString().length;
+    final digits = formatQuantity(quantity).length;
     return (88 + (digits - 1) * 10).clamp(92.0, 132.0).toDouble();
   }
 
@@ -650,7 +704,7 @@ class QuantityStepper extends StatelessWidget {
           _StepperButton(icon: Icons.remove, onTap: onDecrement),
           Expanded(
             child: Text(
-              '$quantity',
+              formatQuantity(quantity),
               maxLines: 1,
               overflow: TextOverflow.fade,
               softWrap: false,
@@ -884,6 +938,103 @@ class _ManualDiscountDialogState extends State<_ManualDiscountDialog> {
       ),
       actions: [
         if (widget.pageState.manualDiscount > 0)
+          TextButton(
+            onPressed: _clearDiscount,
+            child: const Text('Remove'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _apply,
+          child: const Text('Apply'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ItemDiscountDialog extends StatefulWidget {
+  const _ItemDiscountDialog({required this.pageState, required this.item});
+
+  final PosHomePageState pageState;
+  final CartItem item;
+
+  @override
+  State<_ItemDiscountDialog> createState() => _ItemDiscountDialogState();
+}
+
+class _ItemDiscountDialogState extends State<_ItemDiscountDialog> {
+  late final TextEditingController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = TextEditingController(
+      text: widget.item.discount > 0
+          ? widget.item.discount.toStringAsFixed(2)
+          : '',
+    );
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  void _apply() {
+    widget.pageState.applyItemDiscount(widget.item, toDouble(controller.text));
+    Navigator.pop(context);
+    showAppTopSuccess('Discount applied');
+  }
+
+  void _clearDiscount() {
+    widget.pageState.applyItemDiscount(widget.item, 0);
+    Navigator.pop(context);
+    showAppTopSuccess('Discount removed');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currency = widget.pageState.settings.currencySymbol;
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Item Discount'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.item.displayName,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Line total: ${formatMoney(currency, widget.item.grossTotal)}',
+              style: const TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+              ],
+              decoration: InputDecoration(
+                prefixText: currency,
+                labelText: 'Discount Amount',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        if (widget.item.discount > 0)
           TextButton(
             onPressed: _clearDiscount,
             child: const Text('Remove'),

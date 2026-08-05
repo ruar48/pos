@@ -27,7 +27,7 @@ class ProductVariety {
   final String? barcode;
   final double? costPrice;
   final String? deal;
-  final int? stock;
+  final double? stock;
   final int reorderLevel;
   final String? imageUrl;
 
@@ -47,7 +47,7 @@ class ProductVariety {
           ? null
           : toDouble(json['cost_price']),
       deal: json['deal']?.toString(),
-      stock: json['stock'] == null ? null : toInt(json['stock']),
+      stock: json['stock'] == null ? null : toDouble(json['stock']),
       reorderLevel: json['reorder_level'] == null
           ? defaultReorderLevel
           : toInt(json['reorder_level']),

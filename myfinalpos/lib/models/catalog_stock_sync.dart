@@ -8,24 +8,24 @@ class CatalogStockSyncResult {
 
   final String revision;
   final bool unchanged;
-  final Map<String, int> products;
-  final Map<String, int> varieties;
+  final Map<String, double> products;
+  final Map<String, double> varieties;
 
   factory CatalogStockSyncResult.fromJson(Map<String, dynamic> json) {
     final rawProducts = json['products'];
     final rawVarieties = json['varieties'];
-    final products = <String, int>{};
-    final varieties = <String, int>{};
+    final products = <String, double>{};
+    final varieties = <String, double>{};
 
     if (rawProducts is Map) {
       rawProducts.forEach((key, value) {
-        products[key.toString()] = (value as num?)?.toInt() ?? 0;
+        products[key.toString()] = (value as num?)?.toDouble() ?? 0;
       });
     }
 
     if (rawVarieties is Map) {
       rawVarieties.forEach((key, value) {
-        varieties[key.toString()] = (value as num?)?.toInt() ?? 0;
+        varieties[key.toString()] = (value as num?)?.toDouble() ?? 0;
       });
     }
 

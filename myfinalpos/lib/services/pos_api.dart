@@ -1062,8 +1062,8 @@ class PosApi {
   Future<Product> updateProductStock({
     required int productId,
     int? varietyId,
-    int? stock,
-    int? delta,
+    double? stock,
+    double? delta,
     int? actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/inventory.php');
@@ -1101,7 +1101,7 @@ class PosApi {
     String? barcode,
     String? description,
     double? costPrice,
-    int? stock,
+    double? stock,
     int? reorderLevel,
     String? unit,
     String? imageUrl,
@@ -1173,7 +1173,7 @@ class PosApi {
     String? barcode,
     String? description,
     double? costPrice,
-    int? stock,
+    double? stock,
     int? reorderLevel,
     String? unit,
     String? imageUrl,
