@@ -403,13 +403,19 @@ class ThermalReceiptLayout {
       if (line != null && line.isNotEmpty) lines.add(line);
     }
 
-    add(s.logoText.trim().isEmpty ? '[ Store ]' : s.logoText.trim());
+    void addCentered(String text) {
+      for (final line in _wordWrapLines(text, _safeTextWidth)) {
+        add(_center(line));
+      }
+    }
+
+    addCentered(s.logoText.trim().isEmpty ? '[ Store ]' : s.logoText.trim());
     add('');
-    add(s.storeName);
-    add(s.storeSubtitle);
-    add(s.addressLine1);
-    add(s.addressLine2);
-    add('INVOICE');
+    addCentered(s.storeName);
+    addCentered(s.storeSubtitle);
+    addCentered(s.addressLine1);
+    addCentered(s.addressLine2);
+    addCentered('INVOICE');
     add(_labelValue('INV NO', data.invoiceNumber));
     add(_labelValue('DATE', _formatDate(data.dateTime)));
     add(_labelValue('TIME', _formatTime(data.dateTime)));
@@ -589,17 +595,17 @@ class ThermalReceiptLayout {
     add('');
     final note = receiptNote.trim();
     if (note.isNotEmpty) {
-      add('NOTE:');
-      for (final line in _wordWrapLines(note, kThermalWidth)) {
-        add(line);
+      add(_center('NOTE:'));
+      for (final line in _wordWrapLines(note, _safeTextWidth)) {
+        add(_center(line));
       }
       add('');
     }
-    add(kReceiptFooterThanks);
+    add(_center(kReceiptFooterThanks));
     add('');
-    add('NO REFUND POLICY');
-    add('3 DAYS EXCHANGE POLICY');
-    add('WITH PENALTY');
+    add(_center('NO REFUND POLICY'));
+    add(_center('3 DAYS EXCHANGE POLICY'));
+    add(_center('WITH PENALTY'));
     add('');
   }
 
@@ -618,32 +624,73 @@ class ThermalReceiptLayout {
 
   String formatMoney(double value) => _money(value);
 
-  static String _divider() => '-' * kThermalWidth;
+  static const _safeTextWidth = 24;
+  static const _amountColWidth = 10;
 
-  static String _doubleDivider() => '=' * kThermalWidth;
+  static String centerLine(String text) => _center(text);
+
+  static String _center(String text) {
+    final trimmed = text.trim();
+    if (trimmed.length >= _safeTextWidth) return trimmed;
+    final left = ((_safeTextWidth - trimmed.length) / 2).floor();
+    return '${' ' * left}$trimmed';
+  }
+
+  static List<String> _wordWrapLines(String value, int width) {
+    final text = value.trim();
+    if (text.isEmpty) return const [];
+    final lines = <String>[];
+    var current = '';
+    for (final word in text.split(RegExp(r'\s+'))) {
+      if (word.length > width) {
+        if (current.isNotEmpty) {
+          lines.add(current);
+          current = '';
+        }
+        var remaining = word;
+        while (remaining.length > width) {
+          lines.add(remaining.substring(0, width));
+          remaining = remaining.substring(width);
+        }
+        current = remaining;
+        continue;
+      }
+      final candidate = current.isEmpty ? word : '$current $word';
+      if (candidate.length <= width) {
+        current = candidate;
+      } else {
+        lines.add(current);
+        current = word;
+      }
+    }
+    if (current.isNotEmpty) lines.add(current);
+    return lines;
+  }
+
+  static String _divider() => '-' * _safeTextWidth;
+
+  static String _doubleDivider() => '=' * _safeTextWidth;
 
   static String _labelValue(String label, String value) {
     const gap = ': ';
     final prefix = '$label$gap';
-    final space = kThermalWidth - prefix.length - value.length;
+    final space = _safeTextWidth - prefix.length - value.length;
     if (space >= 1) {
       return '$prefix${' ' * space}$value';
     }
     return ('$prefix$value')
-        .padRight(kThermalWidth)
-        .substring(0, kThermalWidth);
+        .padRight(_safeTextWidth)
+        .substring(0, _safeTextWidth);
   }
-
-  static const _amountColWidth = 10;
-  static const _safeMoneyRowWidth = 24;
-  static const _safeItemTextWidth = 24;
 
   /// Label stays flush left, amount stays flush right against the same
   /// column on every row - a fixed-position center formula here (padding
   /// based on each row's label length) made every row's amount land at a
   /// different horizontal offset instead of lining up in one column, which
   /// is what actually read as "misaligned" on paper.
-  static String _amountRow(String label, String amount, {bool emphasize = false}) {
+  static String _amountRow(String label, String amount,
+      {bool emphasize = false}) {
+    const rowWidth = _safeTextWidth;
     final amountCol = amount.length > _amountColWidth
         ? amount
         : amount.padLeft(_amountColWidth);
@@ -699,19 +746,18 @@ class ThermalReceiptLayout {
     final rawName = item.name.trim().isEmpty ? 'Item' : item.name.trim();
     final result = <String>[];
 
-    var remaining = item.name.trim();
-    if (remaining.isEmpty) {
-      remaining = 'Item';
-    }
-    while (remaining.length > kThermalWidth) {
-      result.add(remaining.substring(0, kThermalWidth));
-      remaining = remaining.substring(kThermalWidth).trimLeft();
-    }
-    result.add(remaining);
+    final separatorIndex = rawName.indexOf(' - ');
+    final baseName =
+        separatorIndex > 0 ? rawName.substring(0, separatorIndex) : rawName;
+    final variety = separatorIndex > 0
+        ? rawName.substring(separatorIndex + 3).trim()
+        : null;
+
+    result.addAll(_wordWrapLines(baseName, _safeTextWidth));
 
     result.add(_amountRow(meta, amount));
     if (variety != null && variety.isNotEmpty) {
-      result.addAll(_wordWrapLines('- $variety', kThermalWidth));
+      result.addAll(_wordWrapLines('- $variety', _safeTextWidth));
     }
 
     final gross = item.unitPrice * item.quantity;
@@ -734,8 +780,11 @@ class ThermalReceiptLayout {
 
     add('');
     add(_center('REFUNDED ITEMS'));
+    add(_divider());
     for (final item in data.refundItems) {
-      add(_amountRow('${item.name} x${item.quantity}', money(-item.amount)));
+      for (final line in _formatRefundItemLines(item, money)) {
+        add(line);
+      }
     }
     add(_amountRow('REFUNDED', money(-data.refundedAmount)));
   }
@@ -759,10 +808,10 @@ class ThermalReceiptLayout {
         ? rawName.substring(separatorIndex + 3).trim()
         : null;
 
-    result.addAll(_wordWrapLines(baseName, kThermalWidth));
+    result.addAll(_wordWrapLines(baseName, _safeTextWidth));
     result.add(_amountRow('x${item.quantity}', money(-item.amount)));
     if (variety != null && variety.isNotEmpty) {
-      result.addAll(_wordWrapLines('- $variety', kThermalWidth));
+      result.addAll(_wordWrapLines('- $variety', _safeTextWidth));
     }
 
     return result;
@@ -967,6 +1016,7 @@ class PosReceiptService {
   static List<int> _buildEscPosBytes(ReceiptData receipt) {
     final layout = ThermalReceiptLayout(receipt);
     final lines = layout.buildLines();
+    final totalText = layout.formatMoney(receipt.total);
     final builder = _EscPosBuilder()..init();
 
     // Plain text only - no ESC align/bold/double-height bytes. A bare
@@ -994,7 +1044,7 @@ class PosReceiptService {
       }
       final remainingText = layout.formatMoney(receipt.remainingTotal);
       if (ThermalReceiptLayout._isGrandTotalLine(line, totalText) ||
-          (receipt.hasRefunds && line.contains('REMAINING TOTAL $remainingText'))) {
+          (receipt.hasRefunds && line.contains('BALANCE $remainingText'))) {
         // Every other row in the receipt is exactly kThermalWidth chars, so
         // the generic branch below always computes centered=true for it
         // (centering an already-full-width string is a no-op) and sends the
