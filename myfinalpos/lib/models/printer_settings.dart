@@ -1,5 +1,10 @@
 import 'app_settings.dart';
 
+/// The bundled cashier printer prints on 72 mm paper. Its self-test reports
+/// 48 Font-A characters per line, so this is the safe default for a new POS
+/// tablet. A 58 mm printer can still be selected as 32 columns in My Printer.
+const int kDefaultThermalPaperWidthChars = 48;
+
 enum PrinterConnectionType {
   network,
   bluetooth,
@@ -36,14 +41,16 @@ class PrinterConfig {
     this.host = '',
     this.port = 9100,
     this.device = '',
-    this.paperWidthChars = 32,
+    this.paperWidthChars = kDefaultThermalPaperWidthChars,
   });
 
   final PrinterConnectionType type;
   final String host;
   final int port;
+
   /// Bluetooth MAC address, or USB `vendorId:productId`.
   final String device;
+
   /// Characters per line the physical printer actually fits (Font A).
   /// 58mm printers are usually 32, 80mm printers are usually 42 or 48 -
   /// but this varies by model/font, so it's adjustable per device.

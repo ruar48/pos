@@ -79,9 +79,11 @@ void main() {
 
     final lines = ThermalReceiptLayout(receipt).buildLines();
     final customerIndex = lines.indexWhere((line) => line.contains('CUSTOMER'));
-    final earnedIndex = lines.indexWhere((line) => line.contains('POINTS EARNED'));
-    final totalIndex = lines.indexWhere((line) => line.contains('TOTAL POINTS'));
-    final dividerIndex = lines.indexWhere((line) => line == '-' * 32);
+    final earnedIndex =
+        lines.indexWhere((line) => line.contains('POINTS EARNED'));
+    final totalIndex =
+        lines.indexWhere((line) => line.contains('TOTAL POINTS'));
+    final dividerIndex = lines.indexWhere((line) => line == '-' * 24);
 
     expect(customerIndex, greaterThan(-1));
     expect(earnedIndex, greaterThan(customerIndex));
@@ -203,7 +205,10 @@ void main() {
     expect(lines.any((line) => line == 'TROPLE FOURTEEN'), isTrue);
     expect(lines.any((line) => line == 'AMIGOSUPREME'), isTrue);
     // Neither word was sliced mid-word (e.g. no stray "TROPLE FOUR"/"TEEN").
-    expect(lines.any((line) => line.contains('FOUR') && !line.contains('FOURTEEN')), isFalse);
+    expect(
+        lines
+            .any((line) => line.contains('FOUR') && !line.contains('FOURTEEN')),
+        isFalse);
   });
 
   test('variety/unit prints on its own line after the name and price', () {
@@ -238,7 +243,7 @@ void main() {
 
     final lines = ThermalReceiptLayout(receipt).buildLines();
     final nameIndex =
-        lines.indexWhere((line) => line.contains('UREA VIKING BLUE GRANULAR'));
+        lines.indexWhere((line) => line.contains('UREA VIKING BLUE'));
     final metaIndex = lines.indexWhere((line) => line.contains('1 x @2250'));
     final varietyIndex = lines.indexWhere((line) => line.trim() == '- 50 KILO');
 
@@ -281,8 +286,10 @@ void main() {
 
     final lines = ThermalReceiptLayout(receipt).buildPreviewLines();
     final customerIndex = lines.indexWhere((line) => line.contains('CUSTOMER'));
-    final earnedIndex = lines.indexWhere((line) => line.contains('POINTS EARNED'));
-    final totalIndex = lines.indexWhere((line) => line.contains('TOTAL POINTS'));
+    final earnedIndex =
+        lines.indexWhere((line) => line.contains('POINTS EARNED'));
+    final totalIndex =
+        lines.indexWhere((line) => line.contains('TOTAL POINTS'));
 
     expect(customerIndex, greaterThan(-1));
     expect(earnedIndex, greaterThan(customerIndex));

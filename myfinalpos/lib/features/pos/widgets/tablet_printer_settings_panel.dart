@@ -23,12 +23,13 @@ class TabletPrinterSettingsPanel extends StatefulWidget {
       _TabletPrinterSettingsPanelState();
 }
 
-class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel> {
+class _TabletPrinterSettingsPanelState
+    extends State<TabletPrinterSettingsPanel> {
   late TextEditingController printerHostController;
   late TextEditingController printerDeviceController;
   late TextEditingController printerPortController;
   PrinterConnectionType printerType = PrinterConnectionType.network;
-  int paperWidthChars = 32;
+  int paperWidthChars = kDefaultThermalPaperWidthChars;
   bool saving = false;
   bool bluetoothTesting = false;
 
@@ -48,7 +49,7 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
     printerType = draft.type;
     paperWidthChars = _paperWidthOptions.contains(draft.paperWidthChars)
         ? draft.paperWidthChars
-        : 32;
+        : kDefaultThermalPaperWidthChars;
     printerHostController = TextEditingController(text: draft.host);
     printerDeviceController = TextEditingController(text: draft.device);
     printerPortController = TextEditingController(
@@ -207,7 +208,8 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
     final devices = await PrinterTransport.listUsbPrinterIds();
     if (!mounted) return;
     if (devices.isEmpty) {
-      showTopWarning(context, 'No USB printers detected. Connect one with OTG.');
+      showTopWarning(
+          context, 'No USB printers detected. Connect one with OTG.');
       return;
     }
 
@@ -222,7 +224,8 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
                 ListTile(
                   leading: const Icon(Icons.usb),
                   title: Text(device),
-                  onTap: () => Navigator.pop(context, device.split('·').first.trim()),
+                  onTap: () =>
+                      Navigator.pop(context, device.split('·').first.trim()),
                 ),
             ],
           ),
@@ -384,7 +387,8 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
                   Align(
                     alignment: Alignment.centerLeft,
                     child: OutlinedButton.icon(
-                      onPressed: bluetoothTesting ? null : _testBluetoothPrinter,
+                      onPressed:
+                          bluetoothTesting ? null : _testBluetoothPrinter,
                       icon: bluetoothTesting
                           ? const SizedBox(
                               width: 16,
@@ -442,7 +446,13 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
                   for (final width in _paperWidthOptions)
                     DropdownMenuItem(
                       value: width,
-                      child: Text('$width columns'),
+                      child: Text(
+                        width == 48
+                            ? '48 columns — 72 mm printer (recommended)'
+                            : width == 32
+                                ? '32 columns — 58 mm printer'
+                                : '$width columns',
+                      ),
                     ),
                 ],
                 onChanged: (value) {
@@ -452,8 +462,8 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
               ),
               const SizedBox(height: 8),
               const Text(
-                'If receipt totals or labels print misaligned or cut off mid-word, '
-                'try a different width here to match your printer/paper.',
+                'Your printer self-test shows 72 mm / 48 characters, so select '
+                '48 columns. Use 32 columns only for a 58 mm printer.',
                 style: TextStyle(fontSize: 12, color: AppColors.muted),
               ),
               const SizedBox(height: 16),
@@ -486,7 +496,8 @@ class _TabletPrinterSettingsPanelState extends State<TabletPrinterSettingsPanel>
                         ),
                       )
                     : const Icon(Icons.save_outlined),
-                label: Text(saving ? 'Saving...' : 'Save printer for this tablet'),
+                label:
+                    Text(saving ? 'Saving...' : 'Save printer for this tablet'),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                   backgroundColor: AppColors.green,

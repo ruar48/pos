@@ -19,6 +19,8 @@ export 'receipt_print_exception.dart';
 /// 58mm thermal paper ≈ 32 characters per line (Font A) by default, but
 /// this varies by printer model/font, so it's set from [PrinterConfig]
 /// right before each print job (see [PosReceiptService.printReceipt]).
+// Keep the generic on-screen preview at 58 mm until a physical printer is
+// selected. [printReceipt] applies the selected printer's actual width.
 int kThermalWidth = 32;
 const String kReceiptFooterThanks = 'MARAMING SALAMAT PO!';
 
@@ -71,7 +73,8 @@ class ReceiptStoreConfig {
   }) {
     return ReceiptStoreConfig(
       logoText: logoText ?? this.logoText,
-      logoImagePath: clearLogoImage ? null : (logoImagePath ?? this.logoImagePath),
+      logoImagePath:
+          clearLogoImage ? null : (logoImagePath ?? this.logoImagePath),
       storeName: storeName ?? this.storeName,
       storeSubtitle: storeSubtitle ?? this.storeSubtitle,
       addressLine1: addressLine1 ?? this.addressLine1,
@@ -93,7 +96,8 @@ class ReceiptStoreConfig {
       logoText: prefs.getString('store_logo_text') ?? defaults.logoText,
       logoImagePath: prefs.getString('store_logo_image_path'),
       storeName: prefs.getString('store_name') ?? defaults.storeName,
-      storeSubtitle: prefs.getString('store_subtitle') ?? defaults.storeSubtitle,
+      storeSubtitle:
+          prefs.getString('store_subtitle') ?? defaults.storeSubtitle,
       addressLine1:
           prefs.getString('store_address_line1') ?? defaults.addressLine1,
       addressLine2:
@@ -106,7 +110,8 @@ class ReceiptStoreConfig {
       atpNo: prefs.getString('store_atp_no') ?? defaults.atpNo,
       atpDateIssued:
           prefs.getString('store_atp_date_issued') ?? defaults.atpDateIssued,
-      seriesRange: prefs.getString('store_series_range') ?? defaults.seriesRange,
+      seriesRange:
+          prefs.getString('store_series_range') ?? defaults.seriesRange,
     );
   }
 
@@ -154,10 +159,8 @@ class ReceiptStoreConfig {
       storeName: (json['store_name'] ?? defaults.storeName).toString(),
       storeSubtitle:
           (json['store_subtitle'] ?? defaults.storeSubtitle).toString(),
-      addressLine1:
-          (json['address_line1'] ?? defaults.addressLine1).toString(),
-      addressLine2:
-          (json['address_line2'] ?? defaults.addressLine2).toString(),
+      addressLine1: (json['address_line1'] ?? defaults.addressLine1).toString(),
+      addressLine2: (json['address_line2'] ?? defaults.addressLine2).toString(),
       tin: (json['tin'] ?? defaults.tin).toString(),
       taxStatus: (json['tax_status'] ?? defaults.taxStatus).toString(),
       posTerminalId:
@@ -209,9 +212,7 @@ class ReceiptStoreConfig {
     if (logoBase64.isNotEmpty && !kIsWeb) {
       try {
         final bytes = base64Decode(
-          logoBase64.contains(',')
-              ? logoBase64.split(',').last
-              : logoBase64,
+          logoBase64.contains(',') ? logoBase64.split(',').last : logoBase64,
         );
         final path = await saveLogoImage(bytes);
         if (path != null) {
@@ -403,13 +404,19 @@ class ThermalReceiptLayout {
       if (line != null && line.isNotEmpty) lines.add(line);
     }
 
-    add(s.logoText.trim().isEmpty ? '[ Store ]' : s.logoText.trim());
+    void addCentered(String text) {
+      for (final line in _wordWrapLines(text, _safeTextWidth)) {
+        add(_center(line));
+      }
+    }
+
+    addCentered(s.logoText.trim().isEmpty ? '[ Store ]' : s.logoText.trim());
     add('');
-    add(s.storeName);
-    add(s.storeSubtitle);
-    add(s.addressLine1);
-    add(s.addressLine2);
-    add('INVOICE');
+    addCentered(s.storeName);
+    addCentered(s.storeSubtitle);
+    addCentered(s.addressLine1);
+    addCentered(s.addressLine2);
+    addCentered('INVOICE');
     add(_labelValue('INV NO', data.invoiceNumber));
     add(_labelValue('DATE', _formatDate(data.dateTime)));
     add(_labelValue('TIME', _formatTime(data.dateTime)));
@@ -452,14 +459,14 @@ class ThermalReceiptLayout {
       }
     }
     _addRefundSection(add, _money);
-    add(_shortDivider());
+    add(_divider());
     if (data.hasRefunds) {
       add(_amountRow('ORIGINAL TOTAL', _money(data.total)));
-      add(_amountRow('REMAINING TOTAL', _money(data.remainingTotal), emphasize: true));
+      add(_amountRow('BALANCE', _money(data.remainingTotal), emphasize: true));
     } else {
       add(_amountRow('TOTAL', _money(data.total), emphasize: true));
     }
-    add(_shortDivider());
+    add(_divider());
     if (!data.hasRefunds) {
       // The original cash/change breakdown isn't relevant once refunded —
       // REFUNDED / ORIGINAL TOTAL / REMAINING TOTAL above cover it.
@@ -554,15 +561,16 @@ class ThermalReceiptLayout {
     add(_doubleDivider());
     if (data.hasRefunds) {
       add(previewLabelValue('ORIGINAL TOTAL', previewMoney(data.total)));
-      add(previewLabelValue('REMAINING TOTAL', previewMoney(data.remainingTotal)));
+      add(previewLabelValue('BALANCE', previewMoney(data.remainingTotal)));
     } else {
       add(previewLabelValue('TOTAL', previewMoney(data.total)));
     }
-    add(_shortDivider());
+    add(_divider());
     if (!data.hasRefunds) {
       if (data.hasSplitPayments) {
         for (final payment in data.splitPayments!) {
-          add(previewLabelValue(payment.paymentMethod, previewMoney(payment.amount)));
+          add(previewLabelValue(
+              payment.paymentMethod, previewMoney(payment.amount)));
           if (payment.reference.trim().isNotEmpty) {
             add(previewLabelValue('Ref', payment.reference.trim()));
           }
@@ -588,79 +596,118 @@ class ThermalReceiptLayout {
     add('');
     final note = receiptNote.trim();
     if (note.isNotEmpty) {
-      add('NOTE:');
-      for (final line in _wordWrapLines(note, kThermalWidth)) {
-        add(line);
+      add(_center('NOTE:'));
+      for (final line in _wordWrapLines(note, _safeTextWidth)) {
+        add(_center(line));
       }
       add('');
     }
-    add(kReceiptFooterThanks);
+    add(_center(kReceiptFooterThanks));
     add('');
-    add('NO REFUND POLICY');
-    add('3 DAYS EXCHANGE POLICY');
-    add('WITH PENALTY');
+    add(_center('NO REFUND POLICY'));
+    add(_center('3 DAYS EXCHANGE POLICY'));
+    add(_center('WITH PENALTY'));
     add('');
   }
 
   static bool _isGrandTotalLine(String line, String totalText) {
     final trimmed = line.trim();
     final isTotalLine = trimmed.startsWith('TOTAL') ||
-        trimmed.startsWith('REMAINING TOTAL') ||
+        trimmed.startsWith('BALANCE') ||
         trimmed.startsWith('ORIGINAL TOTAL');
     return isTotalLine &&
         !trimmed.startsWith('TOTAL POINTS') &&
         !trimmed.startsWith('Total Qty') &&
-        (trimmed.startsWith('REMAINING TOTAL') ||
+        (trimmed.startsWith('BALANCE') ||
             trimmed.startsWith('ORIGINAL TOTAL') ||
             trimmed.contains(totalText));
   }
 
   String formatMoney(double value) => _money(value);
 
-  static String _divider() => '-' * kThermalWidth;
+  static const _safeTextWidth = 24;
+  static const _amountColWidth = 10;
 
-  static String _doubleDivider() => '=' * kThermalWidth;
+  static String centerLine(String text) => _center(text);
 
-  static String _shortDivider() {
-    const dots = '-------- --------';
-    final leftPadded = dots.padLeft(
-      ((kThermalWidth + dots.length) ~/ 2).clamp(0, kThermalWidth),
-    );
-    return leftPadded.padRight(kThermalWidth).substring(0, kThermalWidth);
+  static String _center(String text) {
+    final trimmed = text.trim();
+    if (trimmed.length >= _safeTextWidth) return trimmed;
+    final left = ((_safeTextWidth - trimmed.length) / 2).floor();
+    return '${' ' * left}$trimmed';
   }
+
+  static List<String> _wordWrapLines(String value, int width) {
+    final text = value.trim();
+    if (text.isEmpty) return const [];
+    final lines = <String>[];
+    var current = '';
+    for (final word in text.split(RegExp(r'\s+'))) {
+      if (word.length > width) {
+        if (current.isNotEmpty) {
+          lines.add(current);
+          current = '';
+        }
+        var remaining = word;
+        while (remaining.length > width) {
+          lines.add(remaining.substring(0, width));
+          remaining = remaining.substring(width);
+        }
+        current = remaining;
+        continue;
+      }
+      final candidate = current.isEmpty ? word : '$current $word';
+      if (candidate.length <= width) {
+        current = candidate;
+      } else {
+        lines.add(current);
+        current = word;
+      }
+    }
+    if (current.isNotEmpty) lines.add(current);
+    return lines;
+  }
+
+  static String _divider() => '-' * _safeTextWidth;
+
+  static String _doubleDivider() => '=' * _safeTextWidth;
 
   static String _labelValue(String label, String value) {
     const gap = ': ';
     final prefix = '$label$gap';
-    final space = kThermalWidth - prefix.length - value.length;
+    final space = _safeTextWidth - prefix.length - value.length;
     if (space >= 1) {
       return '$prefix${' ' * space}$value';
     }
-    return ('$prefix$value').padRight(kThermalWidth).substring(0, kThermalWidth);
+    return ('$prefix$value')
+        .padRight(_safeTextWidth)
+        .substring(0, _safeTextWidth);
   }
-
-  static const _amountColWidth = 10;
 
   /// Label stays flush left, amount stays flush right against the same
   /// column on every row - a fixed-position center formula here (padding
   /// based on each row's label length) made every row's amount land at a
   /// different horizontal offset instead of lining up in one column, which
   /// is what actually read as "misaligned" on paper.
-  static String _amountRow(String label, String amount, {bool emphasize = false}) {
+  static String _amountRow(String label, String amount,
+      {bool emphasize = false}) {
+    const rowWidth = _safeTextWidth;
     final amountCol = amount.length > _amountColWidth
         ? amount
         : amount.padLeft(_amountColWidth);
-    final space = kThermalWidth - label.length - amountCol.length;
-    if (space >= 1) {
+    final space = rowWidth - label.length - amountCol.length;
+    if (space >= 0) {
       return '$label${' ' * space}$amountCol';
     }
-    final maxLabel = (kThermalWidth - amountCol.length - 1).clamp(0, label.length);
+    final maxLabel = (rowWidth - amountCol.length - 1).clamp(0, label.length);
     final trimmedLabel = label.substring(0, maxLabel);
-    final gap = kThermalWidth - trimmedLabel.length - amountCol.length;
+    final gap = rowWidth - trimmedLabel.length - amountCol.length;
     if (gap >= 1) {
       return '$trimmedLabel${' ' * gap}$amountCol';
     }
-    return ('$trimmedLabel $amountCol').padRight(kThermalWidth).substring(0, kThermalWidth);
+    return ('$trimmedLabel $amountCol')
+        .padRight(rowWidth)
+        .substring(0, rowWidth);
   }
 
   String _money(double value) {
@@ -708,10 +755,11 @@ class ThermalReceiptLayout {
         ? rawName.substring(separatorIndex + 3).trim()
         : null;
 
-    result.addAll(_wordWrapLines(baseName, kThermalWidth));
+    result.addAll(_wordWrapLines(baseName, _safeTextWidth));
+
     result.add(_amountRow(meta, amount));
     if (variety != null && variety.isNotEmpty) {
-      result.addAll(_wordWrapLines('- $variety', kThermalWidth));
+      result.addAll(_wordWrapLines('- $variety', _safeTextWidth));
     }
 
     final gross = item.unitPrice * item.quantity;
@@ -726,40 +774,6 @@ class ThermalReceiptLayout {
     return result;
   }
 
-  /// Wraps [text] to [width] on word boundaries, never slicing a word in
-  /// half (e.g. "50 KILOS" won't come out as "50 KI" / "LOS"). A single
-  /// word longer than [width] on its own is hard-cut as a last resort,
-  /// since there's no word boundary to break on.
-  static List<String> _wordWrapLines(String text, int width) {
-    if (width <= 0) return [text];
-
-    final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
-    final lines = <String>[];
-    var current = '';
-
-    for (final word in words) {
-      if (current.isEmpty) {
-        current = word;
-      } else if (current.length + 1 + word.length <= width) {
-        current = '$current $word';
-      } else {
-        lines.add(current);
-        current = word;
-      }
-
-      while (current.length > width) {
-        lines.add(current.substring(0, width));
-        current = current.substring(width);
-      }
-    }
-
-    if (current.isNotEmpty) {
-      lines.add(current);
-    }
-
-    return lines.isEmpty ? [text] : lines;
-  }
-
   void _addRefundSection(
     void Function(String? line) add,
     String Function(double amount) money,
@@ -767,7 +781,8 @@ class ThermalReceiptLayout {
     if (!data.hasRefunds) return;
 
     add('');
-    add('REFUNDED ITEMS');
+    add(_center('REFUNDED ITEMS'));
+    add(_divider());
     for (final item in data.refundItems) {
       for (final line in _formatRefundItemLines(item, money)) {
         add(line);
@@ -798,7 +813,7 @@ class ThermalReceiptLayout {
     result.addAll(_wordWrapLines(baseName, kThermalWidth));
     result.add(_amountRow('x${formatQuantity(item.quantity)}', money(-item.amount)));
     if (variety != null && variety.isNotEmpty) {
-      result.addAll(_wordWrapLines('- $variety', kThermalWidth));
+      result.addAll(_wordWrapLines('- $variety', _safeTextWidth));
     }
 
     return result;
@@ -823,7 +838,9 @@ class ThermalReceiptLayout {
     if (trimmed.isEmpty) return 'CASHIER';
     final parts = trimmed.split(RegExp(r'\s+'));
     if (parts.length == 1) {
-      return parts.first.toUpperCase().substring(0, parts.first.length.clamp(0, 8));
+      return parts.first
+          .toUpperCase()
+          .substring(0, parts.first.length.clamp(0, 8));
     }
     return parts.first.toUpperCase();
   }
@@ -951,7 +968,9 @@ class PosReceiptService {
       );
     }
 
-    kThermalWidth = config.paperWidthChars > 0 ? config.paperWidthChars : 32;
+    kThermalWidth = config.paperWidthChars > 0
+        ? config.paperWidthChars
+        : kDefaultThermalPaperWidthChars;
 
     await PrinterTransport.sendEscPos(
       config: config,
@@ -999,6 +1018,7 @@ class PosReceiptService {
   static List<int> _buildEscPosBytes(ReceiptData receipt) {
     final layout = ThermalReceiptLayout(receipt);
     final lines = layout.buildLines();
+    final totalText = layout.formatMoney(receipt.total);
     final builder = _EscPosBuilder()..init();
 
     // Plain text only - no ESC align/bold/double-height bytes. A bare
@@ -1007,7 +1027,43 @@ class PosReceiptService {
     // more thing a non-standard clone controller can mishandle - keep the
     // payload as simple as possible.
     for (final line in lines) {
-      builder.text(line);
+      if (line.isEmpty) {
+        builder.text('');
+        continue;
+      }
+      if (line == ThermalReceiptLayout.centerLine(receipt.store.storeName)) {
+        builder.text(
+          receipt.store.storeName,
+          center: true,
+          bold: true,
+          doubleHeight: true,
+        );
+        continue;
+      }
+      if (line == ThermalReceiptLayout.centerLine('INVOICE')) {
+        builder.text('INVOICE', center: true, bold: true);
+        continue;
+      }
+      final remainingText = layout.formatMoney(receipt.remainingTotal);
+      if (ThermalReceiptLayout._isGrandTotalLine(line, totalText) ||
+          (receipt.hasRefunds && line.contains('BALANCE $remainingText'))) {
+        // Every other row in the receipt is exactly kThermalWidth chars, so
+        // the generic branch below always computes centered=true for it
+        // (centering an already-full-width string is a no-op) and sends the
+        // ESC align-center byte. This branch was the one line NOT sending
+        // that byte — on some thermal printers that alone shifts the pitch
+        // enough to throw the amount column out of alignment. Match the
+        // rest of the receipt exactly: bold off, center on.
+        builder.text(line, center: true);
+        continue;
+      }
+      if (line == ThermalReceiptLayout.centerLine(kReceiptFooterThanks)) {
+        builder.text(kReceiptFooterThanks, center: true, bold: true);
+        continue;
+      }
+
+      final centered = line == ThermalReceiptLayout.centerLine(line.trim());
+      builder.text(line, center: centered);
     }
 
     builder.feed(4);
