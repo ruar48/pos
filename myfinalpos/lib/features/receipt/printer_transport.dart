@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -33,24 +33,33 @@ class PrinterTransport {
     return _macPattern.hasMatch(normalizeMacAddress(raw));
   }
 
+  /// Deliberately plain: no init, no bold/center ESC sequences, no feed/cut
+  /// - just ASCII text and line feeds. This receipt keeps garbling even on
+  /// this short 4-line test regardless of chunk pacing, so the next thing
+  /// to rule out is whether the ESC/POS control bytes themselves (which a
+  /// non-standard clone controller could be misinterpreting as literal
+  /// characters) are the source, rather than the transport layer. If this
+  /// still garbles too, the corruption is happening below the byte content
+  /// entirely (plugin/OS/RF), not from anything this app is sending.
   static List<int> buildBluetoothTestReceiptBytes() {
     const title = '${AppBrand.shortName} BT Test';
     const subtitle = 'Bluetooth printer OK';
-    final bytes = <int>[0x1B, 0x40];
+    final bytes = <int>[];
 
-    void line(String text, {bool center = false, bool bold = false}) {
-      if (center) bytes.addAll(const [0x1B, 0x61, 0x01]);
-      if (bold) bytes.addAll(const [0x1B, 0x45, 0x01]);
-      bytes.addAll('$text\n'.codeUnits);
-      if (bold) bytes.addAll(const [0x1B, 0x45, 0x00]);
-      if (center) bytes.addAll(const [0x1B, 0x61, 0x00]);
+    void line(String text) {
+      // utf8.encode, not .codeUnits - AppBrand.shortName contains 'ñ'
+      // (U+00F1), and .codeUnits would emit that as a single raw byte 241
+      // instead of its correct 2-byte UTF-8 sequence, which is exactly the
+      // kind of single bad byte that can desync a cheap printer's parser.
+      bytes.addAll(utf8.encode('$text\n'));
     }
 
-    line(title, center: true, bold: true);
-    line(subtitle, center: true);
+    line(title);
+    line(subtitle);
     line('');
     line('If you can read this, Bluetooth printing works.');
-    bytes.addAll(const [0x1B, 0x64, 0x03]);
+    line('');
+    line('');
     return bytes;
   }
 
@@ -183,9 +192,19 @@ class PrinterTransport {
       addStep('Connection', true, 'Connected to the printer.');
 
       if (sendTestReceipt) {
-        final ok = await PrintBluetoothThermal.writeBytes(
-          buildBluetoothTestReceiptBytes(),
-        );
+        // Must match the real receipt path exactly (settle delay + small
+        // paced chunks via _writeInChunks) - this used to call
+        // PrintBluetoothThermal.writeBytes directly in one shot, so the
+        // test print never actually exercised the pacing fix and could
+        // garble even after that fix was applied to real receipts.
+        bool ok;
+        try {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+          await _writeInChunks(buildBluetoothTestReceiptBytes());
+          ok = true;
+        } catch (error) {
+          ok = false;
+        }
         if (!ok) {
           addStep(
             'Test print',
@@ -341,8 +360,20 @@ class PrinterTransport {
         port,
         timeout: const Duration(seconds: 5),
       );
-      socket.add(bytes);
-      await socket.flush();
+      // Same reasoning as the Bluetooth path: many cheap thermal printers
+      // (including network/WiFi ones, which are often just a small
+      // serial-to-LAN bridge with a tiny receive buffer) drop or corrupt
+      // bytes when a full receipt is written in one burst - writing in
+      // small paced chunks avoids overflowing that buffer.
+      const chunkSize = 256;
+      for (var offset = 0; offset < bytes.length; offset += chunkSize) {
+        final end = (offset + chunkSize).clamp(0, bytes.length);
+        socket.add(bytes.sublist(offset, end));
+        await socket.flush();
+        if (end < bytes.length) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      }
       await socket.close();
     } catch (error) {
       debugPrint('Network printer: $error');
@@ -396,10 +427,10 @@ class PrinterTransport {
       // Give the printer's buffer a moment to settle right after connecting
       // — writing a full receipt immediately on a fresh connection is a
       // known cause of dropped/garbled bytes on cheap thermal printers.
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       await _writeInChunks(bytes);
 
-      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await Future<void>.delayed(const Duration(milliseconds: 400));
     } catch (error) {
       if (error is ReceiptPrintException) rethrow;
       debugPrint('Bluetooth printer: $error');
@@ -416,8 +447,12 @@ class PrinterTransport {
   /// or corrupt bytes when a large payload (a full receipt) is written in
   /// one burst, which can show up as a single line printing misaligned or
   /// with missing characters even though the generated text is correct.
+  /// Deliberately conservative (small chunks, longer pause) - some units
+  /// still garble even fixed, short header text at the previous, less
+  /// conservative pacing, so their receive buffer is smaller/slower than
+  /// most.
   static Future<void> _writeInChunks(List<int> bytes) async {
-    const chunkSize = 128;
+    const chunkSize = 32;
     for (var offset = 0; offset < bytes.length; offset += chunkSize) {
       final end = (offset + chunkSize).clamp(0, bytes.length);
       final chunk = bytes.sublist(offset, end);
@@ -426,7 +461,7 @@ class PrinterTransport {
         throw ReceiptPrintException('Bluetooth printer rejected the print job.');
       }
       if (end < bytes.length) {
-        await Future<void>.delayed(const Duration(milliseconds: 25));
+        await Future<void>.delayed(const Duration(milliseconds: 40));
       }
     }
   }
@@ -479,7 +514,14 @@ class PrinterTransport {
         throw ReceiptPrintException('Could not open USB printer connection.');
       }
 
-      await port.write(Uint8List.fromList(bytes));
+      const chunkSize = 256;
+      for (var offset = 0; offset < bytes.length; offset += chunkSize) {
+        final end = (offset + chunkSize).clamp(0, bytes.length);
+        await port.write(Uint8List.fromList(bytes.sublist(offset, end)));
+        if (end < bytes.length) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      }
       await Future<void>.delayed(const Duration(milliseconds: 250));
     } catch (error) {
       if (error is ReceiptPrintException) rethrow;

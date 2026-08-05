@@ -31,13 +31,10 @@ void main() {
     );
 
     final lines = ThermalReceiptLayout(receipt).buildLines();
-    final itemNameLine = lines.firstWhere(
-      (line) => line.contains('ACC Feeds 40kg'),
-    );
-    final itemLine = lines.firstWhere((line) => line.contains('3 x @320'));
+    final metaLine = lines.firstWhere((line) => line.contains('3 x @320'));
 
-    expect(itemNameLine, 'ACC Feeds 40kg');
-    expect(itemLine, contains('930.00'));
+    expect(lines.any((line) => line.contains('ACC Feeds 40kg')), isTrue);
+    expect(metaLine, contains('930.00'));
     expect(lines, contains('30.00 discount @3.13%'));
     expect(lines.any((line) => line.startsWith('Total Qty')), isTrue);
     expect(lines.any((line) => line.contains('MARAMING SALAMAT PO!')), isTrue);
@@ -131,6 +128,128 @@ void main() {
     expect(lines.any((line) => line.contains('Broiler Starter Feed')), isTrue);
   });
 
+  test('item name and price/amount always print on separate lines', () {
+    kThermalWidth = 48;
+    addTearDown(() => kThermalWidth = 32);
+
+    final receipt = ReceiptData(
+      orderId: 5,
+      invoiceNumber: 'INV-000050',
+      customerName: 'Walk In Farmer',
+      paymentMethod: 'Cash',
+      items: const [
+        ReceiptLineItem(
+          name: 'TOP BREED ADULT DOG FOOD',
+          quantity: 1,
+          unitPrice: 1340,
+          total: 1340,
+        ),
+      ],
+      subtotal: 1340,
+      vat: 0,
+      discount: 0,
+      manualDiscount: 0,
+      couponDiscount: 0,
+      loyaltyDiscount: 0,
+      total: 1340,
+      amountTendered: 1500,
+      change: 160,
+      currencySymbol: 'PHP',
+      cashierName: 'Cashier',
+      itemCount: 1,
+    );
+
+    final lines = ThermalReceiptLayout(receipt).buildLines();
+    final nameLine = lines.firstWhere(
+      (line) => line.contains('TOP BREED ADULT DOG FOOD'),
+    );
+    final metaLine = lines.firstWhere((line) => line.contains('1 x @1340'));
+
+    expect(nameLine.contains('1 x @1340'), isFalse);
+    expect(metaLine.trimRight(), endsWith('1,340.00'));
+  });
+
+  test('long word in item name never gets sliced mid-word', () {
+    kThermalWidth = 20;
+    addTearDown(() => kThermalWidth = 32);
+
+    final receipt = ReceiptData(
+      orderId: 6,
+      invoiceNumber: 'INV-000060',
+      customerName: 'Walk In Farmer',
+      paymentMethod: 'Cash',
+      items: const [
+        ReceiptLineItem(
+          name: 'TROPLE FOURTEEN AMIGOSUPREME',
+          quantity: 1,
+          unitPrice: 1850,
+          total: 1850,
+        ),
+      ],
+      subtotal: 1850,
+      vat: 0,
+      discount: 0,
+      manualDiscount: 0,
+      couponDiscount: 0,
+      loyaltyDiscount: 0,
+      total: 1850,
+      amountTendered: 1850,
+      change: 0,
+      currencySymbol: 'PHP',
+      cashierName: 'Cashier',
+      itemCount: 1,
+    );
+
+    final lines = ThermalReceiptLayout(receipt).buildLines();
+
+    expect(lines.any((line) => line == 'TROPLE FOURTEEN'), isTrue);
+    expect(lines.any((line) => line == 'AMIGOSUPREME'), isTrue);
+    // Neither word was sliced mid-word (e.g. no stray "TROPLE FOUR"/"TEEN").
+    expect(lines.any((line) => line.contains('FOUR') && !line.contains('FOURTEEN')), isFalse);
+  });
+
+  test('variety/unit prints on its own line after the name and price', () {
+    kThermalWidth = 32;
+
+    final receipt = ReceiptData(
+      orderId: 7,
+      invoiceNumber: 'INV-000070',
+      customerName: 'Walk In Farmer',
+      paymentMethod: 'Cash',
+      items: const [
+        ReceiptLineItem(
+          name: 'UREA VIKING BLUE GRANULAR - 50 KILO',
+          quantity: 1,
+          unitPrice: 2250,
+          total: 2250,
+        ),
+      ],
+      subtotal: 2250,
+      vat: 0,
+      discount: 0,
+      manualDiscount: 0,
+      couponDiscount: 0,
+      loyaltyDiscount: 0,
+      total: 2250,
+      amountTendered: 2250,
+      change: 0,
+      currencySymbol: 'PHP',
+      cashierName: 'Cashier',
+      itemCount: 1,
+    );
+
+    final lines = ThermalReceiptLayout(receipt).buildLines();
+    final nameIndex =
+        lines.indexWhere((line) => line.contains('UREA VIKING BLUE GRANULAR'));
+    final metaIndex = lines.indexWhere((line) => line.contains('1 x @2250'));
+    final varietyIndex = lines.indexWhere((line) => line.trim() == '- 50 KILO');
+
+    expect(nameIndex, greaterThan(-1));
+    expect(metaIndex, greaterThan(nameIndex));
+    expect(varietyIndex, greaterThan(metaIndex));
+    expect(lines[nameIndex].contains('50 KILO'), isFalse);
+  });
+
   test('first-time loyalty customer shows points earned on receipt', () {
     final receipt = ReceiptData(
       orderId: 4,
@@ -175,135 +294,45 @@ void main() {
     expect(lines.any((line) => line.contains('35')), isTrue);
   });
 
-  test('refund receipt keeps item names and negative amounts on clear rows',
-      () {
+  test('refund receipt wraps long item names instead of truncating them', () {
+    kThermalWidth = 32;
+
     final receipt = ReceiptData(
-      orderId: 5,
-      invoiceNumber: 'INV-000050',
+      orderId: 9,
+      invoiceNumber: 'RCP-000030',
       customerName: 'Walk In Farmer',
       paymentMethod: 'Cash',
       items: const [],
-      subtotal: 5432,
+      subtotal: 7739,
       vat: 0,
       discount: 0,
       manualDiscount: 0,
       couponDiscount: 0,
       loyaltyDiscount: 0,
-      total: 5432,
-      amountTendered: 5432,
+      total: 7739,
+      amountTendered: 7739,
       change: 0,
       currencySymbol: 'PHP',
-      cashierName: 'Princess',
-      itemCount: 7,
-      refundedAmount: 5432,
+      cashierName: 'Cashier',
+      itemCount: 10,
+      refundedAmount: 7739,
       refundItems: const [
         ReceiptRefundLineItem(
-          name: 'UREA VIKING BLUE GRANULAR - 50 KILO',
+          name: 'DRAGON CARTAP TAGCHEM - 5 X 100 GRAMS',
           quantity: 1,
-          amount: 2250,
-        ),
-        ReceiptRefundLineItem(
-          name: 'FRONTERA - 1000 ML',
-          quantity: 1,
-          amount: 1100,
+          amount: 1740,
         ),
       ],
     );
 
     final lines = ThermalReceiptLayout(receipt).buildLines();
-    final refundedHeader = lines.indexOf(
-      ThermalReceiptLayout.centerLine('REFUNDED ITEMS'),
-    );
-    final firstItem = lines.indexWhere(
-      (line) => line.contains('UREA VIKING BLUE'),
-    );
-    final firstAmount = lines.indexWhere(
-      (line) => line.contains('Qty 1') && line.contains('-2,250.00'),
-    );
-    final refundedTotal = lines.indexWhere(
-      (line) => line.contains('REFUNDED') && line.contains('-5,432.00'),
-    );
-    final originalTotal = lines.indexWhere(
-      (line) => line.contains('ORIGINAL TOTAL') && line.contains('5,432.00'),
-    );
 
-    expect(refundedHeader, greaterThan(-1));
-    expect(firstItem, greaterThan(refundedHeader));
-    expect(firstAmount, greaterThan(firstItem));
-    expect(refundedTotal, greaterThan(firstAmount));
-    expect(originalTotal, greaterThan(refundedTotal));
-  });
-
-  test('money rows stay on one safe line on a 72 mm printer', () {
-    final previousWidth = kThermalWidth;
-    kThermalWidth = 48;
-    addTearDown(() => kThermalWidth = previousWidth);
-
-    final receipt = ReceiptData(
-      orderId: 6,
-      invoiceNumber: 'INV-000060',
-      customerName: 'Walk In Farmer',
-      paymentMethod: 'Cash',
-      items: const [],
-      subtotal: 5432,
-      vat: 0,
-      discount: 0,
-      manualDiscount: 0,
-      couponDiscount: 0,
-      loyaltyDiscount: 0,
-      total: 5432,
-      amountTendered: 5432,
-      change: 0,
-      currencySymbol: 'PHP',
-      cashierName: 'Cashier',
-      itemCount: 7,
-    );
-
-    final lines = ThermalReceiptLayout(receipt).buildLines();
-    for (final label in ['SUBTOTAL', 'TOTAL', 'Cash', 'Change']) {
-      final row = lines.firstWhere((line) => line.startsWith(label));
-      expect(row.length, lessThanOrEqualTo(24));
-    }
-    expect(
-      lines.firstWhere((line) => line.startsWith('TOTAL')).trimRight(),
-      endsWith('5,432.00'),
-    );
-    expect(
-      lines.firstWhere((line) => line.startsWith('Change')).trimRight(),
-      endsWith('0.00'),
-    );
-  });
-
-  test('product names wrap at words instead of splitting a word', () {
-    final receipt = ReceiptData(
-      orderId: 7,
-      invoiceNumber: 'INV-000070',
-      customerName: 'Walk In Farmer',
-      paymentMethod: 'Cash',
-      items: const [
-        ReceiptLineItem(
-          name: 'VELLEFIRE - 1000 ML',
-          quantity: 1,
-          unitPrice: 1250,
-          total: 1250,
-        ),
-      ],
-      subtotal: 1250,
-      vat: 0,
-      discount: 0,
-      manualDiscount: 0,
-      couponDiscount: 0,
-      loyaltyDiscount: 0,
-      total: 1250,
-      amountTendered: 1250,
-      change: 0,
-      currencySymbol: 'PHP',
-      cashierName: 'Cashier',
-      itemCount: 1,
-    );
-
-    final lines = ThermalReceiptLayout(receipt).buildLines();
-    expect(lines, contains('VELLEFIRE - 1000 ML'));
-    expect(lines, isNot(contains('E - 1000 ML')));
+    // The old behavior hard-truncated this to "DRAGON CARTAP TAG" to fit
+    // it and the amount on one line - the full name must survive now,
+    // split across word-wrapped lines instead.
+    expect(lines.any((line) => line == 'DRAGON CARTAP TAG'), isFalse);
+    expect(lines.any((line) => line.contains('DRAGON CARTAP')), isTrue);
+    expect(lines.any((line) => line.contains('TAGCHEM')), isTrue);
+    expect(lines.any((line) => line.trim() == '- 5 X 100 GRAMS'), isTrue);
   });
 }

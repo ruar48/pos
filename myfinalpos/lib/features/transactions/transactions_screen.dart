@@ -96,12 +96,11 @@ class TransactionState extends ChangeNotifier {
             break;
           }
         }
-        selectedTransaction = refreshed ??
-            (transactions.isNotEmpty ? transactions.first : null);
+        selectedTransaction = refreshed;
       } else {
-        selectedTransaction =
-            transactions.isNotEmpty ? transactions.first : null;
+        selectedTransaction = null;
       }
+      _syncSelectionWithFilter();
     } catch (error) {
       errorMessage = error.toString();
     } finally {
@@ -119,12 +118,27 @@ class TransactionState extends ChangeNotifier {
 
   void setQuery(String value) {
     query = value;
+    _syncSelectionWithFilter();
     notifyListeners();
   }
 
   void setFilter(TransactionFilterType value) {
     filter = value;
+    _syncSelectionWithFilter();
     notifyListeners();
+  }
+
+  /// Keeps the detail pane's selected order in sync with the current
+  /// search/filter - without this, searching for a different receipt only
+  /// narrows the list on the left while the detail pane on the right kept
+  /// showing whatever order (often another cashier's most recent, unrelated
+  /// sale) was selected before, until the user explicitly tapped a row.
+  void _syncSelectionWithFilter() {
+    final filtered = filteredTransactions;
+    if (selectedTransaction != null && filtered.contains(selectedTransaction)) {
+      return;
+    }
+    selectedTransaction = filtered.isNotEmpty ? filtered.first : null;
   }
 
   List<TransactionRecord> get filteredTransactions {

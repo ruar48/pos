@@ -158,6 +158,23 @@ class RefundController extends Controller
                 $totalRefundAmount = 0.0;
                 $processedLines = [];
 
+                // order_items.total is the pre-discount line amount (price x qty) -
+                // any manual/coupon/loyalty discount is only ever stored at the
+                // order level. Without prorating it back into each line, refunding
+                // items from a discounted order would refund the pre-discount
+                // amount, overpaying the customer by the discount and leaving the
+                // cash drawer short by exactly that much.
+                $orderSubtotal = round((float) ($order->subtotal ?? 0), 2);
+                $totalOrderDiscount = round(
+                    (float) ($order->discount_amount ?? 0)
+                    + (float) ($order->coupon_discount ?? 0)
+                    + (float) ($order->loyalty_discount ?? 0),
+                    2,
+                );
+                $discountRatio = $orderSubtotal > 0
+                    ? max(0.0, min(1.0, ($orderSubtotal - $totalOrderDiscount) / $orderSubtotal))
+                    : 1.0;
+
                 if (count($refundLines) === 0) {
                     $balance = round($orderTotal - $priorRefunded, 2);
                     if (! $this->allItemsFullyRefunded($orderItems) || $balance <= 0) {
@@ -184,7 +201,7 @@ class RefundController extends Controller
                         $unitMerchandise = $orderedQty > 0
                             ? ($lineTotal / $orderedQty)
                             : (float) $row->price;
-                        $merchandiseAmount = round($unitMerchandise * $qtyToRefund, 2);
+                        $merchandiseAmount = round($unitMerchandise * $qtyToRefund * $discountRatio, 2);
                         $amount = PosHelpers::refundAmountIncludingVat($order, $merchandiseAmount);
 
                         $totalRefundAmount += $amount;
@@ -199,17 +216,21 @@ class RefundController extends Controller
                     $totalRefundAmount = round($totalRefundAmount, 2);
 
                     if ($this->allItemsFullyRefundedAfter($orderItems, $refundLines)) {
+                        // Once every item is refunded, the order balance owed is
+                        // known exactly - clamp to it either direction to absorb
+                        // rounding drift, instead of only ever correcting upward
+                        // (which silently let over-refunds slip through).
                         $fullRefund = round($orderTotal - $priorRefunded, 2);
-                        $vatRemainder = round($fullRefund - $totalRefundAmount, 2);
-                        if ($vatRemainder > 0) {
+                        $remainder = round($fullRefund - $totalRefundAmount, 2);
+                        if ($remainder !== 0.0 && count($processedLines) > 0) {
                             $totalRefundAmount = $fullRefund;
-                            if (count($processedLines) > 0) {
-                                $last = count($processedLines) - 1;
-                                $processedLines[$last]['amount'] = round(
-                                    $processedLines[$last]['amount'] + $vatRemainder,
-                                    2,
-                                );
-                            }
+                            $last = count($processedLines) - 1;
+                            $processedLines[$last]['amount'] = round(
+                                $processedLines[$last]['amount'] + $remainder,
+                                2,
+                            );
+                        } else {
+                            $totalRefundAmount = $fullRefund;
                         }
                     }
                 }
