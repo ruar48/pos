@@ -7,7 +7,6 @@ import '../../../core/theme/agri_admin_widgets.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/format_utils.dart';
 import '../../../core/utils/image_utils.dart';
-import '../../../core/utils/product_units.dart';
 import '../../../core/utils/top_toast.dart';
 import '../../../models/inventory_report.dart';
 import '../../../models/product.dart';
@@ -791,13 +790,9 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
             const SizedBox(height: 16),
             TextField(
               controller: stockController,
-              keyboardType: TextInputType.numberWithOptions(
-                decimal: isFractionalProductUnit(product.primaryUnit),
-              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
-                isFractionalProductUnit(product.primaryUnit)
-                    ? FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}'))
-                    : FilteringTextInputFormatter.digitsOnly,
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}')),
               ],
               decoration: InputDecoration(
                 labelText: 'Stock Quantity',

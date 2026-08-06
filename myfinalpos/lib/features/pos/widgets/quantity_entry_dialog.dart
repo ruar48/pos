@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/format_utils.dart';
-import '../../../core/utils/product_units.dart';
 import '../../../models/product.dart';
 import '../../../models/product_variety.dart';
 import '../pages/pos_home_page.dart';
@@ -231,9 +230,10 @@ Future<void> openPosQuantityEditor(
   final unitPrice = variety?.price ?? liveProduct.price;
   final currentQty = pageState.quantityInCart(liveProduct, variety: variety);
   final maxQty = pageState.maxCartQuantity(liveProduct, variety: variety);
-  final allowDecimal = isFractionalProductUnit(
-    primaryProductUnit(variety?.unit ?? liveProduct.unit),
-  );
+  // Decimal quantity is left up to the cashier for every product (some
+  // items are sold loose/by weight, others in whole units, and the
+  // storekeeper — not the app — decides which on a given sale).
+  const allowDecimal = true;
 
   final qty = await showQuantityEntryDialog(
     context,
