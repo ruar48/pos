@@ -23,6 +23,7 @@ export 'receipt_print_exception.dart';
 // selected. [printReceipt] applies the selected printer's actual width.
 int kThermalWidth = 32;
 const String kReceiptFooterThanks = 'MARAMING SALAMAT PO!';
+const String kReceiptOwnedOperatedBy = 'Owned and Operated By';
 
 class ReceiptStoreConfig {
   const ReceiptStoreConfig({
@@ -30,6 +31,7 @@ class ReceiptStoreConfig {
     this.logoImagePath,
     this.storeName = 'GREEN FARM MART',
     this.storeSubtitle = 'AGRICULTURE RETAIL STORE',
+    this.phoneNumber = '',
     this.addressLine1 = 'Purok 3, Brgy. Sto. Rosario,',
     this.addressLine2 = 'Angeles City, Pampanga 2009',
     this.tin = '123-456-789-000',
@@ -45,6 +47,7 @@ class ReceiptStoreConfig {
   final String? logoImagePath;
   final String storeName;
   final String storeSubtitle;
+  final String phoneNumber;
   final String addressLine1;
   final String addressLine2;
   final String tin;
@@ -61,6 +64,7 @@ class ReceiptStoreConfig {
     bool clearLogoImage = false,
     String? storeName,
     String? storeSubtitle,
+    String? phoneNumber,
     String? addressLine1,
     String? addressLine2,
     String? tin,
@@ -77,6 +81,7 @@ class ReceiptStoreConfig {
           clearLogoImage ? null : (logoImagePath ?? this.logoImagePath),
       storeName: storeName ?? this.storeName,
       storeSubtitle: storeSubtitle ?? this.storeSubtitle,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
       addressLine1: addressLine1 ?? this.addressLine1,
       addressLine2: addressLine2 ?? this.addressLine2,
       tin: tin ?? this.tin,
@@ -98,6 +103,7 @@ class ReceiptStoreConfig {
       storeName: prefs.getString('store_name') ?? defaults.storeName,
       storeSubtitle:
           prefs.getString('store_subtitle') ?? defaults.storeSubtitle,
+      phoneNumber: prefs.getString('store_phone_number') ?? defaults.phoneNumber,
       addressLine1:
           prefs.getString('store_address_line1') ?? defaults.addressLine1,
       addressLine2:
@@ -125,6 +131,7 @@ class ReceiptStoreConfig {
     }
     await prefs.setString('store_name', storeName);
     await prefs.setString('store_subtitle', storeSubtitle);
+    await prefs.setString('store_phone_number', phoneNumber);
     await prefs.setString('store_address_line1', addressLine1);
     await prefs.setString('store_address_line2', addressLine2);
     await prefs.setString('store_tin', tin);
@@ -159,6 +166,8 @@ class ReceiptStoreConfig {
       storeName: (json['store_name'] ?? defaults.storeName).toString(),
       storeSubtitle:
           (json['store_subtitle'] ?? defaults.storeSubtitle).toString(),
+      phoneNumber:
+          (json['phone_number'] ?? defaults.phoneNumber).toString(),
       addressLine1: (json['address_line1'] ?? defaults.addressLine1).toString(),
       addressLine2: (json['address_line2'] ?? defaults.addressLine2).toString(),
       tin: (json['tin'] ?? defaults.tin).toString(),
@@ -188,6 +197,7 @@ class ReceiptStoreConfig {
       'logo_image_base64': logoBase64,
       'store_name': storeName,
       'store_subtitle': storeSubtitle,
+      'phone_number': phoneNumber,
       'address_line1': addressLine1,
       'address_line2': addressLine2,
       'tin': tin,
@@ -410,18 +420,18 @@ class ThermalReceiptLayout {
       }
     }
 
-    addCentered(s.logoText.trim().isEmpty ? '[ Store ]' : s.logoText.trim());
-    add('');
     addCentered(s.storeName);
-    addCentered(s.storeSubtitle);
+    addCentered(kReceiptOwnedOperatedBy);
+    if (s.phoneNumber.trim().isNotEmpty) {
+      addCentered(s.phoneNumber.trim());
+    }
+    add('');
     addCentered(s.addressLine1);
     addCentered(s.addressLine2);
-    addCentered('INVOICE');
-    add(_labelValue('INV NO', data.invoiceNumber));
-    add(_labelValue('DATE', _formatDate(data.dateTime)));
-    add(_labelValue('TIME', _formatTime(data.dateTime)));
-    add(_labelValue('CASHIER', _shortCashier(data.cashierName)));
-    add(_labelValue('POS', s.posTerminalId));
+    add('');
+    add(_formatDateTimeLine(data.dateTime));
+    add(_labelValue('Cashier', _cashierName(data.cashierName)));
+    add(_labelValue('Receipt No', data.invoiceNumber));
     add(_labelValue('CUSTOMER', _clip(data.customerName, 22)));
     final customerTin = _clip(data.customerTin, 22);
     if (customerTin.isNotEmpty) {
@@ -511,18 +521,18 @@ class ThermalReceiptLayout {
       return '$label $value';
     }
 
-    add(s.logoText.trim().isEmpty ? '[ Store ]' : s.logoText.trim());
-    add('');
     add(s.storeName);
-    add(s.storeSubtitle);
+    add(kReceiptOwnedOperatedBy);
+    if (s.phoneNumber.trim().isNotEmpty) {
+      add(s.phoneNumber.trim());
+    }
+    add('');
     add(s.addressLine1);
     add(s.addressLine2);
-    add('INVOICE');
-    add(previewLabelValue('INV NO', data.invoiceNumber));
-    add(previewLabelValue('DATE', _formatDate(data.dateTime)));
-    add(previewLabelValue('TIME', _formatTime(data.dateTime)));
-    add(previewLabelValue('CASHIER', _shortCashier(data.cashierName)));
-    add(previewLabelValue('POS', s.posTerminalId));
+    add('');
+    add(_formatDateTimeLine(data.dateTime));
+    add(previewLabelValue('Cashier', _cashierName(data.cashierName)));
+    add(previewLabelValue('Receipt No', data.invoiceNumber));
     add(previewLabelValue('CUSTOMER', _clip(data.customerName, 22)));
     if (data.isLoyaltyCustomer || data.loyaltyPointsEarned > 0) {
       add(previewLabelValue('POINTS EARNED', '${data.loyaltyPointsEarned}'));
@@ -735,16 +745,17 @@ class ThermalReceiptLayout {
     return rounded.toStringAsFixed(2);
   }
 
-  /// Matches the client's hand-drawn layout: product name, then
-  /// "qty x @price ... amount" with the amount at the far right, then the
-  /// variety/unit (e.g. "- 1000 ML") indented on its own line below - never
-  /// combined onto one line. Product name and variety are joined with
-  /// " - " everywhere they're built (cart, order storage, reprints), so
-  /// splitting on the first " - " recovers them here.
+  /// Matches the client's hand-drawn layout: product name followed by
+  /// "#price x qty" on the same line when it fits, with the amount at the
+  /// far right; falls back to the meta+amount on its own line when the name
+  /// is too long. The variety/unit (e.g. "- 1000 ML") always sits indented
+  /// on its own line below - never combined with the name/meta line.
+  /// Product name and variety are joined with " - " everywhere they're
+  /// built (cart, order storage, reprints), so splitting on the first
+  /// " - " recovers them here.
   List<String> _formatItemLines(ReceiptLineItem item) {
     final amount = _money(item.total);
-    final meta =
-        '${formatQuantity(item.quantity)} x @${_formatUnitPrice(item.unitPrice)}';
+    final meta = '#${_formatUnitPrice(item.unitPrice)}x${formatQuantity(item.quantity)}';
     final rawName = item.name.trim().isEmpty ? 'Item' : item.name.trim();
     final result = <String>[];
 
@@ -755,9 +766,15 @@ class ThermalReceiptLayout {
         ? rawName.substring(separatorIndex + 3).trim()
         : null;
 
-    result.addAll(_wordWrapLines(baseName, _safeTextWidth));
-
-    result.add(_amountRow(meta, amount));
+    final combined = '$baseName $meta';
+    final amountCol =
+        amount.length > _amountColWidth ? amount.length : _amountColWidth;
+    if (combined.length + amountCol <= _safeTextWidth) {
+      result.add(_amountRow(combined, amount));
+    } else {
+      result.addAll(_wordWrapLines(baseName, _safeTextWidth));
+      result.add(_amountRow(meta, amount));
+    }
     if (variety != null && variety.isNotEmpty) {
       result.addAll(_wordWrapLines('- $variety', _safeTextWidth));
     }
@@ -819,30 +836,29 @@ class ThermalReceiptLayout {
     return result;
   }
 
-  static String _formatDate(DateTime dt) {
-    final m = dt.month.toString().padLeft(2, '0');
-    final d = dt.day.toString().padLeft(2, '0');
-    return '$m/$d/${dt.year}';
-  }
+  static const _weekdayNames = [
+    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
+  ];
+  static const _monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
 
-  static String _formatTime(DateTime dt) {
+  /// e.g. "10:23am, Wed 5 Aug 2026" — matches the client's hand-drawn
+  /// receipt layout, which combines date and time onto a single line.
+  static String _formatDateTimeLine(DateTime dt) {
     final hour = dt.hour;
-    final h12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-    final ampm = hour >= 12 ? 'PM' : 'AM';
+    final h12 = hour % 12 == 0 ? 12 : hour % 12;
+    final ampm = hour >= 12 ? 'pm' : 'am';
     final m = dt.minute.toString().padLeft(2, '0');
-    return '$h12:$m $ampm';
+    final weekday = _weekdayNames[dt.weekday - 1];
+    final month = _monthNames[dt.month - 1];
+    return '$h12:$m$ampm, $weekday ${dt.day} $month ${dt.year}';
   }
 
-  static String _shortCashier(String name) {
+  static String _cashierName(String name) {
     final trimmed = name.trim();
-    if (trimmed.isEmpty) return 'CASHIER';
-    final parts = trimmed.split(RegExp(r'\s+'));
-    if (parts.length == 1) {
-      return parts.first
-          .toUpperCase()
-          .substring(0, parts.first.length.clamp(0, 8));
-    }
-    return parts.first.toUpperCase();
+    return trimmed.isEmpty ? 'Cashier' : trimmed;
   }
 
   static String _clip(String value, int max) {

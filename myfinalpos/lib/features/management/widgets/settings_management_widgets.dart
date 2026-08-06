@@ -42,6 +42,7 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
   late TextEditingController loyaltyRedeemController;
   late TextEditingController storeNameController;
   late TextEditingController storeSubtitleController;
+  late TextEditingController storePhoneNumberController;
   late TextEditingController storeAddressController;
   late TextEditingController storeAddressLine2Controller;
   late TextEditingController tinController;
@@ -86,6 +87,8 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
     storeNameController = TextEditingController(text: receiptStore.storeName);
     storeSubtitleController =
         TextEditingController(text: receiptStore.storeSubtitle);
+    storePhoneNumberController =
+        TextEditingController(text: receiptStore.phoneNumber);
     storeAddressController =
         TextEditingController(text: receiptStore.addressLine1);
     storeAddressLine2Controller =
@@ -110,6 +113,7 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
       logoImagePath: logoImagePath,
       storeName: storeNameController.text.trim(),
       storeSubtitle: storeSubtitleController.text.trim(),
+      phoneNumber: storePhoneNumberController.text.trim(),
       addressLine1: storeAddressController.text.trim(),
       addressLine2: storeAddressLine2Controller.text.trim(),
       tin: tinController.text.trim(),
@@ -218,6 +222,7 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
     loyaltyRedeemController.dispose();
     storeNameController.dispose();
     storeSubtitleController.dispose();
+    storePhoneNumberController.dispose();
     storeAddressController.dispose();
     storeAddressLine2Controller.dispose();
     tinController.dispose();
@@ -485,6 +490,17 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
               decoration: const InputDecoration(
                 labelText: 'Store Subtitle',
                 prefixIcon: Icon(Icons.subtitles_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: storePhoneNumberController,
+              onChanged: (_) => _refreshPreview(),
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                hintText: '0989-160-5097',
+                prefixIcon: Icon(Icons.phone_outlined),
               ),
             ),
             const SizedBox(height: 12),

@@ -31,7 +31,7 @@ void main() {
     );
 
     final lines = ThermalReceiptLayout(receipt).buildLines();
-    final metaLine = lines.firstWhere((line) => line.contains('3 x @320'));
+    final metaLine = lines.firstWhere((line) => line.contains('#320x3'));
 
     expect(lines.any((line) => line.contains('ACC Feeds 40kg')), isTrue);
     expect(metaLine, contains('930.00'));
@@ -121,7 +121,7 @@ void main() {
     );
 
     final lines = ThermalReceiptLayout(receipt).buildLines();
-    final metaLine = lines.firstWhere((line) => line.contains('3 x @29.50'));
+    final metaLine = lines.firstWhere((line) => line.contains('#29.50x3'));
 
     expect(metaLine.trimRight(), endsWith('88.50'));
     expect(metaLine.length, lessThanOrEqualTo(32));
@@ -163,9 +163,9 @@ void main() {
     final nameLine = lines.firstWhere(
       (line) => line.contains('TOP BREED ADULT DOG FOOD'),
     );
-    final metaLine = lines.firstWhere((line) => line.contains('1 x @1340'));
+    final metaLine = lines.firstWhere((line) => line.contains('#1340x1'));
 
-    expect(nameLine.contains('1 x @1340'), isFalse);
+    expect(nameLine.contains('#1340x1'), isFalse);
     expect(metaLine.trimRight(), endsWith('1,340.00'));
   });
 
@@ -244,7 +244,7 @@ void main() {
     final lines = ThermalReceiptLayout(receipt).buildLines();
     final nameIndex =
         lines.indexWhere((line) => line.contains('UREA VIKING BLUE'));
-    final metaIndex = lines.indexWhere((line) => line.contains('1 x @2250'));
+    final metaIndex = lines.indexWhere((line) => line.contains('#2250x1'));
     final varietyIndex = lines.indexWhere((line) => line.trim() == '- 50 KILO');
 
     expect(nameIndex, greaterThan(-1));
