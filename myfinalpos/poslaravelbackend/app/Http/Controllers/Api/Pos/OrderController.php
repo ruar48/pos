@@ -174,7 +174,7 @@ class OrderController extends Controller
                     }
 
                     $product = DB::selectOne(
-                        'SELECT id, name, price, stock, cost_price, option
+                        'SELECT id, name, price, stock, cost_price, `option`
                          FROM products
                          WHERE id = ?
                          LIMIT 1
