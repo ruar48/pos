@@ -451,19 +451,63 @@ class PrinterTransport {
   /// still garble even fixed, short header text at the previous, less
   /// conservative pacing, so their receive buffer is smaller/slower than
   /// most.
+  ///
+  /// Chunk boundaries are aligned to CRLF line endings rather than a raw
+  /// byte count: once character-level garbling was fixed, receipts still
+  /// wrapped mid-word at arbitrary points (e.g. "Re" / "ceipt No:"). A
+  /// fixed-size byte chunk can land in the middle of a text line, and if
+  /// the printer times out its input buffer during the pacing delay, it
+  /// force-linefeeds whatever partial line it has - which reproduces
+  /// exactly that pattern. Sending each full line as one write removes
+  /// that failure mode; a single line longer than chunkSize still falls
+  /// back to sub-chunking within that line only.
   static Future<void> _writeInChunks(List<int> bytes) async {
     const chunkSize = 32;
-    for (var offset = 0; offset < bytes.length; offset += chunkSize) {
-      final end = (offset + chunkSize).clamp(0, bytes.length);
-      final chunk = bytes.sublist(offset, end);
-      final ok = await PrintBluetoothThermal.writeBytes(chunk);
-      if (!ok) {
-        throw ReceiptPrintException('Bluetooth printer rejected the print job.');
+    const delay = Duration(milliseconds: 40);
+
+    for (final segment in _splitIntoLineSegments(bytes)) {
+      if (segment.length <= chunkSize) {
+        final ok = await PrintBluetoothThermal.writeBytes(segment);
+        if (!ok) {
+          throw ReceiptPrintException('Bluetooth printer rejected the print job.');
+        }
+        await Future<void>.delayed(delay);
+        continue;
       }
-      if (end < bytes.length) {
-        await Future<void>.delayed(const Duration(milliseconds: 40));
+
+      for (var offset = 0; offset < segment.length; offset += chunkSize) {
+        final end = (offset + chunkSize).clamp(0, segment.length);
+        final chunk = segment.sublist(offset, end);
+        final ok = await PrintBluetoothThermal.writeBytes(chunk);
+        if (!ok) {
+          throw ReceiptPrintException('Bluetooth printer rejected the print job.');
+        }
+        await Future<void>.delayed(delay);
       }
     }
+  }
+
+  /// Splits a byte stream into segments that each end at a CRLF (0x0D
+  /// 0x0A) line ending, so a paced write never lands mid-line. Any trailing
+  /// bytes without a terminating CRLF (e.g. the feed/cut control bytes at
+  /// the end of a receipt) form a final segment on their own.
+  static List<List<int>> _splitIntoLineSegments(List<int> bytes) {
+    final segments = <List<int>>[];
+    var start = 0;
+    var i = 0;
+    while (i < bytes.length - 1) {
+      if (bytes[i] == 0x0D && bytes[i + 1] == 0x0A) {
+        segments.add(bytes.sublist(start, i + 2));
+        start = i + 2;
+        i += 2;
+      } else {
+        i++;
+      }
+    }
+    if (start < bytes.length) {
+      segments.add(bytes.sublist(start));
+    }
+    return segments;
   }
 
   static Future<void> _sendUsb({

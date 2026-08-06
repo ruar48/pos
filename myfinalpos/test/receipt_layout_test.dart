@@ -83,7 +83,7 @@ void main() {
         lines.indexWhere((line) => line.contains('POINTS EARNED'));
     final totalIndex =
         lines.indexWhere((line) => line.contains('TOTAL POINTS'));
-    final dividerIndex = lines.indexWhere((line) => line == '-' * 24);
+    final dividerIndex = lines.indexWhere((line) => line == '-' * kThermalWidth);
 
     expect(customerIndex, greaterThan(-1));
     expect(earnedIndex, greaterThan(customerIndex));
@@ -128,7 +128,11 @@ void main() {
     expect(lines.any((line) => line.contains('Broiler Starter Feed')), isTrue);
   });
 
-  test('item name and price/amount always print on separate lines', () {
+  test('item name and price/amount combine on one line when the printer is wide enough', () {
+    // A 72 mm printer (48 columns) has room to fit this name, its meta,
+    // and the amount on a single line - the layout should use the full
+    // printable width the selected printer reports rather than wrapping
+    // early as if every printer were narrow.
     kThermalWidth = 48;
     addTearDown(() => kThermalWidth = 32);
 
@@ -160,13 +164,11 @@ void main() {
     );
 
     final lines = ThermalReceiptLayout(receipt).buildLines();
-    final nameLine = lines.firstWhere(
-      (line) => line.contains('TOP BREED ADULT DOG FOOD'),
-    );
-    final metaLine = lines.firstWhere((line) => line.contains('#1340x1'));
+    final combinedLine = lines.firstWhere((line) => line.contains('#1340x1'));
 
-    expect(nameLine.contains('#1340x1'), isFalse);
-    expect(metaLine.trimRight(), endsWith('1,340.00'));
+    expect(combinedLine.contains('TOP BREED ADULT DOG FOOD'), isTrue);
+    expect(combinedLine.trimRight(), endsWith('1,340.00'));
+    expect(combinedLine.length, lessThanOrEqualTo(48));
   });
 
   test('long word in item name never gets sliced mid-word', () {

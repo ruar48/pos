@@ -411,7 +411,10 @@ class ThermalReceiptLayout {
     final lines = <String>[];
 
     void add(String? line) {
-      if (line != null && line.isNotEmpty) lines.add(line);
+      // Empty strings are deliberate blank-line spacers between sections -
+      // they must still reach `lines`, only a null means "nothing to add".
+      if (line == null) return;
+      lines.add(_sanitizeLine(line));
     }
 
     void addCentered(String text) {
@@ -432,14 +435,14 @@ class ThermalReceiptLayout {
     add(_formatDateTimeLine(data.dateTime));
     add(_labelValue('Cashier', _cashierName(data.cashierName)));
     add(_labelValue('Receipt No', data.invoiceNumber));
-    add(_labelValue('CUSTOMER', _clip(data.customerName, 22)));
-    final customerTin = _clip(data.customerTin, 22);
-    if (customerTin.isNotEmpty) {
-      add(_labelValue('TIN', customerTin));
+    for (final line in _labelValueLines('CUSTOMER', data.customerName)) {
+      add(line);
     }
-    final customerAddress = _clip(data.customerAddress, 22);
-    if (customerAddress.isNotEmpty) {
-      add(_labelValue('ADDRESS', customerAddress));
+    for (final line in _labelValueLines('TIN', data.customerTin)) {
+      add(line);
+    }
+    for (final line in _labelValueLines('ADDRESS', data.customerAddress)) {
+      add(line);
     }
     if (data.isLoyaltyCustomer || data.loyaltyPointsEarned > 0) {
       add(_labelValue('POINTS EARNED', '${data.loyaltyPointsEarned}'));
@@ -635,8 +638,49 @@ class ThermalReceiptLayout {
 
   String formatMoney(double value) => _money(value);
 
-  static const _safeTextWidth = 24;
+  /// Printable columns for the real printed receipt, driven by the
+  /// selected printer's configured paper width (e.g. 48 for a 72 mm
+  /// printer, 32 for 58 mm) rather than a fixed constant - a hardcoded
+  /// narrow width here wasted most of a wider printer's line and made
+  /// wrapping kick in far earlier than the paper actually required.
+  /// Clamped defensively in case of an unset/invalid config value.
+  static int get _safeTextWidth => kThermalWidth.clamp(24, 64);
   static const _amountColWidth = 10;
+
+  /// Strips content a printer's default font/codepage can't reliably
+  /// render: HTML tags, emoji/other non-Latin symbols, and control
+  /// characters. Printable ASCII plus common Latin-1 accented letters
+  /// (store/customer names and addresses may use them, e.g. "ñ") are kept;
+  /// everything else is dropped rather than sent as raw bytes a clone
+  /// controller could misinterpret.
+  static String _sanitizeLine(String line) {
+    if (line.isEmpty) return line;
+    final withoutTags = line.replaceAll(RegExp(r'<[^>]*>'), '');
+    final buffer = StringBuffer();
+    for (final rune in withoutTags.runes) {
+      final isPrintableAscii = rune >= 0x20 && rune <= 0x7E;
+      final isLatin1Letter = rune >= 0xC0 && rune <= 0xFF;
+      if (isPrintableAscii || isLatin1Letter) {
+        buffer.writeCharCode(rune);
+      }
+    }
+    return buffer.toString();
+  }
+
+  /// Label/value pair that stays on one line when it fits the printable
+  /// width, otherwise wraps: label on its own line, then the value
+  /// word-wrapped beneath it - matches how long product names already
+  /// wrap instead of being cut off, so customer name/TIN/address get the
+  /// same treatment rather than hard truncation.
+  static List<String> _labelValueLines(String label, String rawValue) {
+    final value = rawValue.trim();
+    if (value.isEmpty) return const [];
+    final combinedLength = label.length + 2 + value.length; // ': ' = 2 chars
+    if (combinedLength <= _safeTextWidth) {
+      return [_labelValue(label, value)];
+    }
+    return ['$label:', ..._wordWrapLines(value, _safeTextWidth)];
+  }
 
   static String _center(String text) {
     final trimmed = text.trim();
@@ -699,7 +743,7 @@ class ThermalReceiptLayout {
   /// is what actually read as "misaligned" on paper.
   static String _amountRow(String label, String amount,
       {bool emphasize = false}) {
-    const rowWidth = _safeTextWidth;
+    final rowWidth = _safeTextWidth;
     final amountCol = amount.length > _amountColWidth
         ? amount
         : amount.padLeft(_amountColWidth);
@@ -1049,7 +1093,7 @@ class PosReceiptService {
       builder.text(line);
     }
 
-    builder.feed(4);
+    builder.feed(3);
     builder.cut();
     return builder.build();
   }
