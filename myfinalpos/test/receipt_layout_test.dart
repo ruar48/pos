@@ -35,7 +35,7 @@ void main() {
 
     expect(lines.any((line) => line.contains('ACC Feeds 40kg')), isTrue);
     expect(metaLine, contains('930.00'));
-    expect(lines, contains('30.00 discount @3.13%'));
+    expect(lines, contains('30.00 discount'));
     expect(lines.any((line) => line.startsWith('Total Qty')), isTrue);
     expect(lines.any((line) => line.contains('MARAMING SALAMAT PO!')), isTrue);
     expect(lines.any((line) => line.contains('NO REFUND POLICY')), isTrue);

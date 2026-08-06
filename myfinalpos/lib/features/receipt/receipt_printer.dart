@@ -458,14 +458,24 @@ class ThermalReceiptLayout {
       }
     }
     add(_divider());
-    final totalDiscount =
+    // SUBTOTAL is shown as the full gross amount (before any discount) and
+    // DISCOUNT as everything taken off - per-item discounts included, not
+    // just the order-level manual/coupon/loyalty ones - so the boss can
+    // see the total discount broken out instead of it being silently
+    // baked into a lower SUBTOTAL. TOTAL is unaffected: subtotal (net of
+    // item discounts) already had order-level discounts subtracted from
+    // it, and grossSubtotal - combinedDiscount reduces to that same value.
+    final orderLevelDiscount =
         data.manualDiscount + data.couponDiscount + data.loyaltyDiscount;
+    final itemLevelDiscount = _itemLevelDiscountTotal;
+    final combinedDiscount = orderLevelDiscount + itemLevelDiscount;
+    final grossSubtotal = data.subtotal + itemLevelDiscount;
     if (!data.hasRefunds) {
       // ORIGINAL TOTAL below already covers this for a refund reprint —
       // showing SUBTOTAL too was redundant per the boss's request.
-      add(_amountRow('SUBTOTAL', _money(data.subtotal)));
-      if (totalDiscount > 0) {
-        add(_amountRow('DISCOUNT', _money(-totalDiscount)));
+      add(_amountRow('SUBTOTAL', _money(grossSubtotal)));
+      if (combinedDiscount > 0) {
+        add(_amountRow('DISCOUNT', _money(-combinedDiscount)));
       }
       if (data.vat > 0) {
         add(_amountRow('VAT', _money(data.vat)));
@@ -508,9 +518,10 @@ class ThermalReceiptLayout {
     final lines = <String>[];
 
     void add(String? line) {
-      if (line != null && line.isNotEmpty) {
-        lines.add(line.trim());
-      }
+      // Empty strings are deliberate blank-line spacers (see buildLines) -
+      // only a null means "nothing to add".
+      if (line == null) return;
+      lines.add(line.trim());
     }
 
     String previewMoney(double amount) =>
@@ -564,8 +575,16 @@ class ThermalReceiptLayout {
       }
     }
     add(_divider());
+    final orderLevelDiscount =
+        data.manualDiscount + data.couponDiscount + data.loyaltyDiscount;
+    final itemLevelDiscount = _itemLevelDiscountTotal;
+    final combinedDiscount = orderLevelDiscount + itemLevelDiscount;
+    final grossSubtotal = data.subtotal + itemLevelDiscount;
     if (!data.hasRefunds) {
-      add(previewLabelValue('SUBTOTAL', previewMoney(data.subtotal)));
+      add(previewLabelValue('SUBTOTAL', previewMoney(grossSubtotal)));
+      if (combinedDiscount > 0) {
+        add(previewLabelValue('DISCOUNT', previewMoney(-combinedDiscount)));
+      }
       if (data.vat > 0) {
         add(previewLabelValue('VAT', previewMoney(data.vat)));
       }
@@ -620,7 +639,9 @@ class ThermalReceiptLayout {
     add(_center('NO REFUND POLICY'));
     add(_center('3 DAYS EXCHANGE POLICY'));
     add(_center('WITH PENALTY'));
-    add('');
+    // No trailing blank line here - the paper feed after printing already
+    // advances past the last line, so an extra blank spacer just added
+    // unnecessary paper length.
   }
 
   static bool _isGrandTotalLine(String line, String totalText) {
@@ -637,6 +658,17 @@ class ThermalReceiptLayout {
   }
 
   String formatMoney(double value) => _money(value);
+
+  /// Sum of every item's own discount (gross - net total). [data.subtotal]
+  /// is already net of these - this recovers the amount that was silently
+  /// subtracted so it can be shown as part of the receipt's DISCOUNT line
+  /// instead of only reflecting order-level (manual/coupon/loyalty)
+  /// discounts.
+  double get _itemLevelDiscountTotal => data.items.fold<double>(0, (sum, item) {
+        final gross = item.unitPrice * item.quantity;
+        final lineDiscount = gross - item.total;
+        return sum + (lineDiscount > 0.009 ? lineDiscount : 0);
+      });
 
   /// Printable columns for the real printed receipt, driven by the
   /// selected printer's configured paper width (e.g. 48 for a 72 mm
@@ -824,10 +856,7 @@ class ThermalReceiptLayout {
     final gross = item.unitPrice * item.quantity;
     final lineDiscount = gross - item.total;
     if (lineDiscount > 0.009 && gross > 0) {
-      final pct = lineDiscount / gross * 100;
-      result.add(
-        '${_money(lineDiscount)} discount @${pct.toStringAsFixed(2)}%',
-      );
+      result.add('${_money(lineDiscount)} discount');
     }
 
     return result;
@@ -915,6 +944,15 @@ class _EscPosBuilder {
   final List<int> _bytes = <int>[];
 
   void init() => _bytes.addAll(<int>[0x1B, 0x40]);
+
+  /// ESC 3 n - sets line spacing to [dots] (n/180" on most Epson-compatible
+  /// firmware). Sent once for the whole job, unlike the per-line
+  /// align/bold/double-height bytes that were removed - a single one-time
+  /// mode command here doesn't carry the same desync risk that repeatedly
+  /// toggling formatting per line did. Many clone controllers default to a
+  /// tall ~30-dot spacing that reads as an oversized gap between every
+  /// printed line; tightening it here shortens the whole receipt.
+  void setLineSpacing(int dots) => _bytes.addAll(<int>[0x1B, 0x33, dots]);
 
   void text(
     String value, {
@@ -1076,7 +1114,9 @@ class PosReceiptService {
   static List<int> _buildEscPosBytes(ReceiptData receipt) {
     final layout = ThermalReceiptLayout(receipt);
     final lines = layout.buildLines();
-    final builder = _EscPosBuilder()..init();
+    final builder = _EscPosBuilder()
+      ..init()
+      ..setLineSpacing(24);
 
     // Plain text only - no ESC align/bold/double-height bytes anywhere.
     // The layout already centers/aligns everything itself via padded
@@ -1093,7 +1133,14 @@ class PosReceiptService {
       builder.text(line);
     }
 
-    builder.feed(3);
+    // Feed distance is physical (mm), not just a line count: the cutter
+    // blade sits a fixed distance below the print head, and paper must
+    // clear that gap before cutting or the last printed line stays
+    // attached to the start of the next receipt. Tightening line spacing
+    // to 24 dots/line (see setLineSpacing above) shrank a fixed "3 lines"
+    // feed's physical distance too, which was no longer enough - bump the
+    // line count back up so the fed distance clears the cutter again.
+    builder.feed(6);
     builder.cut();
     return builder.build();
   }
