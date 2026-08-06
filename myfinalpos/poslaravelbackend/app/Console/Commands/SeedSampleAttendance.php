@@ -11,7 +11,7 @@ class SeedSampleAttendance extends Command
 {
     protected $signature = 'attendance:sample {--clear : Remove sample attendance rows only}';
 
-    protected $description = 'Load demo attendance for today (4 scenarios) so you can review the Staff board without live clock-ins';
+    protected $description = 'Load demo attendance for the past 7 days so you can review the Staff board and Payroll report without live clock-ins';
 
     public function handle(): int
     {

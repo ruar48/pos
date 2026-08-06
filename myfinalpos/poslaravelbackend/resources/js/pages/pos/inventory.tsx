@@ -1068,6 +1068,11 @@ function InventoryTableRowGroup({
                                 <p className="truncate font-semibold text-foreground">
                                     {row.name}
                                 </p>
+                                {row.option && (
+                                    <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+                                        {row.option}
+                                    </span>
+                                )}
                                 <StockStatusBadges
                                     isOut={row.is_out_of_stock}
                                     isLow={row.is_low_stock}

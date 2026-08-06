@@ -830,7 +830,7 @@ class AttendanceService
 
                 $clockOut = $at;
 
-                $totalMinutes += $openIn->diffInMinutes(Carbon::parse($at));
+                $totalMinutes += (int) $openIn->diffInMinutes(Carbon::parse($at));
 
                 $openIn = null;
 
@@ -848,7 +848,7 @@ class AttendanceService
 
             if ($type === 'break_out' && $openBreakStart !== null) {
 
-                $totalBreakMinutes += $openBreakStart->diffInMinutes(Carbon::parse($at));
+                $totalBreakMinutes += (int) $openBreakStart->diffInMinutes(Carbon::parse($at));
 
                 $breakEndAt = $at;
 

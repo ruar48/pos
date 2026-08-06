@@ -97,6 +97,9 @@ class InventoryReportController extends Controller
             $rows[] = [
                 'product_id' => $productId,
                 'name' => (string) $p->name,
+                'option' => $p->option !== null && trim((string) $p->option) !== ''
+                    ? trim((string) $p->option)
+                    : null,
                 'category' => $categoryName,
                 'image_url' => $p->image_url,
                 'beginning' => $beginning,
@@ -281,7 +284,7 @@ class InventoryReportController extends Controller
     private function fetchProducts(): array
     {
         return DB::select(
-            'SELECT p.id, p.name, p.price, p.cost_price, p.stock,
+            'SELECT p.id, p.name, p.option, p.price, p.cost_price, p.stock,
                     p.reorder_level, p.image_url, c.name AS category_name
              FROM products p
              LEFT JOIN categories c ON c.id = p.category_id

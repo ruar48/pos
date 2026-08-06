@@ -28,6 +28,7 @@ export type InventoryVarietyRow = {
 export type InventoryRow = {
     product_id: number;
     name: string;
+    option?: string | null;
     sku?: string | null;
     unit?: string | null;
     category: string;
