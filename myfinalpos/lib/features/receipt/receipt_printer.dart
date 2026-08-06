@@ -638,8 +638,6 @@ class ThermalReceiptLayout {
   static const _safeTextWidth = 24;
   static const _amountColWidth = 10;
 
-  static String centerLine(String text) => _center(text);
-
   static String _center(String text) {
     final trimmed = text.trim();
     if (trimmed.length >= _safeTextWidth) return trimmed;
@@ -1034,52 +1032,21 @@ class PosReceiptService {
   static List<int> _buildEscPosBytes(ReceiptData receipt) {
     final layout = ThermalReceiptLayout(receipt);
     final lines = layout.buildLines();
-    final totalText = layout.formatMoney(receipt.total);
     final builder = _EscPosBuilder()..init();
 
-    // Plain text only - no ESC align/bold/double-height bytes. A bare
-    // no-formatting test print still garbled on the reported printer, so
-    // those control bytes weren't the cause, but every extra byte is one
-    // more thing a non-standard clone controller can mishandle - keep the
-    // payload as simple as possible.
+    // Plain text only - no ESC align/bold/double-height bytes anywhere.
+    // The layout already centers/aligns everything itself via padded
+    // spaces (see ThermalReceiptLayout._center/_amountRow), so ESC
+    // formatting bytes are pure duplication here, not something the
+    // receipt actually needs. On the reported printer, real receipts kept
+    // garbling while the plain-text Bluetooth test print (which never
+    // sends these control bytes) stayed clean - the dozens of ESC
+    // align/bold/double-height mode switches a full receipt triggers are
+    // exactly the kind of thing a non-standard clone controller mishandles
+    // over a long payload even though it copes fine with a short plain
+    // test. Keep every line a plain string, matching the test print.
     for (final line in lines) {
-      if (line.isEmpty) {
-        builder.text('');
-        continue;
-      }
-      if (line == ThermalReceiptLayout.centerLine(receipt.store.storeName)) {
-        builder.text(
-          receipt.store.storeName,
-          center: true,
-          bold: true,
-          doubleHeight: true,
-        );
-        continue;
-      }
-      if (line == ThermalReceiptLayout.centerLine('INVOICE')) {
-        builder.text('INVOICE', center: true, bold: true);
-        continue;
-      }
-      final remainingText = layout.formatMoney(receipt.remainingTotal);
-      if (ThermalReceiptLayout._isGrandTotalLine(line, totalText) ||
-          (receipt.hasRefunds && line.contains('BALANCE $remainingText'))) {
-        // Every other row in the receipt is exactly kThermalWidth chars, so
-        // the generic branch below always computes centered=true for it
-        // (centering an already-full-width string is a no-op) and sends the
-        // ESC align-center byte. This branch was the one line NOT sending
-        // that byte — on some thermal printers that alone shifts the pitch
-        // enough to throw the amount column out of alignment. Match the
-        // rest of the receipt exactly: bold off, center on.
-        builder.text(line, center: true);
-        continue;
-      }
-      if (line == ThermalReceiptLayout.centerLine(kReceiptFooterThanks)) {
-        builder.text(kReceiptFooterThanks, center: true, bold: true);
-        continue;
-      }
-
-      final centered = line == ThermalReceiptLayout.centerLine(line.trim());
-      builder.text(line, center: centered);
+      builder.text(line);
     }
 
     builder.feed(4);
