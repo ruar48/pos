@@ -425,7 +425,12 @@ class ThermalReceiptLayout {
 
     addCentered(s.storeName);
     if (s.storeSubtitle.trim().isNotEmpty) {
-      addCentered(s.storeSubtitle.trim());
+      // The subtitle is sent in condensed Font B by the ESC/POS builder,
+      // so it has more usable columns than the normal body Font A. Do not
+      // pre-wrap it using the body width: that would turn a subtitle such
+      // as "AGRICULTURAL AND POULTRY SUPPLY" into two printed lines before
+      // the condensed font has a chance to keep it together.
+      add(_center(s.storeSubtitle.trim()));
     }
     addCentered(kReceiptOwnedOperatedBy);
     if (s.phoneNumber.trim().isNotEmpty) {
@@ -643,8 +648,7 @@ class ThermalReceiptLayout {
   /// narrower pitch without changing the paper width configuration.
   int get storeSubtitleLineCount {
     final subtitle = data.store.storeSubtitle.trim();
-    if (subtitle.isEmpty) return 0;
-    return _wordWrapLines(subtitle, _safeTextWidth).length;
+    return subtitle.isEmpty ? 0 : 1;
   }
 
   /// Store name lines wrapped/centered for HALF the normal column count,
@@ -1005,6 +1009,12 @@ class _EscPosBuilder {
   /// once it runs out of physical space, which read as "misaligned" text.
   void selectFontA() => _bytes.addAll(<int>[0x1B, 0x4D, 0x00]);
 
+  /// ESC SP n sets the extra space inserted after each printed character.
+  /// Some clone printers retain a non-zero value from an earlier job, which
+  /// makes otherwise-short Font-B header text wrap at the paper edge.
+  void setCharacterSpacing(int dots) =>
+      _bytes.addAll(<int>[0x1B, 0x20, dots.clamp(0, 255)]);
+
   /// ESC 3 n - sets line spacing to [dots] (n/180" on most Epson-compatible
   /// firmware). Sent once for the whole job, unlike the per-line
   /// align/bold/double-height bytes that were removed - a single one-time
@@ -1038,7 +1048,13 @@ class _EscPosBuilder {
     // force-wrapped mid-word by the printer itself) has a chance to
     // physically fit on one line at Font B's narrower pitch. Same
     // reset-reliability caveat as doubleWidth above applies here.
-    if (small) _bytes.addAll(<int>[0x1B, 0x4D, 0x01]);
+    if (small) {
+      // Keep the store subtitle (for example, "AGRICULTURAL AND POULTRY
+      // SUPPLY") on one physical line. Font B alone is not enough when a
+      // printer has retained extra character spacing from a previous job.
+      setCharacterSpacing(0);
+      _bytes.addAll(<int>[0x1B, 0x4D, 0x01]);
+    }
 
     for (final line in value.split('\n')) {
       // Encode as proper UTF-8 bytes (not raw UTF-16 code units - a
