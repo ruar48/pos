@@ -994,20 +994,6 @@ class _EscPosBuilder {
     if (center) _bytes.addAll(<int>[0x1B, 0x61, 0x00]);
   }
 
-  /// Explicitly re-asserts normal size/bold/alignment (GS ! 0, ESC E 0,
-  /// ESC a 0) without a full ESC @ re-init. A full re-init also resets
-  /// codepage/font selection made before this payload, which threw off the
-  /// character width the layout's space-padded centering assumed -
-  /// everything after the reset started printing misaligned. This targets
-  /// only the specific modes the store-name header turns on, as a
-  /// redundant safety net in case the per-line "off" bytes in [text] were
-  /// dropped by the clone controller.
-  void resetFormatting() => _bytes.addAll(<int>[
-        0x1D, 0x21, 0x00, // GS ! 0 - cancel double-height/width
-        0x1B, 0x45, 0x00, // ESC E 0 - bold off
-        0x1B, 0x61, 0x00, // ESC a 0 - align left
-      ]);
-
   void feed(int lines) => _bytes.addAll(<int>[0x1B, 0x64, lines]);
 
   void cut() => _bytes.addAll(<int>[0x1D, 0x56, 0x00]);
@@ -1144,32 +1130,22 @@ class PosReceiptService {
       ..init()
       ..setLineSpacing(24);
 
-    // Store name prints larger/bolder (requested per the boss); everything
-    // else stays plain text - the layout already centers/aligns it via
-    // padded spaces (see ThermalReceiptLayout._center/_amountRow).
+    // Store name prints bold (requested per the boss); everything else
+    // stays plain text - the layout already centers/aligns it via padded
+    // spaces (see ThermalReceiptLayout._center/_amountRow). Double-height
+    // sizing was tried (twice, with two different mode-reset strategies)
+    // but this clone controller never reliably exited that mode - it left
+    // every line after the header rendering at a shrunk effective char
+    // width, breaking their space-padded centering and even auto-wrapping
+    // mid-word. Bold-only avoids touching character pitch at all, so
+    // there's nothing to leak into the rest of the receipt.
     final nameLineCount = layout.storeNameLineCount;
     for (var i = 0; i < lines.length; i++) {
       if (i < nameLineCount) {
-        builder.text(
-          lines[i].trim(),
-          center: true,
-          bold: true,
-          doubleHeight: true,
-        );
-        continue;
+        builder.text(lines[i].trim(), center: true, bold: true);
+      } else {
+        builder.text(lines[i]);
       }
-      if (i == nameLineCount) {
-        // Redundant safety net right after the enlarged header, in case
-        // the per-mode "off" bytes at the end of that text() call were
-        // dropped by the clone controller (previously left it stuck in
-        // double-height state, corrupting/truncating everything after,
-        // including the "WITH PENALTY" footer). Uses the targeted
-        // mode-cancel bytes, not a full ESC @ re-init - a full re-init
-        // also wiped codepage/font setup from earlier in the job, which
-        // broke this and every later line's space-padded centering.
-        builder.resetFormatting();
-      }
-      builder.text(lines[i]);
     }
 
     // Feed distance is physical (mm), not just a line count: the cutter
