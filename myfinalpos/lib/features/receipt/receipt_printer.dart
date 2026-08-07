@@ -633,6 +633,20 @@ class ThermalReceiptLayout {
   int get storeNameLineCount =>
       _wordWrapLines(data.store.storeName, _safeTextWidth).length;
 
+  /// Number of lines right after the store name that render the subtitle
+  /// (e.g. "AGRICULTURAL AND POULTRY SUPPLY") - 0 when there's no subtitle.
+  /// Lets the ESC/POS builder print just this span in the printer's
+  /// condensed Font B, which is narrower per character than the store name
+  /// / body text's Font A, so a subtitle that's long enough to overflow a
+  /// physical printer's Font-A line width (and get force-wrapped mid-word
+  /// by the printer itself) has a chance to fit on one line at Font B's
+  /// narrower pitch without changing the paper width configuration.
+  int get storeSubtitleLineCount {
+    final subtitle = data.store.storeSubtitle.trim();
+    if (subtitle.isEmpty) return 0;
+    return _wordWrapLines(subtitle, _safeTextWidth).length;
+  }
+
   /// Store name lines wrapped/centered for HALF the normal column count,
   /// pre-padded with spaces the same way [ThermalReceiptLayout._center]
   /// pads normal lines. This only exists for the ESC/POS double-width store
@@ -1005,6 +1019,7 @@ class _EscPosBuilder {
     bool bold = false,
     bool center = false,
     bool doubleWidth = false,
+    bool small = false,
   }) {
     if (center) _bytes.addAll(<int>[0x1B, 0x61, 0x01]);
     if (bold) _bytes.addAll(<int>[0x1B, 0x45, 0x01]);
@@ -1016,6 +1031,14 @@ class _EscPosBuilder {
     // in a shrunk-width state for the rest of the receipt when the earlier
     // reset strategy didn't take reliably on this clone controller.
     if (doubleWidth) _bytes.addAll(<int>[0x1D, 0x21, 0x10]);
+    // ESC M 1 - switches to condensed Font B for just this line, then back
+    // to Font A (see selectFontA) right after. Font B's glyphs are roughly
+    // 25-30% narrower than Font A's, so a line that's a fixed character
+    // count too long for a printer's physical Font-A line width (and gets
+    // force-wrapped mid-word by the printer itself) has a chance to
+    // physically fit on one line at Font B's narrower pitch. Same
+    // reset-reliability caveat as doubleWidth above applies here.
+    if (small) _bytes.addAll(<int>[0x1B, 0x4D, 0x01]);
 
     for (final line in value.split('\n')) {
       // Encode as proper UTF-8 bytes (not raw UTF-16 code units - a
@@ -1030,6 +1053,7 @@ class _EscPosBuilder {
       _bytes.addAll(<int>[0x0D, 0x0A]);
     }
 
+    if (small) _bytes.addAll(<int>[0x1B, 0x4D, 0x00]);
     if (doubleWidth) _bytes.addAll(<int>[0x1D, 0x21, 0x00]);
     if (bold) _bytes.addAll(<int>[0x1B, 0x45, 0x00]);
     if (center) _bytes.addAll(<int>[0x1B, 0x61, 0x00]);
@@ -1182,6 +1206,9 @@ class PosReceiptService {
     // mid-word. Bold-only avoids touching character pitch at all, so
     // there's nothing to leak into the rest of the receipt.
     final nameLineCount = layout.storeNameLineCount;
+    final subtitleLineCount = layout.storeSubtitleLineCount;
+    final subtitleStart = nameLineCount;
+    final subtitleEnd = subtitleStart + subtitleLineCount;
     // Falls back to null (plain bold, no size change) when the store name
     // doesn't cleanly wrap to the same line count at half width - see
     // storeNameDoubleWidthLines for why double-width needs its own
@@ -1201,6 +1228,11 @@ class PosReceiptService {
         } else {
           builder.text(lines[i], bold: true);
         }
+      } else if (i >= subtitleStart && i < subtitleEnd) {
+        // Subtitle prints in condensed Font B (see _EscPosBuilder.text) so a
+        // subtitle long enough to overflow a physical printer's Font-A line
+        // width fits on one line instead of getting force-wrapped mid-word.
+        builder.text(lines[i], small: true);
       } else {
         builder.text(lines[i]);
       }
