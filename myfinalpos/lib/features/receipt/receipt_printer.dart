@@ -957,6 +957,15 @@ class _EscPosBuilder {
 
   void init() => _bytes.addAll(<int>[0x1B, 0x40]);
 
+  /// ESC M 0 - explicitly selects Font A (the standard compact font, ~32
+  /// columns on 58 mm paper). Sent once at job start. Without this, some
+  /// clone controllers power on with a wider default font that fits far
+  /// fewer characters per physical line than the paper-width setting
+  /// assumes - the app's own word-wrap never kicks in (the line looks
+  /// short enough on paper), so the printer silently auto-wraps mid-word
+  /// once it runs out of physical space, which read as "misaligned" text.
+  void selectFontA() => _bytes.addAll(<int>[0x1B, 0x4D, 0x00]);
+
   /// ESC 3 n - sets line spacing to [dots] (n/180" on most Epson-compatible
   /// firmware). Sent once for the whole job, unlike the per-line
   /// align/bold/double-height bytes that were removed - a single one-time
@@ -1128,6 +1137,7 @@ class PosReceiptService {
     final lines = layout.buildLines();
     final builder = _EscPosBuilder()
       ..init()
+      ..selectFontA()
       ..setLineSpacing(24);
 
     // Store name prints bold (requested per the boss); everything else
