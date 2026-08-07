@@ -39,6 +39,7 @@ import '../widgets/charge_payment_section.dart';
 import '../widgets/offline_status_banner.dart';
 import '../widgets/product_section.dart';
 import '../widgets/receipt_panel.dart';
+import '../widgets/size_picker_sheet.dart';
 import '../widgets/variety_picker_sheet.dart';
 
 class PosHomePage extends StatefulWidget {
@@ -794,6 +795,52 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     if (_productTapInFlight) return;
     _productTapInFlight = true;
     try {
+      await _addProductToCart(context, product);
+    } finally {
+      _productTapInFlight = false;
+    }
+  }
+
+  /// Shared by [promptAddProductToCart] and [promptAddProductGroupToCart] -
+  /// doesn't touch `_productTapInFlight` itself, so the group picker can
+  /// call this directly with the chosen size once its sheet closes instead
+  /// of going back through [promptAddProductToCart], which would just bail
+  /// out immediately since the group picker is still holding that guard.
+  Future<void> _addProductToCart(BuildContext context, Product product) async {
+    unawaited(_syncProductStock());
+
+    if (completedReceipt != null) {
+      dismissCompletedReceipt();
+    }
+    if (isPaymentMode) {
+      exitPaymentMode();
+    }
+
+    final live = productById(product.id) ?? product;
+    if (!live.hasVarieties) {
+      addToCart(live);
+      return;
+    }
+
+    unawaited(_syncProductStock());
+
+    if (!context.mounted) return;
+    await showProductVarietyPicker(context, this, live);
+  }
+
+  /// Entry point used by the product grid, which groups catalog entries
+  /// that share the same name (e.g. the same chemical listed separately
+  /// per bottle size) so the cashier picks the size before it's added.
+  Future<void> promptAddProductGroupToCart(
+    BuildContext context,
+    List<Product> group,
+  ) async {
+    if (group.length <= 1) {
+      return promptAddProductToCart(context, group.first);
+    }
+    if (_productTapInFlight) return;
+    _productTapInFlight = true;
+    try {
       unawaited(_syncProductStock());
 
       if (completedReceipt != null) {
@@ -803,16 +850,11 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
         exitPaymentMode();
       }
 
-      final live = productById(product.id) ?? product;
-      if (!live.hasVarieties) {
-        addToCart(live);
-        return;
-      }
-
-      unawaited(_syncProductStock());
-
       if (!context.mounted) return;
-      await showProductVarietyPicker(context, this, live);
+      final selected = await showProductSizePicker(context, this, group);
+      if (selected != null && context.mounted) {
+        await _addProductToCart(context, selected);
+      }
     } finally {
       _productTapInFlight = false;
     }

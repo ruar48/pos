@@ -633,6 +633,29 @@ class ThermalReceiptLayout {
   int get storeNameLineCount =>
       _wordWrapLines(data.store.storeName, _safeTextWidth).length;
 
+  /// Store name lines wrapped/centered for HALF the normal column count,
+  /// pre-padded with spaces the same way [ThermalReceiptLayout._center]
+  /// pads normal lines. This only exists for the ESC/POS double-width store
+  /// name: the printer's double-width mode doubles the physical width of
+  /// every glyph it prints - including plain space characters - so text
+  /// centered/wrapped against the full column count would print at roughly
+  /// twice the paper's physical width and run off the edge. Wrapping
+  /// against half the columns first means doubling each glyph lands the
+  /// text back at the paper's actual width, correctly centered.
+  ///
+  /// Returns null if the name doesn't wrap to the same number of lines at
+  /// half width as it does at full width (e.g. a long store name) - the
+  /// caller should fall back to normal-width bold text in that case rather
+  /// than risk a wrapped/overflowing double-width line.
+  List<String>? get storeNameDoubleWidthLines {
+    final halfWidth = (_safeTextWidth / 2).floor().clamp(8, 64);
+    final wrapped = _wordWrapLines(data.store.storeName, halfWidth);
+    if (wrapped.length != storeNameLineCount) return null;
+    return [
+      for (final line in wrapped) _centerWithin(line, halfWidth),
+    ];
+  }
+
   static void _addReceiptFooter(
     void Function(String? line) add, {
     String receiptNote = '',
@@ -726,10 +749,12 @@ class ThermalReceiptLayout {
     return ['$label:', ..._wordWrapLines(value, _safeTextWidth)];
   }
 
-  static String _center(String text) {
+  static String _center(String text) => _centerWithin(text, _safeTextWidth);
+
+  static String _centerWithin(String text, int width) {
     final trimmed = text.trim();
-    if (trimmed.length >= _safeTextWidth) return trimmed;
-    final left = ((_safeTextWidth - trimmed.length) / 2).floor();
+    if (trimmed.length >= width) return trimmed;
+    final left = ((width - trimmed.length) / 2).floor();
     return '${' ' * left}$trimmed';
   }
 
@@ -979,11 +1004,18 @@ class _EscPosBuilder {
     String value, {
     bool bold = false,
     bool center = false,
-    bool doubleHeight = false,
+    bool doubleWidth = false,
   }) {
     if (center) _bytes.addAll(<int>[0x1B, 0x61, 0x01]);
     if (bold) _bytes.addAll(<int>[0x1B, 0x45, 0x01]);
-    if (doubleHeight) _bytes.addAll(<int>[0x1D, 0x21, 0x10]);
+    // GS ! n - bits 4-7 set the width multiplier, bits 0-3 the height
+    // multiplier; 0x10 doubles width only (leaves height at x1). Kept
+    // narrowly scoped to just the store name (see storeNameDoubleWidthLines)
+    // and reset immediately after each line, rather than left toggled
+    // across a wider span - a prior attempt at this left the printer stuck
+    // in a shrunk-width state for the rest of the receipt when the earlier
+    // reset strategy didn't take reliably on this clone controller.
+    if (doubleWidth) _bytes.addAll(<int>[0x1D, 0x21, 0x10]);
 
     for (final line in value.split('\n')) {
       // Encode as proper UTF-8 bytes (not raw UTF-16 code units - a
@@ -998,7 +1030,7 @@ class _EscPosBuilder {
       _bytes.addAll(<int>[0x0D, 0x0A]);
     }
 
-    if (doubleHeight) _bytes.addAll(<int>[0x1D, 0x21, 0x00]);
+    if (doubleWidth) _bytes.addAll(<int>[0x1D, 0x21, 0x00]);
     if (bold) _bytes.addAll(<int>[0x1B, 0x45, 0x00]);
     if (center) _bytes.addAll(<int>[0x1B, 0x61, 0x00]);
   }
@@ -1150,9 +1182,25 @@ class PosReceiptService {
     // mid-word. Bold-only avoids touching character pitch at all, so
     // there's nothing to leak into the rest of the receipt.
     final nameLineCount = layout.storeNameLineCount;
+    // Falls back to null (plain bold, no size change) when the store name
+    // doesn't cleanly wrap to the same line count at half width - see
+    // storeNameDoubleWidthLines for why double-width needs its own
+    // half-width wrap/centering rather than reusing `lines`.
+    final doubleWidthNameLines = layout.storeNameDoubleWidthLines;
     for (var i = 0; i < lines.length; i++) {
       if (i < nameLineCount) {
-        builder.text(lines[i].trim(), center: true, bold: true);
+        // Keep the same manual space-padding centering as every other line
+        // (see ThermalReceiptLayout._center) instead of trimming it and
+        // asking the printer to center via ESC a 1 - on this clone
+        // controller, engine-side centering under bold used a different
+        // effective column width than the padding math, so the bold store
+        // name landed at a different horizontal offset than the line right
+        // below it (e.g. the subtitle), reading as misaligned.
+        if (doubleWidthNameLines != null) {
+          builder.text(doubleWidthNameLines[i], bold: true, doubleWidth: true);
+        } else {
+          builder.text(lines[i], bold: true);
+        }
       } else {
         builder.text(lines[i]);
       }

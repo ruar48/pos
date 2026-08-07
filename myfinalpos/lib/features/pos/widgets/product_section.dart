@@ -194,8 +194,8 @@ class ProductSection extends StatelessWidget {
                   : ProductGrid(
                       products: pageState.filteredProducts,
                       currencySymbol: pageState.settings.currencySymbol,
-                      onTap: (product) =>
-                          pageState.promptAddProductToCart(context, product),
+                      onTapGroup: (group) => pageState
+                          .promptAddProductGroupToCart(context, group),
                     ),
             ),
           ],
@@ -311,12 +311,24 @@ class ProductGrid extends StatelessWidget {
     super.key,
     required this.products,
     required this.currencySymbol,
-    required this.onTap,
+    required this.onTapGroup,
   });
 
   final List<Product> products;
   final String currencySymbol;
-  final void Function(Product product) onTap;
+  final void Function(List<Product> group) onTapGroup;
+
+  /// Catalog entries that share the same name (e.g. the same chemical
+  /// listed separately per bottle size) are grouped so they render as a
+  /// single card and prompt a size picker instead of duplicating tiles.
+  List<List<Product>> _groupByName() {
+    final groups = <String, List<Product>>{};
+    for (final product in products) {
+      final key = product.name.trim().toLowerCase();
+      groups.putIfAbsent(key, () => []).add(product);
+    }
+    return groups.values.toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -333,6 +345,8 @@ class ProductGrid extends StatelessWidget {
       );
     }
 
+    final groups = _groupByName();
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
@@ -343,7 +357,7 @@ class ProductGrid extends StatelessWidget {
                 : 2;
         return GridView.builder(
           padding: const EdgeInsets.all(22),
-          itemCount: products.length,
+          itemCount: groups.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
             mainAxisSpacing: 18,
@@ -351,12 +365,15 @@ class ProductGrid extends StatelessWidget {
             childAspectRatio: 1.48,
           ),
           itemBuilder: (context, index) {
-            final product = products[index];
+            final group = groups[index];
             return ProductCard(
-              key: ValueKey('pos-product-${product.id}'),
-              product: product,
+              key: ValueKey(
+                'pos-product-${group.map((p) => p.id).join('-')}',
+              ),
+              product: group.first,
+              group: group,
               currencySymbol: currencySymbol,
-              onTap: () => onTap(product),
+              onTap: () => onTapGroup(group),
             );
           },
         );
@@ -371,17 +388,35 @@ class ProductCard extends StatelessWidget {
     required this.product,
     required this.currencySymbol,
     required this.onTap,
-  });
+    List<Product>? group,
+  }) : group = group ?? const [];
 
   final Product product;
   final String currencySymbol;
   final VoidCallback onTap;
 
+  /// Other catalog entries sharing this product's name (different sizes).
+  /// When there's more than one, the card shows a size count and price
+  /// range instead of a single option/price, and taps open a picker.
+  final List<Product> group;
+
   @override
   Widget build(BuildContext context) {
-    final deal = product.catalogDeal;
-    final option = product.displayOption;
-    final stock = product.catalogStock;
+    final isSizeGroup = group.length > 1;
+    final deal = isSizeGroup ? null : product.catalogDeal;
+    final option = isSizeGroup ? null : product.displayOption;
+    final stock = isSizeGroup
+        ? group.fold<double>(
+            0,
+            (total, item) => total + (item.catalogStock ?? 0),
+          )
+        : product.catalogStock;
+    final showFromPrice = isSizeGroup || product.hasVarieties;
+    final displayPrice = isSizeGroup
+        ? group.map((item) => item.price).reduce((a, b) => a < b ? a : b)
+        : product.price;
+    final metaLabel =
+        isSizeGroup ? '${group.length} sizes' : product.catalogMetaLabel;
 
     return Material(
       color: AppColors.surface,
@@ -501,7 +536,7 @@ class ProductCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (product.hasVarieties)
+                          if (showFromPrice)
                             const Padding(
                               padding: EdgeInsets.only(bottom: 2),
                               child: Text(
@@ -519,7 +554,7 @@ class ProductCard extends StatelessWidget {
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              formatMoney(currencySymbol, product.price),
+                              formatMoney(currencySymbol, displayPrice),
                               maxLines: 1,
                               style: const TextStyle(
                                 color: AppColors.darkGreen,
@@ -532,9 +567,9 @@ class ProductCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (product.hasVarieties) ...[
+                    if (isSizeGroup || product.hasVarieties) ...[
                       const SizedBox(width: 6),
-                      _ProductMetaChip(label: product.catalogMetaLabel),
+                      _ProductMetaChip(label: metaLabel),
                     ],
                   ],
                 ),
