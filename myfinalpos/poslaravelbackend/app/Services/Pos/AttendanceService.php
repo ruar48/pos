@@ -916,22 +916,29 @@ class AttendanceService
             // break_out is punched.
             if ($isOnBreak && $openBreakStart !== null) {
                 $reference = $openBreakStart;
+                $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
+                    ->diffInMinutes($reference);
             } elseif ($isToday) {
                 $reference = Carbon::now('UTC');
+                $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
+                    ->diffInMinutes($reference);
             } else {
-                [, $dayEndUtc] = $this->dayBoundsUtc($date);
-                $reference = Carbon::parse($dayEndUtc, 'UTC');
+                // Past day with a dangling clock_in and no time-out: pay for
+                // that day is zeroed until the staff member (or an admin)
+                // goes back and fixes the missing time-out punch.
                 $missingTimeOut = true;
+                $totalMinutes = 0;
             }
-            $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
-                ->diffInMinutes($reference);
         }
 
         // Break time is unpaid/non-working time - never counted toward
-        // worked hours (attendance duty span, payroll totals, etc.).
+        // worked hours (attendance duty span, payroll totals, etc.). A flat
+        // 1 hour is always deducted for any day with worked time, regardless
+        // of the actual break_in/break_out punches.
         // The 24h cap is a defensive backstop against any future edge case
         // producing an out-of-range span for a single calendar day.
-        $totalMinutes = min(24 * 60, max(0, $totalMinutes - $totalBreakMinutes));
+        $breakDeductionMinutes = $totalMinutes > 0 ? 60 : 0;
+        $totalMinutes = min(24 * 60, max(0, $totalMinutes - $breakDeductionMinutes));
 
         $sessionAttendance = $this->evaluateSessionAttendance(
             $punchState['morning_in_at'],
