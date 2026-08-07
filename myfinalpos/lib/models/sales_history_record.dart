@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../core/utils/format_utils.dart';
 import 'customer.dart';
 import 'sales_line_item.dart';
@@ -51,8 +53,15 @@ class SalesHistoryRecord {
   final DateTime createdAt;
   final List<SalesLineItem> items;
 
+  double get _itemDiscountSum =>
+      items.fold<double>(0, (sum, item) => sum + item.discount);
+
+  // Never let the aggregated total undercount what each item row already
+  // shows - the backend's combined discount_amount should already cover
+  // the item-level portion, but max() guards against it lagging behind
+  // the per-item fallback (see SalesLineItem.discount).
   double get totalDiscount =>
-      discountAmount + couponDiscount + loyaltyDiscount;
+      max(discountAmount, _itemDiscountSum) + couponDiscount + loyaltyDiscount;
 
   bool get isWalkIn =>
       customerId == null || customerId! <= 0 || Customer.isWalkInName(customerName);

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../core/utils/format_utils.dart';
 
 class SalesLineItem {
@@ -7,6 +9,7 @@ class SalesLineItem {
     required this.quantity,
     required this.price,
     required this.total,
+    this.discount = 0,
     this.varietyId,
     this.varietyName,
   });
@@ -16,6 +19,7 @@ class SalesLineItem {
   final double quantity;
   final double price;
   final double total;
+  final double discount;
   final int? varietyId;
   final String? varietyName;
 
@@ -28,12 +32,19 @@ class SalesLineItem {
         ? null
         : toInt(json['variety_id']);
     final varietyName = json['variety_name']?.toString();
+    final quantity = toDouble(json['quantity']);
+    final price = toDouble(json['price']);
+    final total = toDouble(json['total']);
     return SalesLineItem(
       productId: toInt(json['product_id']),
       productName: (json['product_name'] ?? '').toString(),
-      quantity: toDouble(json['quantity']),
-      price: toDouble(json['price']),
-      total: toDouble(json['total']),
+      quantity: quantity,
+      price: price,
+      total: total,
+      discount: max(
+        toDouble(json['discount_amount']),
+        max(0.0, (price * quantity) - total),
+      ),
       varietyId: varietyId != null && varietyId > 0 ? varietyId : null,
       varietyName: varietyName == null || varietyName.isEmpty
           ? null

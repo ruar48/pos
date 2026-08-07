@@ -1130,33 +1130,14 @@ class PosReceiptService {
       ..init()
       ..setLineSpacing(24);
 
-    // Plain text everywhere except the store name - no other ESC
-    // align/bold/double-height bytes anywhere. The layout already
+    // Plain text for every line, including the store name. Double-height
+    // store name printing was tried per an earlier request, but it read as
+    // oversized/garbled on the printer in use - the layout already
     // centers/aligns everything itself via padded spaces (see
-    // ThermalReceiptLayout._center/_amountRow), so ESC formatting bytes
-    // are pure duplication for the rest of the receipt. On the reported
-    // printer, real receipts kept garbling while the plain-text Bluetooth
-    // test print (which never sends these control bytes) stayed clean -
-    // the dozens of ESC align/bold/double-height mode switches a full
-    // receipt triggers are exactly the kind of thing a non-standard clone
-    // controller mishandles over a long payload even though it copes fine
-    // with a short plain test. A single on/off pair for just the store
-    // name (requested larger/bolder per the boss) is a very different
-    // load than dozens of per-line switches - if it turns out to still
-    // garble on that printer, drop back to plain `builder.text(line)` for
-    // the name lines too.
-    final nameLineCount = layout.storeNameLineCount;
-    for (var i = 0; i < lines.length; i++) {
-      if (i < nameLineCount) {
-        builder.text(
-          lines[i].trim(),
-          center: true,
-          bold: true,
-          doubleHeight: true,
-        );
-      } else {
-        builder.text(lines[i]);
-      }
+    // ThermalReceiptLayout._center/_amountRow), so no ESC formatting bytes
+    // are needed anywhere in the receipt.
+    for (final line in lines) {
+      builder.text(line);
     }
 
     // Feed distance is physical (mm), not just a line count: the cutter

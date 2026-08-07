@@ -661,6 +661,15 @@ class _SalesOrderDetailsDialog extends StatelessWidget {
                                               color: AppColors.muted,
                                             ),
                                           ),
+                                          if (item.discount > 0.009)
+                                            Text(
+                                              '-${formatMoney(currencySymbol, item.discount)} discount',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.danger,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ),

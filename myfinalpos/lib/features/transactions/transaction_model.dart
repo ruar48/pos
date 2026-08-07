@@ -63,9 +63,10 @@ class TransactionItem {
       quantity: quantity,
       refundedQuantity: _toDouble(json['refunded_quantity']),
       unitPrice: unitPrice,
-      discount: json['discount_amount'] != null
-          ? _toDouble(json['discount_amount'])
-          : max(0.0, (unitPrice * quantity) - subtotal),
+      discount: max(
+        _toDouble(json['discount_amount']),
+        max(0.0, (unitPrice * quantity) - subtotal),
+      ),
       subtotal: subtotal,
       imageUrl: json['image']?.toString() ?? json['image_url']?.toString(),
     );

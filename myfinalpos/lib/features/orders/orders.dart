@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -708,7 +709,13 @@ class _OrderDetailPane extends StatelessWidget {
   }
 
   Widget _buildReceiptCard(TransactionRecord transaction) {
-    final totalDiscount = transaction.discountAmount +
+    final itemDiscountSum = transaction.items
+        .fold<double>(0, (sum, item) => sum + item.discount);
+    // Never let the aggregated total undercount what each item row already
+    // shows - the backend's combined discount_amount should already cover
+    // the item-level portion, but max() guards against it lagging behind
+    // the per-item fallback (see TransactionItem.discount).
+    final totalDiscount = max(transaction.discountAmount, itemDiscountSum) +
         transaction.couponDiscount +
         transaction.loyaltyDiscount;
 
@@ -1168,6 +1175,17 @@ class _OrderLineItemRow extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   '${item.refundedQuantity} refunded',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.danger,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              if (item.discount > 0.009) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '-${formatMoney('₱', item.discount)} discount',
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.danger,
