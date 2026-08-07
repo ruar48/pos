@@ -424,6 +424,9 @@ class ThermalReceiptLayout {
     }
 
     addCentered(s.storeName);
+    if (s.storeSubtitle.trim().isNotEmpty) {
+      addCentered(s.storeSubtitle.trim());
+    }
     addCentered(kReceiptOwnedOperatedBy);
     if (s.phoneNumber.trim().isNotEmpty) {
       addCentered(s.phoneNumber.trim());
@@ -536,6 +539,9 @@ class ThermalReceiptLayout {
     }
 
     add(s.storeName);
+    if (s.storeSubtitle.trim().isNotEmpty) {
+      add(s.storeSubtitle.trim());
+    }
     add(kReceiptOwnedOperatedBy);
     if (s.phoneNumber.trim().isNotEmpty) {
       add(s.phoneNumber.trim());
@@ -620,6 +626,12 @@ class ThermalReceiptLayout {
   }
 
   List<String> buildTextLines() => buildLines();
+
+  /// Number of leading lines in [buildLines] that render the store name -
+  /// lets the ESC/POS builder print just those larger/bold without
+  /// re-deriving the word-wrap logic itself.
+  int get storeNameLineCount =>
+      _wordWrapLines(data.store.storeName, _safeTextWidth).length;
 
   static void _addReceiptFooter(
     void Function(String? line) add, {
@@ -1118,19 +1130,33 @@ class PosReceiptService {
       ..init()
       ..setLineSpacing(24);
 
-    // Plain text only - no ESC align/bold/double-height bytes anywhere.
-    // The layout already centers/aligns everything itself via padded
-    // spaces (see ThermalReceiptLayout._center/_amountRow), so ESC
-    // formatting bytes are pure duplication here, not something the
-    // receipt actually needs. On the reported printer, real receipts kept
-    // garbling while the plain-text Bluetooth test print (which never
-    // sends these control bytes) stayed clean - the dozens of ESC
-    // align/bold/double-height mode switches a full receipt triggers are
-    // exactly the kind of thing a non-standard clone controller mishandles
-    // over a long payload even though it copes fine with a short plain
-    // test. Keep every line a plain string, matching the test print.
-    for (final line in lines) {
-      builder.text(line);
+    // Plain text everywhere except the store name - no other ESC
+    // align/bold/double-height bytes anywhere. The layout already
+    // centers/aligns everything itself via padded spaces (see
+    // ThermalReceiptLayout._center/_amountRow), so ESC formatting bytes
+    // are pure duplication for the rest of the receipt. On the reported
+    // printer, real receipts kept garbling while the plain-text Bluetooth
+    // test print (which never sends these control bytes) stayed clean -
+    // the dozens of ESC align/bold/double-height mode switches a full
+    // receipt triggers are exactly the kind of thing a non-standard clone
+    // controller mishandles over a long payload even though it copes fine
+    // with a short plain test. A single on/off pair for just the store
+    // name (requested larger/bolder per the boss) is a very different
+    // load than dozens of per-line switches - if it turns out to still
+    // garble on that printer, drop back to plain `builder.text(line)` for
+    // the name lines too.
+    final nameLineCount = layout.storeNameLineCount;
+    for (var i = 0; i < lines.length; i++) {
+      if (i < nameLineCount) {
+        builder.text(
+          lines[i].trim(),
+          center: true,
+          bold: true,
+          doubleHeight: true,
+        );
+      } else {
+        builder.text(lines[i]);
+      }
     }
 
     // Feed distance is physical (mm), not just a line count: the cutter
@@ -1140,7 +1166,10 @@ class PosReceiptService {
     // to 24 dots/line (see setLineSpacing above) shrank a fixed "3 lines"
     // feed's physical distance too, which was no longer enough - bump the
     // line count back up so the fed distance clears the cutter again.
-    builder.feed(6);
+    // Field reports (WITH PENALTY footer still stuck to the top of the
+    // next receipt) showed 6 lines still wasn't reliably clearing the
+    // cutter blade on some clone controllers - bumped further for margin.
+    builder.feed(9);
     builder.cut();
     return builder.build();
   }

@@ -36,6 +36,12 @@ class OrderQueryController extends Controller
                 ? 'LEFT JOIN (SELECT order_id, SUM(amount) AS refunded_amount FROM refunds GROUP BY order_id) rf ON rf.order_id = o.id'
                 : '';
 
+            $hasItemDiscount = PosHelpers::columnExists('order_items', 'discount_amount');
+            $itemDiscountSelect = $hasItemDiscount ? 'COALESCE(idisc.item_discount, 0)' : '0';
+            $itemDiscountJoin = $hasItemDiscount
+                ? 'LEFT JOIN (SELECT order_id, SUM(COALESCE(discount_amount, 0)) AS item_discount FROM order_items GROUP BY order_id) idisc ON idisc.order_id = o.id'
+                : '';
+
             $hasBranchId = PosHelpers::columnExists('orders', 'branch_id');
             $hasCashierUserId = PosHelpers::columnExists('orders', 'cashier_user_id');
             $hasBranchesTable = PosHelpers::tableExists('branches');
@@ -60,7 +66,7 @@ class OrderQueryController extends Controller
                     o.subtotal,
                     o.vat,
                     o.total_amount,
-                    COALESCE(o.discount_amount, 0) AS discount_amount,
+                    COALESCE(o.discount_amount, 0) + {$itemDiscountSelect} AS discount_amount,
                     COALESCE(o.coupon_discount, 0) AS coupon_discount,
                     COALESCE(o.loyalty_discount, 0) AS loyalty_discount,
                     COALESCE(o.loyalty_points_redeemed, 0) AS loyalty_points_redeemed,
@@ -77,6 +83,7 @@ class OrderQueryController extends Controller
                  {$branchJoin}
                  {$cashierJoin}
                  {$refundJoin}
+                 {$itemDiscountJoin}
                  ORDER BY o.created_at DESC, o.id DESC",
             );
 
@@ -87,6 +94,10 @@ class OrderQueryController extends Controller
             $varietySelect = $hasVariety
                 ? 'oi.variety_id, oi.variety_name,'
                 : 'NULL AS variety_id, NULL AS variety_name,';
+
+            $itemDiscountColSelect = $hasItemDiscount
+                ? 'COALESCE(oi.discount_amount, 0) AS discount_amount,'
+                : '0 AS discount_amount,';
 
             $data = [];
             foreach ($orders as $order) {
@@ -103,6 +114,7 @@ class OrderQueryController extends Controller
                         oi.quantity,
                         {$refundedCol},
                         oi.price,
+                        {$itemDiscountColSelect}
                         oi.total
                      FROM order_items oi
                      WHERE oi.order_id = ?

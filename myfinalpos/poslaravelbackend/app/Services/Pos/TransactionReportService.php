@@ -85,6 +85,8 @@ class TransactionReportService
         $hasCashier = PosHelpers::columnExists('orders', 'cashier_user_id');
         $cashierJoin = $hasCashier ? 'LEFT JOIN users cashier ON cashier.id = o.cashier_user_id' : '';
         $cashierSelect = $hasCashier ? 'cashier.full_name AS cashier_name,' : 'NULL AS cashier_name,';
+        $itemDiscountJoin = $this->itemDiscountJoin();
+        $itemDiscountExpr = $this->itemDiscountExpr();
 
         $countRow = DB::selectOne(
             "SELECT COUNT(*) AS total
@@ -107,7 +109,7 @@ class TransactionReportService
                 o.subtotal,
                 o.vat,
                 o.total_amount,
-                COALESCE(o.discount_amount, 0) + COALESCE(o.coupon_discount, 0) + COALESCE(o.loyalty_discount, 0) AS discount_total,
+                COALESCE(o.discount_amount, 0) + COALESCE(o.coupon_discount, 0) + COALESCE(o.loyalty_discount, 0) + {$itemDiscountExpr} AS discount_total,
                 {$cashierSelect}
                 COALESCE(c.customer_name, 'Walk In Farmer') AS customer_name,
                 {$netExpr} AS net_total,
@@ -121,6 +123,7 @@ class TransactionReportService
              LEFT JOIN customers c ON c.id = o.customer_id
              {$cashierJoin}
              {$refundJoin}
+             {$itemDiscountJoin}
              WHERE {$dateFilterSql}
              {$searchSql}
              ORDER BY o.created_at DESC, o.id DESC
@@ -251,6 +254,8 @@ class TransactionReportService
         $netExpr = "(o.total_amount - {$refundAmount})";
         $qtyExpr = $this->netQtyExpr();
         $costExpr = $this->unitCostExpr();
+        $itemDiscountJoin = $this->itemDiscountJoin();
+        $itemDiscountExpr = $this->itemDiscountExpr();
 
         $buckets = DB::select(
             "SELECT
@@ -261,10 +266,11 @@ class TransactionReportService
                 SUM(CASE WHEN {$refundAmount} > 0.009 THEN 1 ELSE 0 END) AS refunded_transactions,
                 COUNT(o.id) AS transactions,
                 COALESCE(SUM(
-                    COALESCE(o.discount_amount, 0) + COALESCE(o.coupon_discount, 0) + COALESCE(o.loyalty_discount, 0)
+                    COALESCE(o.discount_amount, 0) + COALESCE(o.coupon_discount, 0) + COALESCE(o.loyalty_discount, 0) + {$itemDiscountExpr}
                 ), 0) AS discount
              FROM orders o
              {$refundJoin}
+             {$itemDiscountJoin}
              WHERE o.created_at BETWEEN :start AND :end
              GROUP BY {$groupExpr}
              ORDER BY {$groupExpr} DESC",
@@ -495,5 +501,19 @@ class TransactionReportService
     private function hasVarietyColumn(): bool
     {
         return PosHelpers::columnExists('order_items', 'variety_name');
+    }
+
+    private function itemDiscountJoin(): string
+    {
+        return PosHelpers::columnExists('order_items', 'discount_amount')
+            ? 'LEFT JOIN (SELECT order_id, SUM(COALESCE(discount_amount, 0)) AS item_discount FROM order_items GROUP BY order_id) idisc ON idisc.order_id = o.id'
+            : '';
+    }
+
+    private function itemDiscountExpr(): string
+    {
+        return PosHelpers::columnExists('order_items', 'discount_amount')
+            ? 'COALESCE(idisc.item_discount, 0)'
+            : '0';
     }
 }
