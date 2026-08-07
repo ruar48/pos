@@ -1130,14 +1130,32 @@ class PosReceiptService {
       ..init()
       ..setLineSpacing(24);
 
-    // Plain text for every line, including the store name. Double-height
-    // store name printing was tried per an earlier request, but it read as
-    // oversized/garbled on the printer in use - the layout already
-    // centers/aligns everything itself via padded spaces (see
-    // ThermalReceiptLayout._center/_amountRow), so no ESC formatting bytes
-    // are needed anywhere in the receipt.
-    for (final line in lines) {
-      builder.text(line);
+    // Store name prints larger/bolder (requested per the boss); everything
+    // else stays plain text - the layout already centers/aligns it via
+    // padded spaces (see ThermalReceiptLayout._center/_amountRow).
+    final nameLineCount = layout.storeNameLineCount;
+    for (var i = 0; i < lines.length; i++) {
+      if (i < nameLineCount) {
+        builder.text(
+          lines[i].trim(),
+          center: true,
+          bold: true,
+          doubleHeight: true,
+        );
+        continue;
+      }
+      if (i == nameLineCount) {
+        // Hard reset (full ESC @ re-init, not just the doubleHeight/bold/
+        // center "off" bytes) right after the enlarged header. On the
+        // clone controller in the field, relying on those per-mode off
+        // bytes alone left the printer stuck in double-height state,
+        // which corrupted/truncated everything after it - including the
+        // "WITH PENALTY" footer. A full re-init forces known-good state
+        // regardless of whether the earlier off bytes were honored.
+        builder.init();
+        builder.setLineSpacing(24);
+      }
+      builder.text(lines[i]);
     }
 
     // Feed distance is physical (mm), not just a line count: the cutter
