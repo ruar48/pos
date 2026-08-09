@@ -919,6 +919,9 @@ class AttendanceService
                 $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
                     ->diffInMinutes($reference);
             } elseif ($isToday) {
+                // Live on-duty clock for the attendance board only. Payroll
+                // ignores this span while is_clocked_in is true (see
+                // PayrollService) so a fresh time-in does not invent hours/pay.
                 $reference = Carbon::now('UTC');
                 $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
                     ->diffInMinutes($reference);

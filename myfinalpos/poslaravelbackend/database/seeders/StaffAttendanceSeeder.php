@@ -96,13 +96,17 @@ class StaffAttendanceSeeder extends Seeder
             // Maria absent.
         ]);
 
-        // Day 0 — today: original 4-scenario demo, unchanged so the Daily
-        // board keeps matching the existing walkthrough note below.
+        // Day 0 — today: include an open clock-in (no time-out) so payroll
+        // can be checked against the "kakapasok lang, may total hours/pay na"
+        // bug. Maria is still on duty; others have completed punches.
         $this->seedWeekday($users, $lat, $lng, $today, [
             'ricardo' => [['clock_in', 8, 5], ['clock_out', 11, 45], ['clock_in', 13, 5], ['clock_out', 16, 35]],
             'ana' => [['clock_in', 8, 10], ['clock_out', 11, 50]],
             'pedro' => [['clock_in', 13, 10], ['clock_out', 16, 40]],
-            // Maria absent.
+            // Maria: timed in only — no clock_out. Attendance may show a live
+            // duty clock; payroll must keep today's hours/pay at zero for her
+            // until she times out.
+            'maria' => [['clock_in', 8, 20]],
         ]);
 
         $this->command?->newLine();
@@ -116,10 +120,11 @@ class StaffAttendanceSeeder extends Seeder
                 ['Ricardo Santos', 'Present most days · lunch break on 2 days · forgot to time out 3 days ago'],
                 ['Ana Reyes', 'Present most days · a couple of half-days'],
                 ['Pedro Santos', 'Present about half the week, various AM/PM patterns'],
-                ['Maria Cruz', 'Present on 2 of the 7 days, absent the rest'],
+                ['Maria Cruz', 'TODAY: clocked in at 8:20 with NO time-out (open shift / payroll bug sample) · absent most other days'],
             ],
         );
         $this->command?->line('Open POS admin → Staff → Payroll, set Start to '.$today->copy()->subDays(6)->format('m/d/Y').' and End to '.$today->format('m/d/Y').'.');
+        $this->command?->line('Check Maria Cruz: Total Hours / Total Pay for today must stay 0 until she times out (amber warning expected).');
         $this->command?->line('Re-run: php artisan attendance:sample');
         $this->command?->line('Clear samples: php artisan attendance:sample --clear');
     }

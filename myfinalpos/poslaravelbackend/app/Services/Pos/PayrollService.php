@@ -45,10 +45,18 @@ class PayrollService
                     ];
                 }
 
-                $totals[$userId]['total_minutes'] += (int) ($row['total_minutes'] ?? 0);
+                // Open shifts (timed in, not yet timed out) still report a live
+                // duty span from AttendanceService for the daily board. Payroll
+                // must not treat that as worked time — otherwise staff who just
+                // clocked in already show total hours and pay for the day.
+                $stillOnDuty = ! empty($row['is_clocked_in']);
+                $incompleteDay = $stillOnDuty || ! empty($row['missing_time_out']);
+                $dayMinutes = $incompleteDay ? 0 : (int) ($row['total_minutes'] ?? 0);
+
+                $totals[$userId]['total_minutes'] += $dayMinutes;
                 $totals[$userId]['break_minutes'] += (int) ($row['total_break_minutes'] ?? 0);
 
-                if (! empty($row['missing_time_out'])) {
+                if ($incompleteDay) {
                     $totals[$userId]['has_missing_time_out'] = true;
                     $totals[$userId]['missing_time_out_dates'][] = $date;
                 }

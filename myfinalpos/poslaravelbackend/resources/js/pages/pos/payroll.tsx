@@ -177,7 +177,7 @@ export default function PosPayroll() {
                                                     {row.full_name}
                                                     {row.has_missing_time_out && (
                                                         <span
-                                                            title={`Missing time-out on ${row.missing_time_out_dates.join(', ')} — pay for that day was set to zero until the time-out is corrected.`}
+                                                            title={`Incomplete attendance on ${row.missing_time_out_dates.join(', ')} — hours/pay for that day stay at zero until time-out is recorded.`}
                                                         >
                                                             <AlertTriangle className="size-3.5 text-amber-500" />
                                                         </span>
