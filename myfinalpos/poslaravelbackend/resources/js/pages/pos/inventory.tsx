@@ -252,7 +252,7 @@ function downloadInventoryCsv(rows: InventoryRow[]) {
     const header = [
         'Item',
         'Category',
-        'Unit',
+        'Option',
         'Beginning',
         'Added',
         'Deducted',
@@ -274,7 +274,7 @@ function downloadInventoryCsv(rows: InventoryRow[]) {
             [
                 escape(r.name),
                 escape(r.category),
-                escape(r.unit ?? ''),
+                escape(r.option ?? ''),
                 r.beginning,
                 r.added,
                 r.deducted,
