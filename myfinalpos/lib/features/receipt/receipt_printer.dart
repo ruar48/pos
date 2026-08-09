@@ -424,9 +424,6 @@ class ThermalReceiptLayout {
     }
 
     addCentered(s.storeName);
-    if (s.storeSubtitle.trim().isNotEmpty) {
-      addCentered(s.storeSubtitle.trim());
-    }
     addCentered(kReceiptOwnedOperatedBy);
     if (s.phoneNumber.trim().isNotEmpty) {
       addCentered(s.phoneNumber.trim());
@@ -539,9 +536,6 @@ class ThermalReceiptLayout {
     }
 
     add(s.storeName);
-    if (s.storeSubtitle.trim().isNotEmpty) {
-      add(s.storeSubtitle.trim());
-    }
     add(kReceiptOwnedOperatedBy);
     if (s.phoneNumber.trim().isNotEmpty) {
       add(s.phoneNumber.trim());
@@ -633,19 +627,8 @@ class ThermalReceiptLayout {
   int get storeNameLineCount =>
       _wordWrapLines(data.store.storeName, _safeTextWidth).length;
 
-  /// Number of lines right after the store name that render the subtitle
-  /// (e.g. "AGRICULTURAL AND POULTRY SUPPLY") - 0 when there's no subtitle.
-  /// Lets the ESC/POS builder print just this span in the printer's
-  /// condensed Font B, which is narrower per character than the store name
-  /// / body text's Font A, so a subtitle that's long enough to overflow a
-  /// physical printer's Font-A line width (and get force-wrapped mid-word
-  /// by the printer itself) has a chance to fit on one line at Font B's
-  /// narrower pitch without changing the paper width configuration.
-  int get storeSubtitleLineCount {
-    final subtitle = data.store.storeSubtitle.trim();
-    if (subtitle.isEmpty) return 0;
-    return _wordWrapLines(subtitle, _safeTextWidth).length;
-  }
+  /// The receipt header no longer renders a store subtitle.
+  int get storeSubtitleLineCount => 0;
 
   /// Store name lines wrapped/centered for HALF the normal column count,
   /// pre-padded with spaces the same way [ThermalReceiptLayout._center]
