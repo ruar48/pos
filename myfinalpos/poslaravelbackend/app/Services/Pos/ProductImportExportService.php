@@ -4,6 +4,7 @@ namespace App\Services\Pos;
 
 use App\Support\CatalogStockRevision;
 use App\Support\PosHelpers;
+use App\Support\StockLedger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -386,7 +387,25 @@ class ProductImportExportService
 
                 if ($existing !== null) {
                     $productId = (int) $existing->id;
+                    $previousStock = (int) $existing->stock;
+
                     DB::table('products')->where('id', $productId)->update($payload);
+
+                    $delta = $stock - $previousStock;
+                    if ($delta !== 0) {
+                        StockLedger::record(
+                            productId: $productId,
+                            varietyId: null,
+                            type: 'adjustment',
+                            quantityDelta: (float) $delta,
+                            balanceAfter: (float) $stock,
+                            referenceType: 'import',
+                            referenceId: null,
+                            note: 'Stock updated via bulk import',
+                            userId: $actorUserId,
+                        );
+                    }
+
                     $indexed = (object) [
                         'id' => $productId,
                         'stock' => $stock,
@@ -397,6 +416,21 @@ class ProductImportExportService
                 } else {
                     $payload['created_at'] = $now;
                     $productId = (int) DB::table('products')->insertGetId($payload);
+
+                    if ($stock !== 0) {
+                        StockLedger::record(
+                            productId: $productId,
+                            varietyId: null,
+                            type: 'initial',
+                            quantityDelta: (float) $stock,
+                            balanceAfter: (float) $stock,
+                            referenceType: 'import',
+                            referenceId: null,
+                            note: 'Initial stock via bulk import',
+                            userId: $actorUserId,
+                        );
+                    }
+
                     $indexed = (object) [
                         'id' => $productId,
                         'stock' => $stock,
