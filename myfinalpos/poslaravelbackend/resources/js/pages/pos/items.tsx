@@ -531,14 +531,17 @@ function findMatchingProduct(
     products: PosProduct[],
     name: string,
     category: string,
+    option: string = '',
 ): PosProduct | undefined {
     const normalizedName = name.trim().toLowerCase();
     const normalizedCategory = category.trim();
+    const normalizedOption = option.trim().toLowerCase();
 
     return products.find(
         (product) =>
             product.name.trim().toLowerCase() === normalizedName &&
-            product.category_name === normalizedCategory,
+            product.category_name === normalizedCategory &&
+            (product.option?.trim().toLowerCase() ?? '') === normalizedOption,
     );
 }
 
@@ -870,6 +873,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                     nextProducts,
                     payload.name,
                     payload.category,
+                    payload.option ?? '',
                 );
                 if (existing) {
                     throw new Error(
@@ -1122,7 +1126,12 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                 return false;
             }
 
-            const existing = findMatchingProduct(displayProducts, name, category);
+            const existing = findMatchingProduct(
+                displayProducts,
+                name,
+                category,
+                draft.option,
+            );
             if (existing) {
                 toast.error('This item already exists');
                 return false;
@@ -1131,7 +1140,9 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             const duplicatePending = pendingCreates.some(
                 (item) =>
                     item.name.trim().toLowerCase() === name.toLowerCase() &&
-                    item.category.trim() === category,
+                    item.category.trim() === category &&
+                    item.option.trim().toLowerCase() ===
+                        draft.option.trim().toLowerCase(),
             );
             if (duplicatePending) {
                 toast.error('This item is already in unsaved rows');
@@ -1161,7 +1172,12 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             return;
         }
 
-        const existing = findMatchingProduct(displayProducts, name, category);
+        const existing = findMatchingProduct(
+            displayProducts,
+            name,
+            category,
+            newProductDraft.option,
+        );
         if (existing) {
             return;
         }
