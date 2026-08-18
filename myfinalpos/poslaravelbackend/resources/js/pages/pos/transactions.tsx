@@ -27,6 +27,37 @@ import {
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 
+/** Server caps per_page at 100 (see TransactionReportService); export walks
+ * every page at that ceiling instead of relying on whatever page/perPage
+ * the table happens to be showing, so CSV export covers the full date
+ * range, not just what's currently on screen. */
+const EXPORT_PAGE_SIZE = 100;
+
+async function fetchAllTransactionRows(options: {
+    view: TransactionView;
+    start: string;
+    end: string;
+    search?: string;
+}): Promise<(TransactionOrderRow | TransactionPeriodRow)[]> {
+    const rows: (TransactionOrderRow | TransactionPeriodRow)[] = [];
+    let page = 1;
+
+    for (;;) {
+        const result = await fetchTransactionReport({
+            ...options,
+            page,
+            perPage: EXPORT_PAGE_SIZE,
+        });
+        rows.push(...result.rows);
+        if (page >= (result.pagination.total_pages || 1)) {
+            break;
+        }
+        page += 1;
+    }
+
+    return rows;
+}
+
 const TABS: { key: TransactionView; label: string; icon: LucideIcon }[] = [
     { key: 'details', label: 'Details', icon: ArrowLeftRight },
     { key: 'transactions', label: 'Transactions', icon: ArrowLeftRight },
@@ -346,6 +377,7 @@ export default function PosTransactions() {
     const [perPage, setPerPage] = useState(25);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [data, setData] = useState<TransactionReportData | null>(null);
     const [expandedId, setExpandedId] = useState<number | null>(null);
 
@@ -395,92 +427,107 @@ export default function PosTransactions() {
         setExpandedId(null);
     };
 
-    const handleDownload = () => {
+    const handleDownload = async () => {
         if (!data) return;
-        if (tab === 'details' || tab === 'transactions') {
-            const rows = data.rows.filter(isOrderRow);
-            downloadCsv(
-                `transactions-${tab}-${start}-${end}.csv`,
-                [
-                    'Receipt',
-                    'Date',
-                    'Time',
-                    'Cashier',
-                    'Customer',
-                    'Payment',
-                    'Total',
-                    'Refunded',
-                    'Discount',
-                    'Costs',
-                    'Profits',
-                    'Items',
-                    'Status',
-                ],
-                rows.map((row) => [
-                    row.receipt_number,
-                    row.date,
-                    row.time,
-                    row.cashier_name,
-                    row.customer_name,
-                    paymentCsvLabel(row),
-                    row.status === 'refunded' && row.total < 0.01
-                        ? 'Refunded'
-                        : row.total,
-                    row.refunded_amount,
-                    row.discount,
-                    row.status === 'refunded' && row.costs < 0.01
-                        ? 'Refunded'
-                        : row.costs,
-                    row.profits,
-                    row.items_count,
-                    row.status,
-                ]),
+        setExporting(true);
+        try {
+            const allRows = await fetchAllTransactionRows({
+                view: tab,
+                start,
+                end,
+                search: tab === 'details' || tab === 'transactions' ? search : undefined,
+            });
+            if (tab === 'details' || tab === 'transactions') {
+                const rows = allRows.filter(isOrderRow);
+                downloadCsv(
+                    `transactions-${tab}-${start}-${end}.csv`,
+                    [
+                        'Receipt',
+                        'Date',
+                        'Time',
+                        'Cashier',
+                        'Customer',
+                        'Payment',
+                        'Total',
+                        'Refunded',
+                        'Discount',
+                        'Costs',
+                        'Profits',
+                        'Items',
+                        'Status',
+                    ],
+                    rows.map((row) => [
+                        row.receipt_number,
+                        row.date,
+                        row.time,
+                        row.cashier_name,
+                        row.customer_name,
+                        paymentCsvLabel(row),
+                        row.status === 'refunded' && row.total < 0.01
+                            ? 'Refunded'
+                            : row.total,
+                        row.refunded_amount,
+                        row.discount,
+                        row.status === 'refunded' && row.costs < 0.01
+                            ? 'Refunded'
+                            : row.costs,
+                        row.profits,
+                        row.items_count,
+                        row.status,
+                    ]),
+                );
+            } else {
+                const rows = allRows as TransactionPeriodRow[];
+                downloadCsv(
+                    `transactions-${tab}-${start}-${end}.csv`,
+                    [
+                        'Period',
+                        'Gross Sales',
+                        'Refunded',
+                        'Net Total',
+                        'Transactions',
+                        'Refunded Txns',
+                        'Items',
+                        'Discount',
+                        'Costs',
+                        'Expenses',
+                        'Profits',
+                        'Bank Transfer',
+                        'Best Seller',
+                    ],
+                    rows.map((row) => [
+                        row.label,
+                        row.gross_total,
+                        row.refunded_amount,
+                        shouldShowRefunded(row.status, row.total)
+                            ? 'Refunded'
+                            : row.total,
+                        row.transactions,
+                        row.refunded_transactions,
+                        row.items,
+                        row.discount,
+                        shouldShowRefunded(row.status, row.costs)
+                            ? 'Refunded'
+                            : row.costs,
+                        row.expenses,
+                        shouldShowRefunded(row.status, row.profits)
+                            ? 'Refunded'
+                            : row.profits,
+                        shouldShowRefunded(row.status, row.bank_transfer)
+                            ? 'Refunded'
+                            : row.bank_transfer,
+                        row.best_seller,
+                    ]),
+                );
+            }
+            toast.success('CSV downloaded');
+        } catch (error) {
+            toast.error(
+                error instanceof Error ? error.message : 'Failed to export CSV',
             );
-        } else {
-            const rows = data.rows as TransactionPeriodRow[];
-            downloadCsv(
-                `transactions-${tab}-${start}-${end}.csv`,
-                [
-                    'Period',
-                    'Gross Sales',
-                    'Refunded',
-                    'Net Total',
-                    'Transactions',
-                    'Refunded Txns',
-                    'Items',
-                    'Discount',
-                    'Costs',
-                    'Expenses',
-                    'Profits',
-                    'Bank Transfer',
-                    'Best Seller',
-                ],
-                rows.map((row) => [
-                    row.label,
-                    row.gross_total,
-                    row.refunded_amount,
-                    shouldShowRefunded(row.status, row.total)
-                        ? 'Refunded'
-                        : row.total,
-                    row.transactions,
-                    row.refunded_transactions,
-                    row.items,
-                    row.discount,
-                    shouldShowRefunded(row.status, row.costs)
-                        ? 'Refunded'
-                        : row.costs,
-                    row.expenses,
-                    shouldShowRefunded(row.status, row.profits)
-                        ? 'Refunded'
-                        : row.profits,
-                    shouldShowRefunded(row.status, row.bank_transfer)
-                        ? 'Refunded'
-                        : row.bank_transfer,
-                    row.best_seller,
-                ]),
-            );
+        } finally {
+            setExporting(false);
         }
-        toast.success('CSV downloaded');
     };
 
     const rowsMatchView = data?.view === tab;
@@ -522,10 +569,14 @@ export default function PosTransactions() {
                                 variant="outline"
                                 size="sm"
                                 onClick={handleDownload}
-                                disabled={!data || data.rows.length === 0}
+                                disabled={!data || data.rows.length === 0 || exporting}
                             >
-                                <Download className="size-4" />
-                                Download
+                                {exporting ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                    <Download className="size-4" />
+                                )}
+                                {exporting ? 'Exporting…' : 'Download'}
                             </Button>
                         </>
                     }

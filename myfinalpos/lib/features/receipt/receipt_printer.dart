@@ -103,7 +103,8 @@ class ReceiptStoreConfig {
       storeName: prefs.getString('store_name') ?? defaults.storeName,
       storeSubtitle:
           prefs.getString('store_subtitle') ?? defaults.storeSubtitle,
-      phoneNumber: prefs.getString('store_phone_number') ?? defaults.phoneNumber,
+      phoneNumber:
+          prefs.getString('store_phone_number') ?? defaults.phoneNumber,
       addressLine1:
           prefs.getString('store_address_line1') ?? defaults.addressLine1,
       addressLine2:
@@ -166,8 +167,7 @@ class ReceiptStoreConfig {
       storeName: (json['store_name'] ?? defaults.storeName).toString(),
       storeSubtitle:
           (json['store_subtitle'] ?? defaults.storeSubtitle).toString(),
-      phoneNumber:
-          (json['phone_number'] ?? defaults.phoneNumber).toString(),
+      phoneNumber: (json['phone_number'] ?? defaults.phoneNumber).toString(),
       addressLine1: (json['address_line1'] ?? defaults.addressLine1).toString(),
       addressLine2: (json['address_line2'] ?? defaults.addressLine2).toString(),
       tin: (json['tin'] ?? defaults.tin).toString(),
@@ -424,6 +424,7 @@ class ThermalReceiptLayout {
     }
 
     addCentered(s.storeName);
+    addCentered(s.storeSubtitle);
     addCentered(kReceiptOwnedOperatedBy);
     if (s.phoneNumber.trim().isNotEmpty) {
       addCentered(s.phoneNumber.trim());
@@ -536,6 +537,7 @@ class ThermalReceiptLayout {
     }
 
     add(s.storeName);
+    add(s.storeSubtitle);
     add(kReceiptOwnedOperatedBy);
     if (s.phoneNumber.trim().isNotEmpty) {
       add(s.phoneNumber.trim());
@@ -627,31 +629,8 @@ class ThermalReceiptLayout {
   int get storeNameLineCount =>
       _wordWrapLines(data.store.storeName, _safeTextWidth).length;
 
-  /// The receipt header no longer renders a store subtitle.
-  int get storeSubtitleLineCount => 0;
-
-  /// Store name lines wrapped/centered for HALF the normal column count,
-  /// pre-padded with spaces the same way [ThermalReceiptLayout._center]
-  /// pads normal lines. This only exists for the ESC/POS double-width store
-  /// name: the printer's double-width mode doubles the physical width of
-  /// every glyph it prints - including plain space characters - so text
-  /// centered/wrapped against the full column count would print at roughly
-  /// twice the paper's physical width and run off the edge. Wrapping
-  /// against half the columns first means doubling each glyph lands the
-  /// text back at the paper's actual width, correctly centered.
-  ///
-  /// Returns null if the name doesn't wrap to the same number of lines at
-  /// half width as it does at full width (e.g. a long store name) - the
-  /// caller should fall back to normal-width bold text in that case rather
-  /// than risk a wrapped/overflowing double-width line.
-  List<String>? get storeNameDoubleWidthLines {
-    final halfWidth = (_safeTextWidth / 2).floor().clamp(8, 64);
-    final wrapped = _wordWrapLines(data.store.storeName, halfWidth);
-    if (wrapped.length != storeNameLineCount) return null;
-    return [
-      for (final line in wrapped) _centerWithin(line, halfWidth),
-    ];
-  }
+  int get storeSubtitleLineCount =>
+      _wordWrapLines(data.store.storeSubtitle, _safeTextWidth).length;
 
   static void _addReceiptFooter(
     void Function(String? line) add, {
@@ -854,7 +833,7 @@ class ThermalReceiptLayout {
   }
 
   /// Matches the client's hand-drawn layout: product name followed by
-  /// "#price x qty" on the same line when it fits, with the amount at the
+  /// "@price x qty" on the same line when it fits, with the amount at the
   /// far right; falls back to the meta+amount on its own line when the name
   /// is too long. The variety/unit (e.g. "- 1000 ML") always sits indented
   /// on its own line below - never combined with the name/meta line.
@@ -863,7 +842,8 @@ class ThermalReceiptLayout {
   /// " - " recovers them here.
   List<String> _formatItemLines(ReceiptLineItem item) {
     final amount = _money(item.total);
-    final meta = '#${_formatUnitPrice(item.unitPrice)}x${formatQuantity(item.quantity)}';
+    final meta =
+        '@${_formatUnitPrice(item.unitPrice)}x${formatQuantity(item.quantity)}';
     final rawName = item.name.trim().isEmpty ? 'Item' : item.name.trim();
     final result = <String>[];
 
@@ -933,7 +913,8 @@ class ThermalReceiptLayout {
         : null;
 
     result.addAll(_wordWrapLines(baseName, kThermalWidth));
-    result.add(_amountRow('x${formatQuantity(item.quantity)}', money(-item.amount)));
+    result.add(
+        _amountRow('x${formatQuantity(item.quantity)}', money(-item.amount)));
     if (variety != null && variety.isNotEmpty) {
       result.addAll(_wordWrapLines('- $variety', _safeTextWidth));
     }
@@ -942,11 +923,27 @@ class ThermalReceiptLayout {
   }
 
   static const _weekdayNames = [
-    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun'
   ];
   static const _monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec'
   ];
 
   /// e.g. "10:23am, Wed 5 Aug 2026" — matches the client's hand-drawn
@@ -1179,39 +1176,16 @@ class PosReceiptService {
       ..selectFontA()
       ..setLineSpacing(24);
 
-    // Store name prints bold (requested per the boss); everything else
-    // stays plain text - the layout already centers/aligns it via padded
-    // spaces (see ThermalReceiptLayout._center/_amountRow). Double-height
-    // sizing was tried (twice, with two different mode-reset strategies)
-    // but this clone controller never reliably exited that mode - it left
-    // every line after the header rendering at a shrunk effective char
-    // width, breaking their space-padded centering and even auto-wrapping
-    // mid-word. Bold-only avoids touching character pitch at all, so
-    // there's nothing to leak into the rest of the receipt.
+    // Store name and subtitle both print small (matches the client's
+    // original small-header receipt) - everything else stays plain text.
+    // The layout already centers/aligns it via padded spaces (see
+    // ThermalReceiptLayout._center/_amountRow).
     final nameLineCount = layout.storeNameLineCount;
     final subtitleLineCount = layout.storeSubtitleLineCount;
     final subtitleStart = nameLineCount;
     final subtitleEnd = subtitleStart + subtitleLineCount;
-    // Falls back to null (plain bold, no size change) when the store name
-    // doesn't cleanly wrap to the same line count at half width - see
-    // storeNameDoubleWidthLines for why double-width needs its own
-    // half-width wrap/centering rather than reusing `lines`.
-    final doubleWidthNameLines = layout.storeNameDoubleWidthLines;
     for (var i = 0; i < lines.length; i++) {
-      if (i < nameLineCount) {
-        // Keep the same manual space-padding centering as every other line
-        // (see ThermalReceiptLayout._center) instead of trimming it and
-        // asking the printer to center via ESC a 1 - on this clone
-        // controller, engine-side centering under bold used a different
-        // effective column width than the padding math, so the bold store
-        // name landed at a different horizontal offset than the line right
-        // below it (e.g. the subtitle), reading as misaligned.
-        if (doubleWidthNameLines != null) {
-          builder.text(doubleWidthNameLines[i], bold: true, doubleWidth: true);
-        } else {
-          builder.text(lines[i], bold: true);
-        }
-      } else if (i >= subtitleStart && i < subtitleEnd) {
+      if (i < subtitleEnd) {
         // Subtitle prints in condensed Font B (see _EscPosBuilder.text) so a
         // subtitle long enough to overflow a physical printer's Font-A line
         // width fits on one line instead of getting force-wrapped mid-word.
@@ -1262,8 +1236,7 @@ class PosReceiptService {
                     fontSize: 9,
                     font: pw.Font.courier(),
                     lineSpacing: 1.2,
-                    fontWeight: line.contains(receipt.store.storeName) ||
-                            ThermalReceiptLayout._isGrandTotalLine(
+                    fontWeight: ThermalReceiptLayout._isGrandTotalLine(
                               line,
                               layout.formatMoney(receipt.total),
                             ) ||

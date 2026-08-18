@@ -111,6 +111,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   String _settingsSyncRevision = '0';
   bool _settingsSyncInFlight = false;
   bool _catalogSyncInFlight = false;
+  bool _catalogWatchLoopActive = false;
   bool _productTapInFlight = false;
   bool _offlineSyncInFlight = false;
   int pendingOfflineCount = 0;
@@ -783,8 +784,42 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     });
     _startMonitorPresenceHeartbeat();
     unawaited(_refreshStockSyncRevision());
+    _startCatalogWatchLoop();
     if (PosConnectivity.instance.isOnline) {
       unawaited(_syncPendingOfflineOrders());
+    }
+  }
+
+  void _startCatalogWatchLoop() {
+    if (_catalogWatchLoopActive) return;
+    _catalogWatchLoopActive = true;
+    unawaited(_runCatalogWatchLoop());
+  }
+
+  Future<void> _runCatalogWatchLoop() async {
+    while (mounted) {
+      if (isOfflineMode) {
+        await Future<void>.delayed(const Duration(seconds: 5));
+        continue;
+      }
+
+      try {
+        final result = await api.watchCatalogSync(
+          stockRevision: _stockSyncRevision,
+          settingsRevision: _settingsSyncRevision,
+        );
+        if (!mounted) return;
+
+        if (result.stockChanged) {
+          unawaited(_syncProductStock());
+        }
+        if (result.settingsChanged) {
+          unawaited(_syncAppSettings());
+        }
+      } catch (_) {
+        // Best-effort live catalog watch; retry after a short backoff.
+        await Future<void>.delayed(const Duration(seconds: 3));
+      }
     }
   }
 
