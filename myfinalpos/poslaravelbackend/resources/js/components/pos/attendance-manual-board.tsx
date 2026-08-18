@@ -1,17 +1,30 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { Camera, Coffee, Loader2, LogIn, LogOut, RefreshCw, X } from 'lucide-react';
+import {
+    Camera,
+    Clock,
+    Coffee,
+    Loader2,
+    LogIn,
+    LogOut,
+    RefreshCw,
+    X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import {
     clockStaffAttendance,
+    manualClockOutStaffAttendance,
     type AttendanceRow,
 } from '@/lib/staff-api';
 
@@ -117,12 +130,14 @@ function actionCaption(label: string): string {
 type Props = {
     attendance: AttendanceRow[];
     clockEnabled: boolean;
+    date: string;
     onClocked: () => void | Promise<void>;
 };
 
 export function AttendanceManualBoard({
     attendance,
     clockEnabled,
+    date,
     onClocked,
 }: Props) {
     const [punchingUserId, setPunchingUserId] = useState<number | null>(null);
@@ -134,6 +149,51 @@ export function AttendanceManualBoard({
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    const [manualTarget, setManualTarget] = useState<AttendanceRow | null>(
+        null,
+    );
+    const [manualDate, setManualDate] = useState('');
+    const [manualTime, setManualTime] = useState('');
+    const [manualSaving, setManualSaving] = useState(false);
+
+    const openManualClockOut = (row: AttendanceRow) => {
+        setManualTarget(row);
+        setManualDate(date);
+        setManualTime('');
+    };
+
+    const closeManualClockOut = () => {
+        setManualTarget(null);
+        setManualDate('');
+        setManualTime('');
+    };
+
+    const saveManualClockOut = async () => {
+        if (!manualTarget || manualDate === '' || manualTime === '') {
+            toast.error('Pick a date and time');
+            return;
+        }
+
+        setManualSaving(true);
+        try {
+            await manualClockOutStaffAttendance({
+                user_id: manualTarget.user_id,
+                date: manualDate,
+                time: manualTime,
+                branch_id: manualTarget.branch_id ?? undefined,
+            });
+            toast.success(`Time-out recorded · ${manualTarget.full_name}`);
+            closeManualClockOut();
+            await onClocked();
+        } catch (err) {
+            toast.error(
+                err instanceof Error ? err.message : 'Could not record time-out',
+            );
+        } finally {
+            setManualSaving(false);
+        }
+    };
 
     const stopCamera = useCallback(() => {
         streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -294,6 +354,7 @@ export function AttendanceManualBoard({
                             punchEnabled={clockEnabled}
                             onPunch={() => void openPunch(row)}
                             onBreak={() => void openBreak(row)}
+                            onManualClockOut={() => openManualClockOut(row)}
                         />
                     ))}
                 </div>
@@ -413,6 +474,65 @@ export function AttendanceManualBoard({
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <Dialog
+                open={manualTarget !== null}
+                onOpenChange={(open) => {
+                    if (!open) closeManualClockOut();
+                }}
+            >
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Record Time-Out</DialogTitle>
+                        <DialogDescription>
+                            {manualTarget?.full_name} forgot to time out. Pick the
+                            date and the actual time they left.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-2">
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="manual-clockout-date">Date</Label>
+                            <Input
+                                id="manual-clockout-date"
+                                type="date"
+                                value={manualDate}
+                                max={date}
+                                onChange={(e) => setManualDate(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="manual-clockout-time">Time out</Label>
+                            <Input
+                                id="manual-clockout-time"
+                                type="time"
+                                value={manualTime}
+                                onChange={(e) => setManualTime(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={closeManualClockOut}
+                            disabled={manualSaving}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => void saveManualClockOut()}
+                            disabled={manualSaving}
+                        >
+                            {manualSaving ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : null}
+                            Save
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
@@ -423,12 +543,14 @@ function ManualAttendanceRow({
     punchEnabled,
     onPunch,
     onBreak,
+    onManualClockOut,
 }: {
     row: AttendanceRow;
     busy: boolean;
     punchEnabled: boolean;
     onPunch: () => void;
     onBreak: () => void;
+    onManualClockOut: () => void;
 }) {
     const enabled = punchEnabled && canPunch(row) && !busy;
     const label = punchButtonLabel(row);
@@ -446,8 +568,18 @@ function ManualAttendanceRow({
     return (
         <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap">
             <div className="min-w-[10rem] flex-1">
-                <p className="truncate text-sm font-extrabold uppercase tracking-wide text-foreground">
+                <p className="flex items-center gap-1.5 truncate text-sm font-extrabold uppercase tracking-wide text-foreground">
                     {row.full_name}
+                    {row.is_clocked_in && (
+                        <button
+                            type="button"
+                            title="Forgot to time out — click to manually record it"
+                            onClick={onManualClockOut}
+                            className="rounded-full p-0.5 hover:bg-amber-500/10"
+                        >
+                            <Clock className="size-3.5 text-amber-500" />
+                        </button>
+                    )}
                 </p>
                 <p className="text-xs text-muted-foreground">
                     {row.total_hours_label

@@ -541,6 +541,7 @@ export default function PosStaff() {
                         <AttendanceManualBoard
                             attendance={attendance}
                             clockEnabled={isToday}
+                            date={date}
                             onClocked={load}
                         />
                     )
