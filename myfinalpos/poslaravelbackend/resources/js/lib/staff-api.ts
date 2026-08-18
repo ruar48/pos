@@ -95,6 +95,7 @@ export type AttendanceRow = {
     lunch_out_photo_url?: string | null;
     afternoon_in_photo_url?: string | null;
     day_out_photo_url?: string | null;
+    day_out_is_manual?: boolean;
     is_on_break: boolean;
     break_start_at: string | null;
     break_end_at: string | null;

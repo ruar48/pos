@@ -841,10 +841,17 @@ class AttendanceService
                 ? (string) $event->photo_url
                 : null;
 
+            // Flags a punch recorded by an admin via "Fix Time-Out" (see
+            // clock()'s $adminManual device_info) instead of the staff
+            // member's own selfie punch - no photo exists for these, so the
+            // board shows a manual-entry marker in place of the selfie.
+            $isManual = (string) ($event->device_info ?? '') === 'Web Admin Manual';
+
             $punchTimes[] = [
                 'type' => $type,
                 'at' => $at,
                 'photo_url' => $eventPhoto,
+                'is_manual' => $isManual,
             ];
 
 
@@ -857,7 +864,7 @@ class AttendanceService
 
                 }
 
-                $openIn = Carbon::parse($at);
+                $openIn = Carbon::parse($at, 'UTC');
 
             }
 
@@ -867,7 +874,7 @@ class AttendanceService
 
                 $clockOut = $at;
 
-                $totalMinutes += (int) $openIn->diffInMinutes(Carbon::parse($at));
+                $totalMinutes += (int) $openIn->diffInMinutes(Carbon::parse($at, 'UTC'));
 
                 $openIn = null;
 
@@ -875,7 +882,7 @@ class AttendanceService
 
             if ($type === 'break_in') {
 
-                $openBreakStart = Carbon::parse($at);
+                $openBreakStart = Carbon::parse($at, 'UTC');
 
                 $breakStartAt = $at;
 
@@ -885,7 +892,7 @@ class AttendanceService
 
             if ($type === 'break_out' && $openBreakStart !== null) {
 
-                $totalBreakMinutes += (int) $openBreakStart->diffInMinutes(Carbon::parse($at));
+                $totalBreakMinutes += (int) $openBreakStart->diffInMinutes(Carbon::parse($at, 'UTC'));
 
                 $breakEndAt = $at;
 
@@ -939,28 +946,31 @@ class AttendanceService
         // instead and flag it so payroll/attendance can surface a warning.
         $isToday = Carbon::parse($date, self::DISPLAY_TIMEZONE)->isToday();
         $missingTimeOut = false;
+        $isLiveSpan = false;
 
         if (
             $totalMinutes === 0
             && $punchState['morning_in_at'] !== null
             && $punchState['day_out_at'] !== null
         ) {
-            $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
-                ->diffInMinutes(Carbon::parse($punchState['day_out_at']));
+            $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'], 'UTC')
+                ->diffInMinutes(Carbon::parse($punchState['day_out_at'], 'UTC'));
         } elseif ($isClockedIn && $punchState['morning_in_at'] !== null) {
             // While on break, freeze at the moment the break started instead
             // of "now" - the duty clock pauses during break and resumes once
             // break_out is punched.
             if ($isOnBreak && $openBreakStart !== null) {
+                $isLiveSpan = true;
                 $reference = $openBreakStart;
-                $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
+                $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'], 'UTC')
                     ->diffInMinutes($reference);
             } elseif ($isToday) {
                 // Live on-duty clock for the attendance board only. Payroll
                 // ignores this span while is_clocked_in is true (see
                 // PayrollService) so a fresh time-in does not invent hours/pay.
+                $isLiveSpan = true;
                 $reference = Carbon::now('UTC');
-                $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'])
+                $totalMinutes = (int) Carbon::parse($punchState['morning_in_at'], 'UTC')
                     ->diffInMinutes($reference);
             } else {
                 // Past day with a dangling clock_in and no time-out: pay for
@@ -973,11 +983,24 @@ class AttendanceService
 
         // Break time is unpaid/non-working time - never counted toward
         // worked hours (attendance duty span, payroll totals, etc.). A flat
-        // 1 hour is always deducted for any day with worked time, regardless
-        // of the actual break_in/break_out punches.
+        // 1 hour is deducted for any COMPLETED day that's long enough for a
+        // lunch break to plausibly have happened, regardless of the actual
+        // break_in/break_out punches. Below that threshold (a short shift,
+        // or a manually-corrected time-out only minutes after clock-in), no
+        // lunch could have realistically been taken, so deducting one would
+        // just zero out - or go negative and clamp to zero - a real short
+        // span. This is also skipped for a live in-progress span (still
+        // clocked in today) - deducting a lunch hour that hasn't happened
+        // yet made a fresh clock-in show "0 hour 0 minute" for the entire
+        // first hour of every shift, which reads as broken to whoever's
+        // watching the board. The live span only ever feeds the attendance
+        // board (see "Payroll ignores this span" above), so showing the raw
+        // elapsed time here doesn't affect pay.
         // The 24h cap is a defensive backstop against any future edge case
         // producing an out-of-range span for a single calendar day.
-        $breakDeductionMinutes = $totalMinutes > 0 ? 60 : 0;
+        $breakDeductionMinutes = ! $isLiveSpan && $totalMinutes >= self::MIN_MINUTES_FOR_BREAK_DEDUCTION
+            ? 60
+            : 0;
         $totalMinutes = min(24 * 60, max(0, $totalMinutes - $breakDeductionMinutes));
 
         $sessionAttendance = $this->evaluateSessionAttendance(
@@ -1021,6 +1044,8 @@ class AttendanceService
             'afternoon_in_photo_url' => $punchState['afternoon_in_photo_url'] ?? null,
 
             'day_out_photo_url' => $punchState['day_out_photo_url'] ?? null,
+
+            'day_out_is_manual' => $punchState['day_out_is_manual'] ?? false,
 
             'punch_count' => $punchState['punch_count'],
 
@@ -1110,6 +1135,7 @@ class AttendanceService
         $lunchOutPhoto = null;
         $afternoonInPhoto = null;
         $dayOutPhoto = null;
+        $dayOutIsManual = false;
 
         // Simple Time In / Time Out: first clock_in = morning_in, first clock_out = day_out.
         foreach ($punches as $punch) {
@@ -1123,6 +1149,7 @@ class AttendanceService
             } elseif (($punch['type'] ?? '') === 'clock_out' && $dayOut === null) {
                 $dayOut = $punch['at'];
                 $dayOutPhoto = $photo;
+                $dayOutIsManual = (bool) ($punch['is_manual'] ?? false);
             }
         }
 
@@ -1154,6 +1181,7 @@ class AttendanceService
             'lunch_out_photo_url' => $lunchOutPhoto,
             'afternoon_in_photo_url' => $afternoonInPhoto,
             'day_out_photo_url' => $dayOutPhoto,
+            'day_out_is_manual' => $dayOutIsManual,
         ];
     }
 
@@ -1438,6 +1466,10 @@ class AttendanceService
 
 
     private const DISPLAY_TIMEZONE = 'Asia/Manila';
+
+    // A lunch break only plausibly happens on a shift this long or longer;
+    // see the flat break deduction in duty-span calculation above.
+    private const MIN_MINUTES_FOR_BREAK_DEDUCTION = 4 * 60;
 
     /**
      * @return array{0: string, 1: string}

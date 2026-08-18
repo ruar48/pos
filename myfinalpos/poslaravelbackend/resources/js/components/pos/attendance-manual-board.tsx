@@ -568,18 +568,8 @@ function ManualAttendanceRow({
     return (
         <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap">
             <div className="min-w-[10rem] flex-1">
-                <p className="flex items-center gap-1.5 truncate text-sm font-extrabold uppercase tracking-wide text-foreground">
+                <p className="truncate text-sm font-extrabold uppercase tracking-wide text-foreground">
                     {row.full_name}
-                    {row.is_clocked_in && (
-                        <button
-                            type="button"
-                            title="Forgot to time out — click to manually record it"
-                            onClick={onManualClockOut}
-                            className="rounded-full p-0.5 hover:bg-amber-500/10"
-                        >
-                            <Clock className="size-3.5 text-amber-500" />
-                        </button>
-                    )}
                 </p>
                 <p className="text-xs text-muted-foreground">
                     {row.total_hours_label
@@ -610,7 +600,18 @@ function ManualAttendanceRow({
             <LabeledPhotoCircle
                 label="Out"
                 src={outUrl}
-                fallback={<LogOut className="size-4 opacity-40" />}
+                fallback={
+                    row.day_out_is_manual ? (
+                        <span
+                            title="Time-out fixed by admin — no selfie taken"
+                            className="text-[11px] font-extrabold text-amber-600"
+                        >
+                            FT
+                        </span>
+                    ) : (
+                        <LogOut className="size-4 opacity-40" />
+                    )
+                }
             />
 
             <div className="flex shrink-0 flex-col items-center gap-1">
@@ -651,9 +652,30 @@ function ManualAttendanceRow({
                 </span>
             </div>
 
+            {row.is_clocked_in && (
+                <div className="flex shrink-0 flex-col items-center gap-1">
+                    <button
+                        type="button"
+                        title="Forgot to time out — click to manually record it"
+                        onClick={onManualClockOut}
+                        className="inline-flex size-16 animate-pulse items-center justify-center rounded-full border-2 border-amber-500 bg-amber-50 text-center text-amber-700 shadow-sm transition hover:bg-amber-100"
+                    >
+                        <Clock className="size-6" />
+                    </button>
+                    <span className="text-[11px] font-bold text-amber-600">
+                        Fix Time-Out
+                    </span>
+                </div>
+            )}
+
             <div className="grid min-w-[12rem] flex-1 grid-cols-2 gap-2">
                 <SelfieMeta label="Selfie-In" time={inTime} tone="teal" />
-                <SelfieMeta label="Selfie-Out" time={outTime} tone="orange" />
+                <SelfieMeta
+                    label="Selfie-Out"
+                    time={outTime}
+                    tone="orange"
+                    note={row.day_out_is_manual ? 'Fixed by admin' : undefined}
+                />
                 {(breakInPhotoUrl || breakOutPhotoUrl || row.is_on_break) && (
                     <>
                         <SelfieMeta label="Break-In" time={breakInAt} tone="amber" />
@@ -708,10 +730,12 @@ function SelfieMeta({
     label,
     time,
     tone,
+    note,
 }: {
     label: string;
     time: string;
     tone: 'teal' | 'orange' | 'amber';
+    note?: string;
 }) {
     const hasTime = time !== '—';
     return (
@@ -741,6 +765,9 @@ function SelfieMeta({
             </p>
             {hasTime ? (
                 <p className="text-xs font-semibold text-muted-foreground">{time}</p>
+            ) : null}
+            {note ? (
+                <p className="text-[11px] font-bold text-amber-600">{note}</p>
             ) : null}
         </div>
     );
