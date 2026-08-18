@@ -149,12 +149,12 @@ class _InventoryManagementContentState extends State<InventoryManagementContent>
     return null;
   }
 
-  ({int beginning, int added, int deducted, int ending, double valueCost, double valueRetail})
+  ({double beginning, double added, double deducted, double ending, double valueCost, double valueRetail})
       _totalsForRows(List<InventoryReportRow> rows) {
-    var beginning = 0;
-    var added = 0;
-    var deducted = 0;
-    var ending = 0;
+    var beginning = 0.0;
+    var added = 0.0;
+    var deducted = 0.0;
+    var ending = 0.0;
     var valueCost = 0.0;
     var valueRetail = 0.0;
     for (final row in rows) {
@@ -185,7 +185,7 @@ class _InventoryManagementContentState extends State<InventoryManagementContent>
     ];
     for (final row in rows) {
       lines.add(
-        '"${row.name}","${row.sku ?? ''}","${row.category}",${row.beginning},${row.added},${row.deducted},${row.liveStock},${row.valueRetail.toStringAsFixed(2)}',
+        '"${row.name}","${row.sku ?? ''}","${row.category}",${formatQuantity(row.beginning)},${formatQuantity(row.added)},${formatQuantity(row.deducted)},${formatQuantity(row.liveStock)},${row.valueRetail.toStringAsFixed(2)}',
       );
     }
     Clipboard.setData(ClipboardData(text: lines.join('\n')));
@@ -317,7 +317,7 @@ class _InventoryManagementContentState extends State<InventoryManagementContent>
               ),
               AgriStatCard(
                 label: 'Units Sold',
-                value: '${totals?.sold ?? 0}',
+                value: formatQuantity(totals?.sold ?? 0),
                 icon: Icons.payments_outlined,
                 tone: AgriStatTone.positive,
                 hint: rangeKey == _InventoryRange.today ||
@@ -491,13 +491,13 @@ class _InventoryManagementContentState extends State<InventoryManagementContent>
                     AgriTableCell(
                       width: colNum,
                       align: Alignment.centerRight,
-                      child: Text('${row.beginning}'),
+                      child: Text(formatQuantity(row.beginning)),
                     ),
                     AgriTableCell(
                       width: colNum,
                       align: Alignment.centerRight,
                       child: Text(
-                        '${row.added}',
+                        formatQuantity(row.added),
                         style: const TextStyle(
                           color: AppColors.green,
                           fontWeight: FontWeight.w700,
@@ -508,7 +508,9 @@ class _InventoryManagementContentState extends State<InventoryManagementContent>
                       width: colNum,
                       align: Alignment.centerRight,
                       child: Text(
-                        row.deducted > 0 ? '-${row.deducted}' : '${row.deducted}',
+                        row.deducted > 0
+                            ? '-${formatQuantity(row.deducted)}'
+                            : formatQuantity(row.deducted),
                         style: const TextStyle(
                           color: AppColors.orange,
                           fontWeight: FontWeight.w700,
@@ -519,7 +521,7 @@ class _InventoryManagementContentState extends State<InventoryManagementContent>
                       width: colNum,
                       align: Alignment.centerRight,
                       child: Text(
-                        '${row.liveStock} ${row.unit ?? 'pc'}',
+                        '${formatQuantity(row.liveStock)} ${row.unit ?? 'pc'}',
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
@@ -600,13 +602,13 @@ class _InventoryManagementContentState extends State<InventoryManagementContent>
                       AgriTableCell(
                         width: colNum,
                         align: Alignment.centerRight,
-                        child: Text('${filteredTotals.beginning}'),
+                        child: Text(formatQuantity(filteredTotals.beginning)),
                       ),
                       AgriTableCell(
                         width: colNum,
                         align: Alignment.centerRight,
                         child: Text(
-                          '${filteredTotals.added}',
+                          formatQuantity(filteredTotals.added),
                           style: const TextStyle(color: AppColors.green),
                         ),
                       ),
@@ -614,14 +616,14 @@ class _InventoryManagementContentState extends State<InventoryManagementContent>
                         width: colNum,
                         align: Alignment.centerRight,
                         child: Text(
-                          '${filteredTotals.deducted}',
+                          formatQuantity(filteredTotals.deducted),
                           style: const TextStyle(color: AppColors.orange),
                         ),
                       ),
                       AgriTableCell(
                         width: colNum,
                         align: Alignment.centerRight,
-                        child: Text('${filteredTotals.ending}'),
+                        child: Text(formatQuantity(filteredTotals.ending)),
                       ),
                       AgriTableCell(
                         width: colValue,

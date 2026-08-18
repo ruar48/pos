@@ -13,11 +13,11 @@ class InventoryReportTotals {
     required this.items,
   });
 
-  final int beginning;
-  final int added;
-  final int deducted;
-  final int ending;
-  final int sold;
+  final double beginning;
+  final double added;
+  final double deducted;
+  final double ending;
+  final double sold;
   final double valueCost;
   final double valueRetail;
   final double valueMargin;
@@ -27,11 +27,11 @@ class InventoryReportTotals {
 
   factory InventoryReportTotals.fromJson(Map<String, dynamic> json) {
     return InventoryReportTotals(
-      beginning: (json['beginning'] as num?)?.toInt() ?? 0,
-      added: (json['added'] as num?)?.toInt() ?? 0,
-      deducted: (json['deducted'] as num?)?.toInt() ?? 0,
-      ending: (json['ending'] as num?)?.toInt() ?? 0,
-      sold: (json['sold'] as num?)?.toInt() ?? 0,
+      beginning: (json['beginning'] as num?)?.toDouble() ?? 0,
+      added: (json['added'] as num?)?.toDouble() ?? 0,
+      deducted: (json['deducted'] as num?)?.toDouble() ?? 0,
+      ending: (json['ending'] as num?)?.toDouble() ?? 0,
+      sold: (json['sold'] as num?)?.toDouble() ?? 0,
       valueCost: (json['value_cost'] as num?)?.toDouble() ?? 0,
       valueRetail: (json['value_retail'] as num?)?.toDouble() ?? 0,
       valueMargin: (json['value_margin'] as num?)?.toDouble() ?? 0,
@@ -67,12 +67,12 @@ class InventoryReportRow {
   final String? sku;
   final String category;
   final String? unit;
-  final int beginning;
-  final int added;
-  final int deducted;
-  final int ending;
-  final int liveStock;
-  final int sold;
+  final double beginning;
+  final double added;
+  final double deducted;
+  final double ending;
+  final double liveStock;
+  final double sold;
   final double valueCost;
   final double valueRetail;
   final bool isLowStock;
@@ -88,12 +88,12 @@ class InventoryReportRow {
       sku: json['sku'] as String?,
       category: (json['category'] as String?) ?? 'Uncategorized',
       unit: json['unit'] as String?,
-      beginning: (json['beginning'] as num?)?.toInt() ?? 0,
-      added: (json['added'] as num?)?.toInt() ?? 0,
-      deducted: (json['deducted'] as num?)?.toInt() ?? 0,
-      ending: (json['ending'] as num?)?.toInt() ?? 0,
-      liveStock: (json['live_stock'] as num?)?.toInt() ?? 0,
-      sold: (json['sold'] as num?)?.toInt() ?? 0,
+      beginning: (json['beginning'] as num?)?.toDouble() ?? 0,
+      added: (json['added'] as num?)?.toDouble() ?? 0,
+      deducted: (json['deducted'] as num?)?.toDouble() ?? 0,
+      ending: (json['ending'] as num?)?.toDouble() ?? 0,
+      liveStock: (json['live_stock'] as num?)?.toDouble() ?? 0,
+      sold: (json['sold'] as num?)?.toDouble() ?? 0,
       valueCost: (json['value_cost'] as num?)?.toDouble() ?? 0,
       valueRetail: (json['value_retail'] as num?)?.toDouble() ?? 0,
       isLowStock: json['is_low_stock'] == true,
