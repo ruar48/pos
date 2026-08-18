@@ -272,10 +272,10 @@ class ProductImportExportService
             $categoryIdByLower[strtolower((string) $category->name)] = (int) $category->id;
         }
 
-        /** @var array<string, object{id: int, stock: int}> $productIndex */
+        /** @var array<string, object{id: int, stock: float}> $productIndex */
         $productIndex = $this->buildProductImportIndex($hasOption);
 
-        /** @var array<int, object{id: int, stock: int}> $productIndexById */
+        /** @var array<int, object{id: int, stock: float}> $productIndexById */
         $productIndexById = [];
         foreach ($productIndex as $indexed) {
             $productIndexById[(int) $indexed->id] = $indexed;
@@ -325,7 +325,7 @@ class ProductImportExportService
                     continue;
                 }
 
-                $stock = $this->parseInt($row['stock'] ?? 0, 0);
+                $stock = $this->parseQuantity($row['stock'] ?? 0, 0.0);
                 $reorder = max(0, $this->parseInt($row['reorder_level'] ?? 5, 5));
                 $description = trim((string) ($row['description'] ?? ''));
                 $deal = trim((string) ($row['deal'] ?? ''));
@@ -387,12 +387,12 @@ class ProductImportExportService
 
                 if ($existing !== null) {
                     $productId = (int) $existing->id;
-                    $previousStock = (int) $existing->stock;
+                    $previousStock = (float) $existing->stock;
 
                     DB::table('products')->where('id', $productId)->update($payload);
 
-                    $delta = $stock - $previousStock;
-                    if ($delta !== 0) {
+                    $delta = round($stock - $previousStock, 3);
+                    if ($delta !== 0.0) {
                         StockLedger::record(
                             productId: $productId,
                             varietyId: null,
@@ -417,13 +417,13 @@ class ProductImportExportService
                     $payload['created_at'] = $now;
                     $productId = (int) DB::table('products')->insertGetId($payload);
 
-                    if ($stock !== 0) {
+                    if ($stock !== 0.0) {
                         StockLedger::record(
                             productId: $productId,
                             varietyId: null,
                             type: 'initial',
-                            quantityDelta: (float) $stock,
-                            balanceAfter: (float) $stock,
+                            quantityDelta: $stock,
+                            balanceAfter: $stock,
                             referenceType: 'import',
                             referenceId: null,
                             note: 'Initial stock via bulk import',
@@ -478,7 +478,7 @@ class ProductImportExportService
     }
 
     /**
-     * @return array<string, object{id: int, stock: int}>
+     * @return array<string, object{id: int, stock: float}>
      */
     private function buildProductImportIndex(bool $hasOption): array
     {
@@ -497,7 +497,7 @@ class ProductImportExportService
             );
             $index[$key] = (object) [
                 'id' => (int) $product->id,
-                'stock' => (int) ($product->stock ?? 0),
+                'stock' => (float) ($product->stock ?? 0),
             ];
         }
 
@@ -631,5 +631,18 @@ class ProductImportExportService
         }
 
         return (int) $value;
+    }
+
+    private function parseQuantity(mixed $value, float $default): float
+    {
+        if ($value === null || $value === '') {
+            return $default;
+        }
+
+        if (! is_numeric($value)) {
+            return $default;
+        }
+
+        return round((float) $value, 3);
     }
 }
