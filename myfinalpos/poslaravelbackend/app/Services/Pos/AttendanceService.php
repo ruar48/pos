@@ -537,6 +537,12 @@ class AttendanceService
 
         ?string $photoUrl = null,
 
+        ?string $date = null,
+
+        ?string $time = null,
+
+        bool $allowBackdate = false,
+
     ): array {
 
         if (! in_array($eventType, ['clock_in', 'clock_out', 'break_in', 'break_out'], true)) {
@@ -593,9 +599,40 @@ class AttendanceService
 
 
 
-        $today = Carbon::today()->format('Y-m-d');
-        $status = $this->userStatus($userId, $today);
-        $this->assertValidPunch($eventType, $status, $today);
+        // Admin-only: fix a missed time-out (or other punch) on a past day by
+        // recording it at a specific date/time instead of "now". Requires
+        // both date and time together so we never insert an ambiguous
+        // half-specified backdated entry.
+        $backdated = $allowBackdate && $date !== null && trim($date) !== '';
+
+        if ($backdated && ($time === null || trim($time) === '')) {
+            throw new \InvalidArgumentException('Time is required when specifying a manual attendance date');
+        }
+
+        $targetDate = $backdated ? $date : Carbon::today()->format('Y-m-d');
+
+        if ($backdated) {
+            try {
+                $eventAt = Carbon::parse($targetDate.' '.$time, self::DISPLAY_TIMEZONE);
+            } catch (\Throwable) {
+                throw new \InvalidArgumentException('Invalid date/time for manual attendance entry');
+            }
+
+            if ($eventAt->copy()->utc()->gt(Carbon::now('UTC'))) {
+                throw new \RuntimeException('Cannot record attendance in the future');
+            }
+        } else {
+            $eventAt = Carbon::now('UTC');
+        }
+
+        $status = $this->userStatus($userId, $targetDate);
+        $this->assertValidPunch($eventType, $status, $targetDate);
+
+        if ($backdated && $eventType === 'clock_out' && $status['clock_in_at'] !== null) {
+            if ($eventAt->copy()->utc()->lt(Carbon::parse($status['clock_in_at']))) {
+                throw new \RuntimeException('Time-out must be after the time-in for that day');
+            }
+        }
 
 
 
@@ -663,7 +700,7 @@ class AttendanceService
                 : ($geofence['skipped'] ? null : ($geofence['within'] ? 1 : 0)),
             'face_verified' => $faceVerified === null ? null : ($faceVerified ? 1 : 0),
             'device_info' => $deviceInfo,
-            'created_at' => Carbon::now('UTC'),
+            'created_at' => $eventAt->copy()->utc(),
         ];
 
         if ($photoUrl !== null && $photoUrl !== '') {
@@ -710,7 +747,7 @@ class AttendanceService
 
 
 
-        $updatedStatus = $this->userStatus($userId);
+        $updatedStatus = $this->userStatus($userId, $targetDate);
 
 
 

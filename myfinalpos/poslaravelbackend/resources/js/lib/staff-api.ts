@@ -259,6 +259,23 @@ export async function clockStaffAttendance(input: {
     });
 }
 
+export async function manualClockOutStaffAttendance(input: {
+    user_id: number;
+    date: string;
+    time: string;
+    branch_id?: number;
+}) {
+    return laravelFetch<{
+        message: string;
+        data: {
+            status: AttendanceRow;
+        };
+    }>('/pos/staff/attendance', {
+        method: 'POST',
+        body: JSON.stringify({ ...input, action: 'clock_out' }),
+    });
+}
+
 export type AttendancePhotoStats = {
     file_count: number;
     total_bytes: number;

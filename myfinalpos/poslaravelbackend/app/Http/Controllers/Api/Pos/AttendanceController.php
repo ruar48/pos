@@ -123,6 +123,10 @@ class AttendanceController extends Controller
         $faceVerified = ! empty($body['face_verified']);
         $photoBase64 = trim((string) ($body['photo_base64'] ?? ''));
         $tabletManual = ! empty($body['tablet_manual']) || $photoBase64 !== '';
+        $forDate = trim((string) ($body['date'] ?? ''));
+        $forDate = $forDate !== '' ? $forDate : null;
+        $forTime = trim((string) ($body['time'] ?? ''));
+        $forTime = $forTime !== '' ? $forTime : null;
 
         if ($adminManual) {
             PosHelpers::requireManagementActor($actorUserId);
@@ -165,6 +169,9 @@ class AttendanceController extends Controller
             isset($body['face_verified']) ? (bool) $body['face_verified'] : null,
             $adminManual || $tabletManual,
             $photoUrl,
+            $forDate,
+            $forTime,
+            $adminManual,
         );
 
         $message = match ($action) {

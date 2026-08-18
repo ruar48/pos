@@ -4,13 +4,29 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     fetchPayrollReport,
     savePayrollRate,
     type PayrollRow,
 } from '@/lib/payroll-api';
+import { manualClockOutStaffAttendance } from '@/lib/staff-api';
 import { dashboard } from '@/routes';
 
 function pad(n: number): string {
@@ -45,6 +61,10 @@ export default function PosPayroll() {
     const [rows, setRows] = useState<PayrollRow[]>([]);
     const [rateDrafts, setRateDrafts] = useState<Record<number, string>>({});
     const [savingUserId, setSavingUserId] = useState<number | null>(null);
+    const [fixTarget, setFixTarget] = useState<PayrollRow | null>(null);
+    const [fixDate, setFixDate] = useState('');
+    const [fixTime, setFixTime] = useState('');
+    const [fixing, setFixing] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -87,6 +107,43 @@ export default function PosPayroll() {
             );
         } finally {
             setSavingUserId(null);
+        }
+    };
+
+    const openFixTimeOut = (row: PayrollRow) => {
+        setFixTarget(row);
+        setFixDate(row.missing_time_out_dates[0] ?? '');
+        setFixTime('');
+    };
+
+    const closeFixTimeOut = () => {
+        setFixTarget(null);
+        setFixDate('');
+        setFixTime('');
+    };
+
+    const saveFixTimeOut = async () => {
+        if (!fixTarget || fixDate === '' || fixTime === '') {
+            toast.error('Pick a date and time');
+            return;
+        }
+
+        setFixing(true);
+        try {
+            await manualClockOutStaffAttendance({
+                user_id: fixTarget.user_id,
+                date: fixDate,
+                time: fixTime,
+            });
+            toast.success(`Time-out recorded · ${fixTarget.full_name}`);
+            closeFixTimeOut();
+            await load();
+        } catch (err) {
+            toast.error(
+                err instanceof Error ? err.message : 'Could not record time-out',
+            );
+        } finally {
+            setFixing(false);
         }
     };
 
@@ -176,11 +233,14 @@ export default function PosPayroll() {
                                                 <div className="flex items-center gap-1.5">
                                                     {row.full_name}
                                                     {row.has_missing_time_out && (
-                                                        <span
-                                                            title={`Incomplete attendance on ${row.missing_time_out_dates.join(', ')} — hours/pay for that day stay at zero until time-out is recorded.`}
+                                                        <button
+                                                            type="button"
+                                                            title={`Incomplete attendance on ${row.missing_time_out_dates.join(', ')} — click to record the time-out. Hours/pay for that day stay at zero until it's recorded.`}
+                                                            onClick={() => openFixTimeOut(row)}
+                                                            className="rounded-full p-0.5 hover:bg-amber-500/10"
                                                         >
                                                             <AlertTriangle className="size-3.5 text-amber-500" />
-                                                        </span>
+                                                        </button>
                                                     )}
                                                 </div>
                                             </td>
@@ -230,6 +290,75 @@ export default function PosPayroll() {
                     )}
                 </div>
             </div>
+
+            <Dialog
+                open={fixTarget !== null}
+                onOpenChange={(open) => !open && closeFixTimeOut()}
+            >
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Record Time-Out</DialogTitle>
+                        <DialogDescription>
+                            {fixTarget?.full_name} forgot to time out. Pick the
+                            date and the actual time they left.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-2">
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="fix-date">Date</Label>
+                            {fixTarget && fixTarget.missing_time_out_dates.length > 1 ? (
+                                <Select value={fixDate} onValueChange={setFixDate}>
+                                    <SelectTrigger id="fix-date">
+                                        <SelectValue placeholder="Select a date" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {fixTarget.missing_time_out_dates.map((d) => (
+                                            <SelectItem key={d} value={d}>
+                                                {d}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <Input
+                                    id="fix-date"
+                                    type="date"
+                                    value={fixDate}
+                                    max={today()}
+                                    onChange={(e) => setFixDate(e.target.value)}
+                                />
+                            )}
+                        </div>
+
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="fix-time">Time out</Label>
+                            <Input
+                                id="fix-time"
+                                type="time"
+                                value={fixTime}
+                                onChange={(e) => setFixTime(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={closeFixTimeOut}
+                            disabled={fixing}
+                        >
+                            Cancel
+                        </Button>
+                        <Button onClick={() => void saveFixTimeOut()} disabled={fixing}>
+                            {fixing ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : null}
+                            Save
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

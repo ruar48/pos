@@ -583,12 +583,17 @@ export default function CashDrawerPage() {
 
     const handleAddCash = () => {
         const amount = Number(cashAmount);
-        if (!Number.isFinite(amount) || amount <= 0) {
+        if (!Number.isFinite(amount) || amount < 0) {
             toast.error('Enter a valid cash amount');
             return;
         }
 
         const remarks = cashRemarks.trim();
+        if (amount === 0 && remarks === '') {
+            toast.error('Remarks are required for a zero cash amount');
+            return;
+        }
+
         requestCashDrawerPin(async (pin) => {
             const snapshot = data;
             const tempId = -Date.now();
@@ -722,8 +727,13 @@ export default function CashDrawerPage() {
     const handleSaveCashAddition = () => {
         if (!editingCashAddition) return;
         const amount = Number(editCashAmount);
-        if (!Number.isFinite(amount) || amount <= 0) {
+        if (!Number.isFinite(amount) || amount < 0) {
             toast.error('Enter a valid cash amount');
+            return;
+        }
+        const remarks = editCashRemarks.trim();
+        if (amount === 0 && remarks === '') {
+            toast.error('Remarks are required for a zero cash amount');
             return;
         }
         requestCashDrawerPin(async (pin) => {
@@ -732,7 +742,7 @@ export default function CashDrawerPage() {
                     updateCashAddition(
                         editingCashAddition.id,
                         amount,
-                        editCashRemarks.trim(),
+                        remarks,
                         pin,
                     ),
                 setSavingCash,

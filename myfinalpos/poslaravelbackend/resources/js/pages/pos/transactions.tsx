@@ -568,7 +568,7 @@ export default function PosTransactions() {
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleGo()}
-                                        placeholder="Receipt, cashier, customer…"
+                                        placeholder="Receipt, cashier, customer, item…"
                                         className="pl-9"
                                     />
                                 </div>

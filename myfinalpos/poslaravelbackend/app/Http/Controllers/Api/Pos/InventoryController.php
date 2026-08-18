@@ -162,18 +162,6 @@ class InventoryController extends Controller
                 ],
             );
 
-            StockLedger::record(
-                productId: $productId,
-                varietyId: null,
-                type: 'adjustment',
-                quantityDelta: $newStock - $currentStock,
-                balanceAfter: $newStock,
-                referenceType: 'inventory',
-                referenceId: $productId,
-                note: 'Manual stock adjustment',
-                userId: $actorUserId,
-            );
-
             DB::commit();
             CatalogStockRevision::bump();
 

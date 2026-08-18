@@ -72,14 +72,27 @@ class TransactionReportService
         $params = $dateParams;
 
         if ($search !== '') {
+            // Each LIKE clause needs its own named placeholder — MySQL's native
+            // (non-emulated) prepared statements reject the same named
+            // parameter bound more than once in one query.
             $searchSql = 'AND (
-                CAST(o.id AS CHAR) LIKE :search
-                OR COALESCE(c.customer_name, "") LIKE :search
-                OR COALESCE(cashier.full_name, "") LIKE :search
-                OR COALESCE(o.payment_method, "") LIKE :search
-                OR COALESCE(o.reference, "") LIKE :search
+                CAST(o.id AS CHAR) LIKE :search_id
+                OR COALESCE(c.customer_name, "") LIKE :search_customer
+                OR COALESCE(cashier.full_name, "") LIKE :search_cashier
+                OR COALESCE(o.payment_method, "") LIKE :search_payment
+                OR COALESCE(o.reference, "") LIKE :search_reference
+                OR EXISTS (
+                    SELECT 1 FROM order_items oi
+                    WHERE oi.order_id = o.id AND oi.product_name LIKE :search_item
+                )
             )';
-            $params['search'] = '%'.$search.'%';
+            $searchTerm = '%'.$search.'%';
+            $params['search_id'] = $searchTerm;
+            $params['search_customer'] = $searchTerm;
+            $params['search_cashier'] = $searchTerm;
+            $params['search_payment'] = $searchTerm;
+            $params['search_reference'] = $searchTerm;
+            $params['search_item'] = $searchTerm;
         }
 
         $hasCashier = PosHelpers::columnExists('orders', 'cashier_user_id');

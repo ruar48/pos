@@ -1277,7 +1277,7 @@ function StockAdjustDialog({
 
     if (!target) return null;
 
-    const parsed = parseInt(amount, 10);
+    const parsed = parseFloat(amount);
     const valid = Number.isFinite(parsed) && parsed >= 0 && amount.trim() !== '';
     const projected =
         mode === 'set'
@@ -1369,7 +1369,8 @@ function StockAdjustDialog({
                             id="adjust-amount"
                             type="number"
                             min={0}
-                            inputMode="numeric"
+                            step="0.001"
+                            inputMode="decimal"
                             autoFocus
                             value={amount}
                             onChange={(e) => setAmount(e.target.value)}

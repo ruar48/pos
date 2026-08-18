@@ -162,11 +162,15 @@ class CashDrawerService
         $this->requireCashDrawerPin($request);
 
         $amount = round((float) $request->input('amount', 0), 2);
-        if ($amount <= 0) {
-            throw new \InvalidArgumentException('Cash amount must be greater than zero');
+        if ($amount < 0) {
+            throw new \InvalidArgumentException('Cash amount cannot be negative');
         }
 
         $remarks = trim((string) $request->input('remarks', ''));
+        if ($amount === 0.0 && $remarks === '') {
+            throw new \InvalidArgumentException('Remarks are required for a zero cash amount');
+        }
+
         $businessDate = $this->resolveBusinessDate($request);
         $session = $this->resolveSession($businessDate);
 
@@ -209,11 +213,14 @@ class CashDrawerService
         }
 
         $amount = round((float) $request->input('amount', $addition->amount), 2);
-        if ($amount <= 0) {
-            throw new \InvalidArgumentException('Cash amount must be greater than zero');
+        if ($amount < 0) {
+            throw new \InvalidArgumentException('Cash amount cannot be negative');
         }
 
         $remarks = trim((string) $request->input('remarks', $addition->remarks ?? ''));
+        if ($amount === 0.0 && $remarks === '') {
+            throw new \InvalidArgumentException('Remarks are required for a zero cash amount');
+        }
 
         DB::table('cash_additions')
             ->where('id', $additionId)

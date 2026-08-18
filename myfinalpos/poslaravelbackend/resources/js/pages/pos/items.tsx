@@ -311,7 +311,7 @@ function applyInlineFieldToDraft(
         if (rawValue < 0) {
             throw new Error('Stock cannot be negative');
         }
-        return { ...draft, stock: String(Math.trunc(rawValue)) };
+        return { ...draft, stock: String(rawValue) };
     }
 
     return draft;
@@ -347,7 +347,8 @@ function draftToProductInput(draft: NewProductDraft): ProductInput {
     }
     const cost = costResult.value;
 
-    const stockResult = parseSpreadsheetInteger(draft.stock, {
+    const stockResult = parseSpreadsheetDecimal(draft.stock, {
+        allowEmpty: true,
         label: 'Stock',
     });
     if (!stockResult.ok) {
@@ -367,7 +368,7 @@ function draftToProductInput(draft: NewProductDraft): ProductInput {
         price,
         cost_price: cost !== null && Number.isFinite(cost) ? cost : null,
         deal,
-        stock: Number.isFinite(stock) ? stock : 0,
+        stock: stock !== null && Number.isFinite(stock) ? stock : 0,
         reorder_level: 5,
     };
 }
@@ -1176,7 +1177,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
         if (
             isInvalidDecimalDraft(newProductDraft.price, true) ||
             isInvalidDecimalDraft(newProductDraft.cost_price, true) ||
-            isInvalidIntegerDraft(newProductDraft.stock) ||
+            isInvalidDecimalDraft(newProductDraft.stock, true) ||
             newProductDraft.deal.trim().length > DEAL_MAX_LENGTH
         ) {
             return;
@@ -1412,7 +1413,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                     : parseFloat(form.cost_price),
             deal: form.deal.trim() === '' ? null : form.deal.trim(),
             stock:
-                form.stock.trim() === '' ? 0 : parseInt(form.stock, 10),
+                form.stock.trim() === '' ? 0 : parseFloat(form.stock),
             reorder_level:
                 form.reorder_level.trim() === ''
                     ? 5
@@ -2421,8 +2422,9 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 <Input
                                     id="p-stock"
                                     type="number"
-                                    inputMode="numeric"
+                                    inputMode="decimal"
                                     min="0"
+                                    step="0.001"
                                     value={form.stock}
                                     onChange={(e) =>
                                         setForm((f) => ({
@@ -3103,29 +3105,6 @@ function parseSpreadsheetDecimal(
     return { ok: true, value: parsed };
 }
 
-function parseSpreadsheetInteger(
-    raw: string,
-    options: { label?: string; allowEmpty?: boolean } = {},
-): SpreadsheetParseResult<number> {
-    const { label = 'Stock', allowEmpty = true } = options;
-    const trimmed = raw.trim().replace(/,/g, '');
-
-    if (trimmed === '') {
-        return { ok: true, value: allowEmpty ? 0 : 0 };
-    }
-
-    if (!/^\d+$/.test(trimmed)) {
-        return { ok: false, message: `${label} must be a whole number` };
-    }
-
-    const parsed = parseInt(trimmed, 10);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-        return { ok: false, message: `Enter a valid ${label.toLowerCase()}` };
-    }
-
-    return { ok: true, value: parsed };
-}
-
 function isInvalidDecimalDraft(
     draft: string,
     allowEmpty: boolean,
@@ -3133,14 +3112,6 @@ function isInvalidDecimalDraft(
 ): boolean {
     const result = parseSpreadsheetDecimal(draft, { allowEmpty, min });
     return !result.ok;
-}
-
-function isInvalidIntegerDraft(draft: string): boolean {
-    const trimmed = draft.trim().replace(/,/g, '');
-    if (trimmed === '') {
-        return false;
-    }
-    return !/^\d+$/.test(trimmed);
 }
 
 function decimalsEqual(
@@ -3252,20 +3223,24 @@ function SpreadsheetIntegerCell({
         setDraft(String(value));
     }, [value]);
 
-    const invalid = isInvalidIntegerDraft(draft);
+    const invalid = isInvalidDecimalDraft(draft, false);
 
     async function commit() {
-        const result = parseSpreadsheetInteger(draft, { label });
+        const result = parseSpreadsheetDecimal(draft, {
+            label,
+            allowEmpty: false,
+        });
         if (!result.ok) {
             toast.error(result.message);
             setDraft(String(value));
             return;
         }
-        if (result.value === value) {
+        const parsed = result.value ?? 0;
+        if (decimalsEqual(parsed, value, 3)) {
             return;
         }
         try {
-            await onCommit(result.value);
+            await onCommit(parsed);
         } catch {
             setDraft(String(value));
         }
@@ -3274,7 +3249,7 @@ function SpreadsheetIntegerCell({
     return (
         <input
             type="text"
-            inputMode="numeric"
+            inputMode="decimal"
             value={draft}
             disabled={saving}
             data-spreadsheet-cell=""
@@ -3318,7 +3293,7 @@ function NewProductSpreadsheetRow({
     const placeholderClass = 'placeholder:text-gray-400';
     const priceInvalid = isInvalidDecimalDraft(draft.price, true);
     const costInvalid = isInvalidDecimalDraft(draft.cost_price, true);
-    const stockInvalid = isInvalidIntegerDraft(draft.stock);
+    const stockInvalid = isInvalidDecimalDraft(draft.stock, true);
     const dealInvalid = draft.deal.trim().length > DEAL_MAX_LENGTH;
 
     function handleFieldBlur(field: NewProductBlurField) {
