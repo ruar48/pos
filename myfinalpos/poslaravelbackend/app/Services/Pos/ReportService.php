@@ -742,13 +742,13 @@ class ReportService
             ];
         }
 
-        $tz = BusinessDay::timezone();
-        $offset = Carbon::now($tz)->format('P');
         $qtyExpr = $this->netQtyExpr();
 
+        // Do not use CONVERT_TZ from UTC - created_at is stored as
+        // Philippines local time already (see comment above in this file).
         $rows = DB::select(
-            "SELECT DATE(CONVERT_TZ(o.created_at, '+00:00', '{$offset}')) AS sale_date,
-                    HOUR(CONVERT_TZ(o.created_at, '+00:00', '{$offset}')) AS sale_hour,
+            "SELECT DATE(o.created_at) AS sale_date,
+                    HOUR(o.created_at) AS sale_hour,
                     COALESCE(SUM({$qtyExpr}), 0) AS units,
                     COALESCE(SUM({$qtyExpr} * oi.price), 0) AS amount
              FROM order_items oi

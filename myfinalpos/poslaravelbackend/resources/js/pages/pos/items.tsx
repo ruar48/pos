@@ -556,7 +556,7 @@ function downloadCsv(filename: string, header: string[], rows: (string | number)
         header.join(','),
         ...rows.map((row) => row.map(escape).join(',')),
     ];
-    const blob = new Blob([lines.join('\n')], {
+    const blob = new Blob(['\uFEFF', lines.join('\n')], {
         type: 'text/csv;charset=utf-8;',
     });
     const url = URL.createObjectURL(blob);
