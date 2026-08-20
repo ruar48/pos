@@ -112,6 +112,10 @@ function tableRowOption(row: ItemTableRow): string {
     return row.product.option?.trim() ?? '';
 }
 
+function tableRowBarcode(row: ItemTableRow): string {
+    return row.product.barcode?.trim() ?? '';
+}
+
 function tableRowStock(row: ItemTableRow): number {
     return toNumber(row.product.stock);
 }
@@ -125,6 +129,7 @@ function productToPayload(product: PosProduct): ProductInput {
         id: product.id,
         name: product.name,
         option: product.option?.trim() || null,
+        barcode: product.barcode?.trim() || null,
         category: product.category_name,
         price: toNumber(product.price),
         cost_price:
@@ -153,6 +158,8 @@ function mergeProductWithPendingEdits(
         category_name: edits.category ?? product.category_name,
         name: edits.name ?? product.name,
         option: edits.option !== undefined ? edits.option : product.option,
+        barcode:
+            edits.barcode !== undefined ? edits.barcode : product.barcode,
         price: edits.price ?? product.price,
         cost_price:
             edits.cost_price !== undefined
@@ -192,6 +199,14 @@ function applyInlineFieldToPayload(
             throw new Error('Option must be 120 characters or less');
         }
         return { option: option === '' ? null : option };
+    }
+
+    if (field === 'barcode' && typeof rawValue === 'string') {
+        const barcode = rawValue.trim();
+        if (barcode.length > 120) {
+            throw new Error('Barcode must be 120 characters or less');
+        }
+        return { barcode: barcode === '' ? null : barcode };
     }
 
     if (
@@ -264,6 +279,14 @@ function applyInlineFieldToDraft(
             throw new Error('Option must be 120 characters or less');
         }
         return { ...draft, option };
+    }
+
+    if (field === 'barcode' && typeof rawValue === 'string') {
+        const barcode = rawValue.trim();
+        if (barcode.length > 120) {
+            throw new Error('Barcode must be 120 characters or less');
+        }
+        return { ...draft, barcode };
     }
 
     if (
@@ -364,6 +387,7 @@ function draftToProductInput(draft: NewProductDraft): ProductInput {
     return {
         name,
         option: draft.option.trim() === '' ? null : draft.option.trim(),
+        barcode: draft.barcode.trim() === '' ? null : draft.barcode.trim(),
         category,
         price,
         cost_price: cost !== null && Number.isFinite(cost) ? cost : null,
@@ -396,6 +420,7 @@ function pendingDraftToDisplayProduct(
         category_name: payload.category,
         name: payload.name,
         option: payload.option ?? null,
+        barcode: payload.barcode ?? null,
         price: payload.price,
         cost_price: payload.cost_price ?? null,
         deal: payload.deal ?? null,
@@ -408,6 +433,7 @@ type InlineField =
     | 'category'
     | 'name'
     | 'option'
+    | 'barcode'
     | 'price'
     | 'cost_price'
     | 'deal'
@@ -438,6 +464,7 @@ type ProductFormState = {
     id?: number;
     name: string;
     category: string;
+    barcode: string;
     price: string;
     cost_price: string;
     deal: string;
@@ -449,6 +476,7 @@ type ProductFormState = {
 const emptyForm = (category = ''): ProductFormState => ({
     name: '',
     category,
+    barcode: '',
     price: '',
     cost_price: '',
     deal: '',
@@ -461,6 +489,7 @@ type NewProductDraft = {
     category: string;
     name: string;
     option: string;
+    barcode: string;
     price: string;
     cost_price: string;
     deal: string;
@@ -482,6 +511,7 @@ function emptyNewProductDraft(category = ''): NewProductDraft {
         category,
         name: '',
         option: '',
+        barcode: '',
         price: '',
         cost_price: '',
         deal: '',
@@ -493,6 +523,7 @@ function newProductDraftHasData(draft: NewProductDraft): boolean {
     return (
         draft.name.trim() !== '' ||
         draft.option.trim() !== '' ||
+        draft.barcode.trim() !== '' ||
         draft.price.trim() !== '' ||
         draft.cost_price.trim() !== '' ||
         draft.stock.trim() !== ''
@@ -503,6 +534,7 @@ type NewProductBlurField =
     | 'category'
     | 'name'
     | 'option'
+    | 'barcode'
     | 'price'
     | 'cost_price'
     | 'deal'
@@ -1314,6 +1346,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             id: product.id,
             name: product.name,
             category: product.category_name,
+            barcode: product.barcode?.trim() ?? '',
             price: String(toNumber(product.price)),
             cost_price:
                 product.cost_price === null || product.cost_price === undefined
@@ -1422,6 +1455,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             id: form.id,
             name,
             category,
+            barcode: form.barcode.trim(),
             price: productPrice,
             cost_price:
                 form.cost_price.trim() === ''
@@ -1857,6 +1891,9 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                     <th className={SPREADSHEET_HEADER}>
                                         Option
                                     </th>
+                                    <th className={SPREADSHEET_HEADER}>
+                                        Barcode
+                                    </th>
                                     <th
                                         className={cn(
                                             SPREADSHEET_HEADER,
@@ -1965,13 +2002,29 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                                 />
                                             </td>
                                             <td className={SPREADSHEET_CELL}>
+                                                <SpreadsheetTextCell
+                                                    value={tableRowBarcode(row)}
+                                                    allowEmpty
+                                                    saving={saving}
+                                                    dataRow={cellRow}
+                                                    dataCol={4}
+                                                    onCommit={(value) =>
+                                                        stageInlineField(
+                                                            row,
+                                                            'barcode',
+                                                            value,
+                                                        )
+                                                    }
+                                                />
+                                            </td>
+                                            <td className={SPREADSHEET_CELL}>
                                                 <SpreadsheetNumberCell
                                                     value={tableRowPrice(row)}
                                                     decimals={2}
                                                     label="Price"
                                                     saving={saving}
                                                     dataRow={cellRow}
-                                                    dataCol={4}
+                                                    dataCol={5}
                                                     onCommit={(value) =>
                                                         stageInlineField(
                                                             row,
@@ -1989,7 +2042,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                                     label="Cost"
                                                     saving={saving}
                                                     dataRow={cellRow}
-                                                    dataCol={5}
+                                                    dataCol={6}
                                                     onCommit={(value) =>
                                                         stageInlineField(
                                                             row,
@@ -2005,7 +2058,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                                     allowEmpty
                                                     saving={saving}
                                                     dataRow={cellRow}
-                                                    dataCol={6}
+                                                    dataCol={7}
                                                     onCommit={(value) =>
                                                         stageInlineField(
                                                             row,
@@ -2021,7 +2074,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                                     low={low}
                                                     saving={saving}
                                                     dataRow={cellRow}
-                                                    dataCol={7}
+                                                    dataCol={8}
                                                     onCommit={(value) =>
                                                         stageInlineField(
                                                             row,
@@ -2075,7 +2128,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 />
                                 {hasMore && !loadingMore ? (
                                     <tr ref={loadMoreSentinelRef}>
-                                        <td colSpan={9} className="p-0">
+                                        <td colSpan={10} className="p-0">
                                             <button
                                                 type="button"
                                                 onClick={() => void loadMore()}
@@ -2090,7 +2143,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 {loadingMore ? (
                                     <tr>
                                         <td
-                                            colSpan={9}
+                                            colSpan={10}
                                             className="border border-gray-300 px-3 py-2 text-center text-xs text-muted-foreground"
                                         >
                                             <span className="inline-flex items-center gap-2">
@@ -2351,6 +2404,23 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             </div>
 
                             <div className="grid gap-2">
+                                <Label htmlFor="p-barcode">
+                                    Barcode (optional)
+                                </Label>
+                                <Input
+                                    id="p-barcode"
+                                    value={form.barcode}
+                                    onChange={(e) =>
+                                        setForm((f) => ({
+                                            ...f,
+                                            barcode: e.target.value,
+                                        }))
+                                    }
+                                    placeholder="Reference / scan code"
+                                />
+                            </div>
+
+                            <div className="grid gap-2">
                                 <Label>Category</Label>
                                 {categories.length > 0 ? (
                                     <Select
@@ -2532,8 +2602,8 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             .xls, or .csv). Works with your legacy file
                             (Category, Item, Option, Price, Cost, Morning
                             Inventory) or a system export backup (id, category,
-                            item, option, price, cost_price, deal, stock,
-                            reorder_level). Category numbers like &quot;01
+                            item, option, barcode, price, cost_price, deal,
+                            stock, reorder_level). Category numbers like &quot;01
                             CHEMICALS&quot; are saved as words only. Extra
                             columns are ignored.
                         </DialogDescription>
@@ -2793,6 +2863,9 @@ function ProductDetailsDialog({
                     <div className="grid grid-cols-2 gap-4 rounded-xl border border-border/60 bg-secondary/30 p-4">
                         {product.option?.trim() && (
                             <DetailRow label="Option" value={product.option} />
+                        )}
+                        {product.barcode?.trim() && (
+                            <DetailRow label="Barcode" value={product.barcode} />
                         )}
                         {cost !== null && (
                             <DetailRow
@@ -3409,13 +3482,35 @@ function NewProductSpreadsheetRow({
             <td className={SPREADSHEET_CELL}>
                 <input
                     type="text"
+                    value={draft.barcode}
+                    disabled={saving || !hasCategories}
+                    placeholder="Barcode"
+                    maxLength={120}
+                    data-spreadsheet-cell=""
+                    data-row={rowIndex}
+                    data-col={4}
+                    className={cn(
+                        SPREADSHEET_INPUT,
+                        'text-left italic text-gray-700',
+                        placeholderClass,
+                    )}
+                    onChange={(event) =>
+                        onDraftChange({ barcode: event.target.value })
+                    }
+                    onBlur={() => handleFieldBlur('barcode')}
+                    onKeyDown={handleSpreadsheetKeyDown}
+                />
+            </td>
+            <td className={SPREADSHEET_CELL}>
+                <input
+                    type="text"
                     inputMode="decimal"
                     value={draft.price}
                     disabled={saving || !hasCategories}
                     placeholder="0.00"
                     data-spreadsheet-cell=""
                     data-row={rowIndex}
-                    data-col={4}
+                    data-col={5}
                     className={cn(
                         SPREADSHEET_INPUT,
                         'text-right tabular-nums text-gray-700',
@@ -3438,7 +3533,7 @@ function NewProductSpreadsheetRow({
                     placeholder="Cost"
                     data-spreadsheet-cell=""
                     data-row={rowIndex}
-                    data-col={5}
+                    data-col={6}
                     className={cn(
                         SPREADSHEET_INPUT,
                         'text-right tabular-nums text-gray-700',
@@ -3461,7 +3556,7 @@ function NewProductSpreadsheetRow({
                     maxLength={DEAL_MAX_LENGTH}
                     data-spreadsheet-cell=""
                     data-row={rowIndex}
-                    data-col={6}
+                    data-col={7}
                     className={cn(
                         SPREADSHEET_INPUT,
                         'text-left text-gray-700',
@@ -3484,7 +3579,7 @@ function NewProductSpreadsheetRow({
                     placeholder="0"
                     data-spreadsheet-cell=""
                     data-row={rowIndex}
-                    data-col={7}
+                    data-col={8}
                     className={cn(
                         SPREADSHEET_INPUT,
                         'text-right tabular-nums text-gray-700',

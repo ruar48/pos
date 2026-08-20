@@ -25,6 +25,7 @@ class ProductController extends Controller
                 p.category_id,
                 p.name,
                 p.option,
+                p.barcode,
                 p.description,
                 p.price,
                 p.cost_price,
@@ -216,6 +217,7 @@ class ProductController extends Controller
                 'category_id' => $categoryId,
                 'name' => $payload['name'],
                 'option' => $payload['option'],
+                'barcode' => $payload['barcode'],
                 'description' => $payload['description'],
                 'price' => $payload['price'],
                 'cost_price' => $payload['cost_price'],
@@ -344,6 +346,7 @@ class ProductController extends Controller
                     'category_id' => $categoryId,
                     'name' => $payload['name'],
                     'option' => $payload['option'],
+                    'barcode' => $payload['barcode'],
                     'description' => $payload['description'],
                     'price' => $payload['price'],
                     'cost_price' => $payload['cost_price'],
@@ -495,6 +498,13 @@ class ProductController extends Controller
         if (strlen($option) > 120) {
             throw new \InvalidArgumentException('Option must be 120 characters or less');
         }
+        $barcode = trim((string) $request->input(
+            'barcode',
+            $existing['barcode'] ?? '',
+        ));
+        if (strlen($barcode) > 120) {
+            throw new \InvalidArgumentException('Barcode must be 120 characters or less');
+        }
         $categoryName = trim((string) $request->input(
             'category',
             $existing['category_name'] ?? '',
@@ -533,6 +543,7 @@ class ProductController extends Controller
         return [
             'name' => $name,
             'option' => $option === '' ? null : $option,
+            'barcode' => $barcode === '' ? null : $barcode,
             'category_name' => $categoryName,
             'price' => $price,
             'cost_price' => $costPrice,

@@ -41,7 +41,7 @@ export type ProductInput = {
     category: string;
     price: number;
     sku?: string;
-    barcode?: string;
+    barcode?: string | null;
     cost_price?: number | null;
     deal?: string | null;
     stock?: number;

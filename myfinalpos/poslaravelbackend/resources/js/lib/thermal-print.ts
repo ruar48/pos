@@ -28,18 +28,18 @@ export function printThermalLines(lines: string[]): void {
 <meta charset="utf-8">
 <title>Print</title>
 <style>
-  @page { size: 80mm auto; margin: 2mm; }
+  @page { size: 58mm auto; margin: 1mm; }
   @media print {
-    html, body { width: 80mm; margin: 0; padding: 0; }
+    html, body { width: 58mm; margin: 0; padding: 0; }
   }
   body {
     font-family: "Courier New", Courier, monospace;
-    font-size: 11px;
-    line-height: 1.35;
+    font-size: 14px;
+    line-height: 1.4;
     color: #000;
     background: #fff;
     margin: 0;
-    padding: 4mm 2mm;
+    padding: 3mm 1mm;
   }
   pre {
     margin: 0;

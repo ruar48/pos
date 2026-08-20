@@ -2,7 +2,7 @@ import type { CashAddition, DrawerExpense } from '@/lib/cash-drawer-api';
 import type { ReceiptStore } from '@/lib/store-settings-api';
 import { parseServerDateTime } from '@/lib/datetime';
 
-const THERMAL_WIDTH = 32;
+const THERMAL_WIDTH = 24;
 
 function divider(char = '-'): string {
     return char.repeat(THERMAL_WIDTH);
@@ -14,6 +14,13 @@ function labelValue(label: string, value: string): string {
         return `${label}${' '.repeat(gap)}${value}`;
     }
     return `${label} ${value}`.slice(0, THERMAL_WIDTH);
+}
+
+function labelValueLines(label: string, value: string): string[] {
+    if (label.length + 1 + value.length <= THERMAL_WIDTH) {
+        return [labelValue(label, value)];
+    }
+    return [label, value.slice(0, THERMAL_WIDTH)];
 }
 
 function money(symbol: string, amount: number): string {
@@ -73,8 +80,7 @@ export function buildExpenseReceiptLines(
     }
     add(labelValue('DATE', formatDate(when)));
     add(labelValue('TIME', formatTime(when)));
-    add(labelValue('CASHIER', expense.user_name.slice(0, THERMAL_WIDTH - 8)));
-    add(labelValue('POS', store.pos_terminal_id));
+    labelValueLines('CASHIER', expense.user_name).forEach(add);
     add('');
     add('EXPENSE');
     add(divider());
@@ -116,8 +122,7 @@ export function buildCashAdditionReceiptLines(
     add(labelValue('BUS. DATE', businessDate));
     add(labelValue('DATE', formatDate(when)));
     add(labelValue('TIME', formatTime(when)));
-    add(labelValue('CASHIER', addition.user_name.slice(0, THERMAL_WIDTH - 8)));
-    add(labelValue('POS', store.pos_terminal_id));
+    labelValueLines('CASHIER', addition.user_name).forEach(add);
     add('');
     add('CASH ADDED');
     add(divider());
@@ -158,7 +163,6 @@ export function buildAllExpensesReceiptLines(
     add(labelValue('DATE', options.businessDate));
     add(labelValue('FILTER', options.filterLabel));
     add(labelValue('COUNT', String(expenses.length)));
-    add(labelValue('POS', store.pos_terminal_id));
     add('');
     add(divider());
 
@@ -171,10 +175,13 @@ export function buildAllExpensesReceiptLines(
         }
         add(expense.name.slice(0, THERMAL_WIDTH));
         add(
-            `${expense.payment_label} · ${formatDate(when)} ${formatTime(when)}`
-                .slice(0, THERMAL_WIDTH),
+            `${expense.payment_label} · ${formatDate(when)}`.slice(
+                0,
+                THERMAL_WIDTH,
+            ),
         );
-        add(labelValue('BY', expense.user_name.slice(0, THERMAL_WIDTH - 3)));
+        add(formatTime(when));
+        labelValueLines('BY', expense.user_name).forEach(add);
         add(labelValue('AMOUNT', money(symbol, expense.amount)));
         add(divider());
     }

@@ -17,6 +17,7 @@ class ProductImportExportService
         'category',
         'item',
         'option',
+        'barcode',
         'price',
         'cost_price',
         'deal',
@@ -35,12 +36,14 @@ class ProductImportExportService
 
         $hasDeal = Schema::hasColumn('products', 'deal');
         $hasOption = Schema::hasColumn('products', 'option');
+        $hasBarcode = Schema::hasColumn('products', 'barcode');
 
         $dealSelect = $hasDeal ? 'p.deal,' : 'NULL AS deal,';
         $optionSelect = $hasOption ? 'p.option,' : 'NULL AS option,';
+        $barcodeSelect = $hasBarcode ? 'p.barcode,' : 'NULL AS barcode,';
 
         $rows = DB::select(
-            "SELECT p.id, c.name AS category, p.name AS item, {$optionSelect}
+            "SELECT p.id, c.name AS category, p.name AS item, {$optionSelect} {$barcodeSelect}
                     p.price, p.cost_price, {$dealSelect}
                     p.stock, p.reorder_level
              FROM products p
@@ -265,6 +268,7 @@ class ProductImportExportService
         $maxErrors = 50;
         $hasOption = Schema::hasColumn('products', 'option');
         $hasDeal = Schema::hasColumn('products', 'deal');
+        $hasBarcode = Schema::hasColumn('products', 'barcode');
 
         /** @var array<string, int> $categoryIdByLower */
         $categoryIdByLower = [];
@@ -295,6 +299,7 @@ class ProductImportExportService
                 $categoryName = $this->normalizeCategoryName((string) ($row['category'] ?? ''));
                 $name = trim((string) ($row['name'] ?? ''));
                 $option = trim((string) ($row['option'] ?? ''));
+                $barcode = trim((string) ($row['barcode'] ?? ''));
 
                 if ($categoryName === '' || $name === '') {
                     $skipped++;
@@ -383,6 +388,10 @@ class ProductImportExportService
 
                 if ($hasDeal) {
                     $payload['deal'] = $deal === '' ? null : $deal;
+                }
+
+                if ($hasBarcode) {
+                    $payload['barcode'] = $barcode === '' ? null : $barcode;
                 }
 
                 if ($existing !== null) {
