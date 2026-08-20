@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowLeft,
@@ -176,6 +176,7 @@ function applyInlineFieldToPayload(
     payload: ProductInput,
     field: InlineField,
     rawValue: InlineValue,
+    stockMin = 0,
 ): Partial<ProductInput> {
     if (field === 'category' && typeof rawValue === 'string') {
         const category = rawValue.trim();
@@ -243,7 +244,7 @@ function applyInlineFieldToPayload(
         rawValue !== null &&
         typeof rawValue === 'number'
     ) {
-        if (rawValue < 0) {
+        if (rawValue < stockMin) {
             throw new Error('Stock cannot be negative');
         }
         return { stock: rawValue };
@@ -256,6 +257,7 @@ function applyInlineFieldToDraft(
     draft: NewProductDraft,
     field: InlineField,
     rawValue: InlineValue,
+    stockMin = 0,
 ): NewProductDraft {
     if (field === 'category' && typeof rawValue === 'string') {
         const category = rawValue.trim();
@@ -331,7 +333,7 @@ function applyInlineFieldToDraft(
         rawValue !== null &&
         typeof rawValue === 'number'
     ) {
-        if (rawValue < 0) {
+        if (rawValue < stockMin) {
             throw new Error('Stock cannot be negative');
         }
         return { ...draft, stock: String(rawValue) };
@@ -348,7 +350,10 @@ function parsePendingCreateIndex(rowKey: string): number | null {
     return Number.isFinite(index) ? index : null;
 }
 
-function draftToProductInput(draft: NewProductDraft): ProductInput {
+function draftToProductInput(
+    draft: NewProductDraft,
+    stockMin = 0,
+): ProductInput {
     const name = draft.name.trim();
     const category = draft.category.trim();
 
@@ -373,6 +378,7 @@ function draftToProductInput(draft: NewProductDraft): ProductInput {
     const stockResult = parseSpreadsheetDecimal(draft.stock, {
         allowEmpty: true,
         label: 'Stock',
+        min: stockMin,
     });
     if (!stockResult.ok) {
         throw new Error(stockResult.message);
@@ -400,10 +406,11 @@ function draftToProductInput(draft: NewProductDraft): ProductInput {
 function pendingDraftToDisplayProduct(
     draft: NewProductDraft,
     tempId: number,
+    stockMin = 0,
 ): PosProduct {
     let payload: ProductInput;
     try {
-        payload = draftToProductInput(draft);
+        payload = draftToProductInput(draft, stockMin);
     } catch {
         payload = {
             name: draft.name.trim() || 'New item',
@@ -601,7 +608,14 @@ function downloadCsv(filename: string, header: string[], rows: (string | number)
 
 const ITEMS_PER_PAGE = 100;
 
+type ItemsPageProps = {
+    allow_negative_stock?: boolean;
+};
+
 export function ItemsCatalogView({ standalone = false }: { standalone?: boolean }) {
+    const { allow_negative_stock: allowNegativeStock = false } =
+        usePage<ItemsPageProps>().props;
+    const stockMin = allowNegativeStock ? -Infinity : 0;
     const [categories, setCategories] = useState<PosCategory[]>([]);
     const [products, setProducts] = useState<PosProduct[]>([]);
     const [loading, setLoading] = useState(true);
@@ -872,7 +886,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                 return false;
             }
             try {
-                createPayloads.push(draftToProductInput(draft));
+                createPayloads.push(draftToProductInput(draft, stockMin));
             } catch (error) {
                 toast.error(
                     error instanceof Error
@@ -1033,12 +1047,16 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             .map(({ draft, createIndex }, displayIndex) => ({
                 key: `pending-${createIndex}`,
                 index: productRows.length + displayIndex + 1,
-                product: pendingDraftToDisplayProduct(draft, -(createIndex + 1)),
+                product: pendingDraftToDisplayProduct(
+                    draft,
+                    -(createIndex + 1),
+                    stockMin,
+                ),
                 isPending: true as const,
             }));
 
         return [...productRows, ...stagedCreates];
-    }, [activeCategory, filteredProducts, pendingCreates, pendingEdits]);
+    }, [activeCategory, filteredProducts, pendingCreates, pendingEdits, stockMin]);
 
     const toggleBrowserFullscreen = useCallback(async () => {
         const root = spreadsheetRootRef.current;
@@ -1098,6 +1116,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             draft,
                             field,
                             rawValue,
+                            stockMin,
                         );
                         return next;
                     });
@@ -1111,6 +1130,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                     payload,
                     field,
                     rawValue,
+                    stockMin,
                 );
 
                 setPendingEdits((current) => {
@@ -1130,7 +1150,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                 throw error;
             }
         },
-        [pendingEdits],
+        [pendingEdits, stockMin],
     );
 
     const stageNewProduct = useCallback(
@@ -1148,7 +1168,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             }
 
             try {
-                draftToProductInput(draft);
+                draftToProductInput(draft, stockMin);
             } catch (error) {
                 toast.error(
                     error instanceof Error
@@ -1191,7 +1211,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             });
             return true;
         },
-        [activeCategory, categories, displayProducts, pendingCreates],
+        [activeCategory, categories, displayProducts, pendingCreates, stockMin],
     );
 
     const tryCommitNewProduct = useCallback(async () => {
@@ -1891,9 +1911,6 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                     <th className={SPREADSHEET_HEADER}>
                                         Option
                                     </th>
-                                    <th className={SPREADSHEET_HEADER}>
-                                        Barcode
-                                    </th>
                                     <th
                                         className={cn(
                                             SPREADSHEET_HEADER,
@@ -1909,6 +1926,9 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                         )}
                                     >
                                         Cost
+                                    </th>
+                                    <th className={SPREADSHEET_HEADER}>
+                                        Barcode
                                     </th>
                                     <th className={SPREADSHEET_HEADER}>
                                         Deal
@@ -2002,29 +2022,13 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                                 />
                                             </td>
                                             <td className={SPREADSHEET_CELL}>
-                                                <SpreadsheetTextCell
-                                                    value={tableRowBarcode(row)}
-                                                    allowEmpty
-                                                    saving={saving}
-                                                    dataRow={cellRow}
-                                                    dataCol={4}
-                                                    onCommit={(value) =>
-                                                        stageInlineField(
-                                                            row,
-                                                            'barcode',
-                                                            value,
-                                                        )
-                                                    }
-                                                />
-                                            </td>
-                                            <td className={SPREADSHEET_CELL}>
                                                 <SpreadsheetNumberCell
                                                     value={tableRowPrice(row)}
                                                     decimals={2}
                                                     label="Price"
                                                     saving={saving}
                                                     dataRow={cellRow}
-                                                    dataCol={5}
+                                                    dataCol={4}
                                                     onCommit={(value) =>
                                                         stageInlineField(
                                                             row,
@@ -2042,11 +2046,27 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                                     label="Cost"
                                                     saving={saving}
                                                     dataRow={cellRow}
-                                                    dataCol={6}
+                                                    dataCol={5}
                                                     onCommit={(value) =>
                                                         stageInlineField(
                                                             row,
                                                             'cost_price',
+                                                            value,
+                                                        )
+                                                    }
+                                                />
+                                            </td>
+                                            <td className={SPREADSHEET_CELL}>
+                                                <SpreadsheetTextCell
+                                                    value={tableRowBarcode(row)}
+                                                    allowEmpty
+                                                    saving={saving}
+                                                    dataRow={cellRow}
+                                                    dataCol={6}
+                                                    onCommit={(value) =>
+                                                        stageInlineField(
+                                                            row,
+                                                            'barcode',
                                                             value,
                                                         )
                                                     }
@@ -2073,6 +2093,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                                     value={tableRowStock(row)}
                                                     low={low}
                                                     saving={saving}
+                                                    min={stockMin}
                                                     dataRow={cellRow}
                                                     dataCol={8}
                                                     onCommit={(value) =>
@@ -2114,6 +2135,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 <NewProductSpreadsheetRow
                                     draft={newProductDraft}
                                     saving={savingAll}
+                                    stockMin={stockMin}
                                     rowIndex={tableRows.length + 1}
                                     categoryNames={categoryNames}
                                     itemInputRef={newRowItemRef}
@@ -2509,7 +2531,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                     id="p-stock"
                                     type="number"
                                     inputMode="decimal"
-                                    min="0"
+                                    min={allowNegativeStock ? undefined : '0'}
                                     step="0.001"
                                     value={form.stock}
                                     onChange={(e) =>
@@ -3297,6 +3319,7 @@ function SpreadsheetIntegerCell({
     low = false,
     label = 'Stock',
     saving = false,
+    min = 0,
     dataRow,
     dataCol,
     onCommit,
@@ -3304,6 +3327,7 @@ function SpreadsheetIntegerCell({
     value: number;
     low?: boolean;
     label?: string;
+    min?: number;
     onCommit: (value: number) => Promise<void>;
 }) {
     const [draft, setDraft] = useState(String(value));
@@ -3312,12 +3336,13 @@ function SpreadsheetIntegerCell({
         setDraft(String(value));
     }, [value]);
 
-    const invalid = isInvalidDecimalDraft(draft, false);
+    const invalid = isInvalidDecimalDraft(draft, false, min);
 
     async function commit() {
         const result = parseSpreadsheetDecimal(draft, {
             label,
             allowEmpty: false,
+            min,
         });
         if (!result.ok) {
             toast.error(result.message);
@@ -3362,6 +3387,7 @@ function SpreadsheetIntegerCell({
 function NewProductSpreadsheetRow({
     draft,
     saving,
+    stockMin = 0,
     rowIndex,
     categoryNames,
     itemInputRef,
@@ -3371,6 +3397,7 @@ function NewProductSpreadsheetRow({
 }: {
     draft: NewProductDraft;
     saving: boolean;
+    stockMin?: number;
     rowIndex: number;
     categoryNames: string[];
     itemInputRef: RefObject<HTMLInputElement | null>;
@@ -3382,7 +3409,7 @@ function NewProductSpreadsheetRow({
     const placeholderClass = 'placeholder:text-gray-400';
     const priceInvalid = isInvalidDecimalDraft(draft.price, true);
     const costInvalid = isInvalidDecimalDraft(draft.cost_price, true);
-    const stockInvalid = isInvalidDecimalDraft(draft.stock, true);
+    const stockInvalid = isInvalidDecimalDraft(draft.stock, true, stockMin);
     const dealInvalid = draft.deal.trim().length > DEAL_MAX_LENGTH;
 
     function handleFieldBlur(field: NewProductBlurField) {
@@ -3482,35 +3509,13 @@ function NewProductSpreadsheetRow({
             <td className={SPREADSHEET_CELL}>
                 <input
                     type="text"
-                    value={draft.barcode}
-                    disabled={saving || !hasCategories}
-                    placeholder="Barcode"
-                    maxLength={120}
-                    data-spreadsheet-cell=""
-                    data-row={rowIndex}
-                    data-col={4}
-                    className={cn(
-                        SPREADSHEET_INPUT,
-                        'text-left italic text-gray-700',
-                        placeholderClass,
-                    )}
-                    onChange={(event) =>
-                        onDraftChange({ barcode: event.target.value })
-                    }
-                    onBlur={() => handleFieldBlur('barcode')}
-                    onKeyDown={handleSpreadsheetKeyDown}
-                />
-            </td>
-            <td className={SPREADSHEET_CELL}>
-                <input
-                    type="text"
                     inputMode="decimal"
                     value={draft.price}
                     disabled={saving || !hasCategories}
                     placeholder="0.00"
                     data-spreadsheet-cell=""
                     data-row={rowIndex}
-                    data-col={5}
+                    data-col={4}
                     className={cn(
                         SPREADSHEET_INPUT,
                         'text-right tabular-nums text-gray-700',
@@ -3533,7 +3538,7 @@ function NewProductSpreadsheetRow({
                     placeholder="Cost"
                     data-spreadsheet-cell=""
                     data-row={rowIndex}
-                    data-col={6}
+                    data-col={5}
                     className={cn(
                         SPREADSHEET_INPUT,
                         'text-right tabular-nums text-gray-700',
@@ -3544,6 +3549,28 @@ function NewProductSpreadsheetRow({
                         onDraftChange({ cost_price: event.target.value })
                     }
                     onBlur={() => handleFieldBlur('cost_price')}
+                    onKeyDown={handleSpreadsheetKeyDown}
+                />
+            </td>
+            <td className={SPREADSHEET_CELL}>
+                <input
+                    type="text"
+                    value={draft.barcode}
+                    disabled={saving || !hasCategories}
+                    placeholder="Barcode"
+                    maxLength={120}
+                    data-spreadsheet-cell=""
+                    data-row={rowIndex}
+                    data-col={6}
+                    className={cn(
+                        SPREADSHEET_INPUT,
+                        'text-left italic text-gray-700',
+                        placeholderClass,
+                    )}
+                    onChange={(event) =>
+                        onDraftChange({ barcode: event.target.value })
+                    }
+                    onBlur={() => handleFieldBlur('barcode')}
                     onKeyDown={handleSpreadsheetKeyDown}
                 />
             </td>

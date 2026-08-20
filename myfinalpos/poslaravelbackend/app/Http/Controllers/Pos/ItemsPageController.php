@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\Pos\ProductController;
 
 use App\Http\Controllers\Controller;
 
+use App\Services\Pos\AppSettingsService;
+
 use App\Services\Pos\ProductImportExportService;
 
 use App\Support\PosHelpers;
@@ -36,7 +38,11 @@ class ItemsPageController extends Controller
 
     {
 
-        return Inertia::render('pos/items');
+        return Inertia::render('pos/items', [
+
+            'allow_negative_stock' => (bool) (app(AppSettingsService::class)->read()['allow_negative_stock'] ?? false),
+
+        ]);
 
     }
 
@@ -46,7 +52,11 @@ class ItemsPageController extends Controller
 
     {
 
-        return Inertia::render('pos/items-sheet');
+        return Inertia::render('pos/items-sheet', [
+
+            'allow_negative_stock' => (bool) (app(AppSettingsService::class)->read()['allow_negative_stock'] ?? false),
+
+        ]);
 
     }
 
