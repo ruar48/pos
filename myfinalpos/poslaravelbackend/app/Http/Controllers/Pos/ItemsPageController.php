@@ -92,6 +92,16 @@ class ItemsPageController extends Controller
 
 
 
+    public function deleteCategory(Request $request): JsonResponse
+
+    {
+
+        return app(CategoryController::class)->handle($request);
+
+    }
+
+
+
     public function products(Request $request): JsonResponse
 
     {

@@ -1,6 +1,9 @@
 import { laravelFetch } from '@/lib/laravel-fetch';
 import { categories, products } from '@/routes/pos/items';
-import { store as storeCategory } from '@/routes/pos/items/categories';
+import {
+    destroy as destroyCategory,
+    store as storeCategory,
+} from '@/routes/pos/items/categories';
 import {
     exportMethod as exportProductsRoute,
     importMethod as importProductsRoute,
@@ -115,6 +118,14 @@ export async function updateCategory(input: {
             body: JSON.stringify(input),
         },
     );
+}
+
+export async function deleteCategory(id: number) {
+    clearItemsCatalogCache();
+    return laravelFetch<{ message?: string }>(destroyCategory.url(), {
+        method: 'DELETE',
+        body: JSON.stringify({ id }),
+    });
 }
 
 export async function fetchProducts() {

@@ -26,6 +26,7 @@ class CategoryController extends Controller
             'GET' => $this->index(),
             'POST' => $this->store($request),
             'PUT' => $this->update($request),
+            'DELETE' => $this->destroy($request),
             default => $this->posError('Method not allowed', 405),
         };
     }
@@ -140,6 +141,79 @@ class CategoryController extends Controller
         return $this->posSuccess([
             'message' => 'Category updated successfully',
             'data' => (array) $category,
+        ]);
+    }
+
+    private function destroy(Request $request): JsonResponse
+    {
+        $id = (int) $request->input('id', 0);
+
+        if ($id <= 0) {
+            return $this->posError('Category id is required', 400);
+        }
+
+        $current = DB::selectOne(
+            'SELECT id, name FROM categories WHERE id = ? LIMIT 1',
+            [$id],
+        );
+
+        if (! $current) {
+            return $this->posError('Category not found', 404);
+        }
+
+        $activeCount = (int) DB::table('products')
+            ->where('category_id', $id)
+            ->where('status', 'active')
+            ->count();
+
+        if ($activeCount > 0) {
+            return $this->posError(
+                "Cannot delete \"{$current->name}\" - it still has {$activeCount} item(s). Move or delete those items first.",
+                409,
+            );
+        }
+
+        // Soft-deleted products (status != active) keep their row so past
+        // sales stay attached to a product record - order_items also has a
+        // restrictOnDelete FK to products, so those rows can't be purged
+        // even if we wanted to. The category's FK is restrictOnDelete too,
+        // so any leftover inactive rows still pointing at this category
+        // would block the delete even though the UI shows it as empty.
+        // Re-point them at a catch-all archive category instead of deleting
+        // history.
+        DB::transaction(function () use ($id) {
+            $hasLeftovers = DB::table('products')->where('category_id', $id)->exists();
+
+            if ($hasLeftovers) {
+                $archiveId = $this->archiveCategoryId($id);
+                DB::table('products')->where('category_id', $id)->update([
+                    'category_id' => $archiveId,
+                ]);
+            }
+
+            DB::table('categories')->where('id', $id)->delete();
+        });
+
+        return $this->posSuccess([
+            'message' => "\"{$current->name}\" deleted successfully",
+        ]);
+    }
+
+    private function archiveCategoryId(int $excludeId): int
+    {
+        $existing = DB::selectOne(
+            "SELECT id FROM categories WHERE LOWER(name) IN ('others', 'archived') AND id != ? LIMIT 1",
+            [$excludeId],
+        );
+
+        if ($existing) {
+            return (int) $existing->id;
+        }
+
+        return (int) DB::table('categories')->insertGetId([
+            'name' => 'Archived',
+            'icon' => 'category',
+            'description' => 'Holding category for removed items that still have order history.',
         ]);
     }
 

@@ -57,6 +57,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/pos/items/categories', [ItemsPageController::class, 'categories'])->name('pos.items.categories');
     Route::post('/pos/items/categories', [ItemsPageController::class, 'storeCategory'])->name('pos.items.categories.store');
     Route::put('/pos/items/categories', [ItemsPageController::class, 'updateCategory'])->name('pos.items.categories.update');
+    Route::delete('/pos/items/categories', [ItemsPageController::class, 'deleteCategory'])->name('pos.items.categories.destroy');
     Route::get('/pos/items/products', [ItemsPageController::class, 'products'])->name('pos.items.products');
     Route::post('/pos/items/products', [ItemsPageController::class, 'storeProduct'])->name('pos.items.products.store');
     Route::put('/pos/items/products', [ItemsPageController::class, 'updateProduct'])->name('pos.items.products.update');

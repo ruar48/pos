@@ -48,6 +48,7 @@ import {
 } from '@/lib/category-icons';
 import {
     createCategory,
+    deleteCategory,
     deleteProduct,
     exportProducts,
     fetchCategories,
@@ -673,6 +674,9 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
     const importFileRef = useRef<HTMLInputElement>(null);
     const [deleteTarget, setDeleteTarget] = useState<PosProduct | null>(null);
     const [deletingProduct, setDeletingProduct] = useState(false);
+    const [deleteCategoryTarget, setDeleteCategoryTarget] =
+        useState<PosCategory | null>(null);
+    const [deletingCategory, setDeletingCategory] = useState(false);
     const newRowItemRef = useRef<HTMLInputElement>(null);
     const spreadsheetRootRef = useRef<HTMLDivElement>(null);
     const tableScrollRef = useRef<HTMLDivElement>(null);
@@ -1324,6 +1328,31 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             );
         } finally {
             setDeletingProduct(false);
+        }
+    }
+
+    async function confirmDeleteCategory() {
+        if (!deleteCategoryTarget) {
+            return;
+        }
+
+        setDeletingCategory(true);
+        try {
+            await deleteCategory(deleteCategoryTarget.id);
+            setCategories((current) =>
+                current.filter((cat) => cat.id !== deleteCategoryTarget.id),
+            );
+            if (activeCategory === deleteCategoryTarget.name) {
+                setActiveCategory(ALL);
+            }
+            setDeleteCategoryTarget(null);
+            toast.success('Category deleted');
+        } catch (error) {
+            toast.error(
+                error instanceof Error ? error.message : 'Delete failed',
+            );
+        } finally {
+            setDeletingCategory(false);
         }
     }
 
@@ -2337,9 +2366,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                     <div className="flex flex-col gap-2 py-2">
                         {categories.map((cat) => {
                             const Icon = resolveCategoryIcon(cat.icon, cat.name);
-                            const count = products.filter(
-                                (product) => product.category_name === cat.name,
-                            ).length;
+                            const count = categoryCounts[cat.name] ?? 0;
                             return (
                                 <div
                                     key={cat.id}
@@ -2368,6 +2395,17 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                     >
                                         <Pencil className="size-3.5" />
                                         Edit
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="shrink-0 text-destructive hover:text-destructive"
+                                        onClick={() =>
+                                            setDeleteCategoryTarget(cat)
+                                        }
+                                    >
+                                        <Trash2 className="size-3.5" />
                                     </Button>
                                 </div>
                             );
@@ -2711,6 +2749,49 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             disabled={deletingProduct}
                         >
                             {deletingProduct ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                                'Delete'
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={deleteCategoryTarget !== null}
+                onOpenChange={(open) => {
+                    if (!open && !deletingCategory) {
+                        setDeleteCategoryTarget(null);
+                    }
+                }}
+            >
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader className="items-center text-center sm:items-center sm:text-center">
+                        <div className="mb-1 flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                            <Trash2 className="size-5" />
+                        </div>
+                        <DialogTitle>Delete category?</DialogTitle>
+                        <DialogDescription className="text-center">
+                            {deleteCategoryTarget
+                                ? `Remove "${deleteCategoryTarget.name}" from your categories? This can't be undone. Categories that still have items can't be deleted.`
+                                : null}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 sm:justify-center">
+                        <Button
+                            variant="outline"
+                            onClick={() => setDeleteCategoryTarget(null)}
+                            disabled={deletingCategory}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => void confirmDeleteCategory()}
+                            disabled={deletingCategory}
+                        >
+                            {deletingCategory ? (
                                 <Loader2 className="size-4 animate-spin" />
                             ) : (
                                 'Delete'
