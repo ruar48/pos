@@ -67,6 +67,7 @@ class CashDrawerService
             ],
             'cash_additions' => $this->listCashAdditions($sessionId),
             'expenses' => $this->listExpenses($sessionId),
+            'next_series_no' => $this->nextSuggestedSeriesNo(),
             'range' => [
                 'start' => $startDt,
                 'end' => $endDt,
@@ -308,6 +309,7 @@ class CashDrawerService
         }
 
         $seriesNo = $this->parseSeriesNo($request);
+        $this->assertSeriesNoUnique($seriesNo);
 
         $businessDate = $this->resolveBusinessDate($request);
         $session = $this->resolveSession($businessDate);
@@ -375,6 +377,7 @@ class CashDrawerService
         }
 
         $seriesNo = $this->parseSeriesNo($request);
+        $this->assertSeriesNoUnique($seriesNo, $expenseId);
 
         DB::table('drawer_expenses')
             ->where('id', $expenseId)
@@ -824,6 +827,7 @@ class CashDrawerService
                 'cash_expenses' => round($cashExpenses, 2),
                 'non_cash_expenses' => round($nonCashExpenses, 2),
             ],
+            'next_series_no' => $this->nextSuggestedSeriesNo(),
             'range' => [
                 'start' => $startDt,
                 'end' => $endDt,
@@ -924,6 +928,23 @@ class CashDrawerService
         return (string) $id;
     }
 
+    /**
+     * Suggested next Series No. shown to the cashier as a prefilled (but
+     * still editable) default, replacing the redundant auto Reference No.
+     * field. Global across all sessions/dates - not date-based like
+     * Reference No. - and floors at 4001 per the store's requested cutover,
+     * so it never collides with historical free-text series numbers
+     * (e.g. "CHK-88421") already on old records.
+     */
+    private function nextSuggestedSeriesNo(): string
+    {
+        $max = (int) (DB::table('drawer_expenses')
+            ->whereRaw("series_no REGEXP '^[0-9]+$'")
+            ->max(DB::raw('CAST(series_no AS UNSIGNED)')) ?? 0);
+
+        return (string) (max(4000, $max) + 1);
+    }
+
     private function allocateExpenseReferenceNo(int $sessionId, string $businessDate): string
     {
         $count = (int) DB::table('drawer_expenses')
@@ -945,6 +966,31 @@ class CashDrawerService
         }
 
         return mb_substr($series, 0, 60);
+    }
+
+    /**
+     * Case-insensitive uniqueness check across all drawer expenses (not
+     * scoped to a session/date - series numbers now double as the sole
+     * reference identifier, so a duplicate anywhere would be ambiguous).
+     * Blank/null series numbers are exempt since the field stays optional.
+     */
+    private function assertSeriesNoUnique(?string $seriesNo, ?int $excludeExpenseId = null): void
+    {
+        if ($seriesNo === null) {
+            return;
+        }
+
+        $exists = DB::table('drawer_expenses')
+            ->whereRaw('LOWER(series_no) = ?', [strtolower($seriesNo)])
+            ->when(
+                $excludeExpenseId !== null,
+                fn ($query) => $query->where('id', '!=', $excludeExpenseId),
+            )
+            ->exists();
+
+        if ($exists) {
+            throw new \InvalidArgumentException("Series No. \"{$seriesNo}\" is already used by another expense.");
+        }
     }
 
     /**

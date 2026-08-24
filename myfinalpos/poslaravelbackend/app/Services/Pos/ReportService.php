@@ -284,9 +284,10 @@ class ReportService
     }
 
     /**
+     * @param  'profit'|'name'|'category'  $sort
      * @return array<int, array<string, mixed>>
      */
-    public function profitByItem(string $startDt, string $endDt, int $limit = 15): array
+    public function profitByItem(string $startDt, string $endDt, string $sort = 'profit'): array
     {
         if (! Schema::hasTable('order_items')) {
             return [];
@@ -295,6 +296,15 @@ class ReportService
         $qtyExpr = $this->netQtyExpr();
         $costExpr = $this->unitCostExpr();
 
+        $orderBy = match ($sort) {
+            'name' => 'oi.product_name ASC',
+            'category' => "COALESCE(c.name, 'Uncategorized') ASC, oi.product_name ASC",
+            default => "(SUM({$qtyExpr} * oi.price) - SUM({$qtyExpr} * {$costExpr})) DESC",
+        };
+
+        // No LIMIT here - the store wants the full item list, not just a
+        // top-N slice; sort controls (profit/name/category) let them find
+        // what they need instead.
         $rows = DB::select(
             "SELECT
                 oi.product_id,
@@ -312,8 +322,7 @@ class ReportService
              GROUP BY oi.product_id, oi.product_name, COALESCE(c.name, 'Uncategorized')
              ".($this->hasVarietyColumn() ? ', oi.variety_name' : '')."
              HAVING quantity_sold > 0
-             ORDER BY (SUM({$qtyExpr} * oi.price) - SUM({$qtyExpr} * {$costExpr})) DESC
-             LIMIT {$limit}",
+             ORDER BY {$orderBy}",
             ['start' => $startDt, 'end' => $endDt],
         );
 
@@ -334,6 +343,7 @@ class ReportService
                 'cogs' => $cogs,
                 'profit' => $profit,
                 'margin_percent' => $revenue > 0 ? round(($profit / $revenue) * 100, 1) : 0,
+                'markup_percent' => $cogs > 0 ? round(($profit / $cogs) * 100, 1) : 0,
             ];
         }, $rows);
     }
@@ -415,6 +425,9 @@ class ReportService
             $cat['profit'] = round($cat['profit'], 2);
             $cat['margin_percent'] = $cat['revenue'] > 0
                 ? round(($cat['profit'] / $cat['revenue']) * 100, 1)
+                : 0;
+            $cat['markup_percent'] = $cat['cogs'] > 0
+                ? round(($cat['profit'] / $cat['cogs']) * 100, 1)
                 : 0;
         }
 

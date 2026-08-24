@@ -41,6 +41,7 @@ export type CashDrawerData = {
     summary: CashDrawerSummary;
     cash_additions: CashAddition[];
     expenses: DrawerExpense[];
+    next_series_no: string;
     range: {
         start: string;
         end: string;
@@ -52,6 +53,7 @@ export type CashDrawerMutation = {
     session_id: number;
     revision: string;
     summary: CashDrawerSummary;
+    next_series_no: string;
     range: {
         start: string;
         end: string;

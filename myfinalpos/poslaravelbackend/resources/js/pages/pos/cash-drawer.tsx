@@ -162,6 +162,7 @@ function mergeDrawerMutation(
         session_id: mutation.session_id,
         revision: mutation.revision,
         summary: mutation.summary,
+        next_series_no: mutation.next_series_no,
         range: mutation.range,
         expenses,
         cash_additions: cashAdditions,
@@ -177,6 +178,7 @@ function applyOptimisticExpense(
         session_id: current.session_id,
         revision: current.revision,
         summary: current.summary,
+        next_series_no: current.next_series_no,
         range: current.range,
         expense,
     });
@@ -195,6 +197,7 @@ function applyOptimisticCashAddition(
             cash_added: current.summary.cash_added + addition.amount,
             cash_in_drawer: current.summary.cash_in_drawer + addition.amount,
         },
+        next_series_no: current.next_series_no,
         range: current.range,
         cash_addition: addition,
     });
@@ -542,6 +545,17 @@ export default function CashDrawerPage() {
         const savedCount = (data?.expenses ?? []).filter((row) => row.id > 0).length;
         return formatExpenseReferenceNo(selectedDate, savedCount + 1);
     }, [data?.expenses, selectedDate]);
+
+    // Prefill Series No. with the next suggested number so it's a one-click
+    // default instead of a required manual entry, replacing the old
+    // Reference No. field. Only fills in when the field is empty (untouched
+    // or just reset after a save) so it never overwrites a value the
+    // cashier is actively typing/editing.
+    useEffect(() => {
+        const suggested = data?.next_series_no;
+        if (!suggested) return;
+        setExpenseSeriesNo((current) => (current === '' ? suggested : current));
+    }, [data?.next_series_no]);
 
     const runAction = async (
         action: () => Promise<{ data: CashDrawerMutation }>,
@@ -1282,26 +1296,17 @@ export default function CashDrawerPage() {
                             </div>
                             <div className="space-y-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="expense-reference-no">Reference No.</Label>
-                                    <Input
-                                        id="expense-reference-no"
-                                        value={nextReferenceNo}
-                                        readOnly
-                                        className="bg-muted/50 text-muted-foreground"
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        Format: date + daily number (e.g. {selectedDate}-001).
-                                        Auto-assigned when you save.
-                                    </p>
-                                </div>
-                                <div className="space-y-2">
                                     <Label htmlFor="expense-series-no">Series No.</Label>
                                     <Input
                                         id="expense-series-no"
-                                        placeholder="Optional (e.g. cheque series)"
+                                        placeholder="e.g. cheque series"
                                         value={expenseSeriesNo}
                                         onChange={(e) => setExpenseSeriesNo(e.target.value)}
                                     />
+                                    <p className="text-xs text-muted-foreground">
+                                        Auto-suggested - edit if you need a
+                                        different series number.
+                                    </p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="expense-name">Expense Name *</Label>
@@ -1547,15 +1552,6 @@ export default function CashDrawerPage() {
                         <DialogTitle>Edit Expense</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-expense-reference-no">Reference No.</Label>
-                            <Input
-                                id="edit-expense-reference-no"
-                                value={editingExpense?.reference_no ?? ''}
-                                readOnly
-                                className="bg-muted/50 text-muted-foreground"
-                            />
-                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="edit-expense-series-no">Series No.</Label>
                             <Input
