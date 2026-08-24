@@ -21,20 +21,22 @@ class PayrollServiceTest extends TestCase
         $date = now()->toDateString();
 
         $attendance = Mockery::mock(AttendanceService::class);
-        $attendance->shouldReceive('dailyBoard')
+        $attendance->shouldReceive('rangeBoard')
             ->once()
-            ->with($date, null)
+            ->with($date, $date, null)
             ->andReturn([
-                [
-                    'user_id' => 42,
-                    'full_name' => 'Ana Reyes',
-                    'role' => 'cashier',
-                    'branch_name' => 'Main',
-                    // Live duty span after just timing in — must not become payroll.
-                    'total_minutes' => 125,
-                    'total_break_minutes' => 0,
-                    'is_clocked_in' => true,
-                    'missing_time_out' => false,
+                $date => [
+                    [
+                        'user_id' => 42,
+                        'full_name' => 'Ana Reyes',
+                        'role' => 'cashier',
+                        'branch_name' => 'Main',
+                        // Live duty span after just timing in — must not become payroll.
+                        'total_minutes' => 125,
+                        'total_break_minutes' => 0,
+                        'is_clocked_in' => true,
+                        'missing_time_out' => false,
+                    ],
                 ],
             ]);
 
@@ -56,19 +58,21 @@ class PayrollServiceTest extends TestCase
         $date = now()->toDateString();
 
         $attendance = Mockery::mock(AttendanceService::class);
-        $attendance->shouldReceive('dailyBoard')
+        $attendance->shouldReceive('rangeBoard')
             ->once()
-            ->with($date, null)
+            ->with($date, $date, null)
             ->andReturn([
-                [
-                    'user_id' => 7,
-                    'full_name' => 'Ricardo Santos',
-                    'role' => 'labor',
-                    'branch_name' => 'Main',
-                    'total_minutes' => 420,
-                    'total_break_minutes' => 60,
-                    'is_clocked_in' => false,
-                    'missing_time_out' => false,
+                $date => [
+                    [
+                        'user_id' => 7,
+                        'full_name' => 'Ricardo Santos',
+                        'role' => 'labor',
+                        'branch_name' => 'Main',
+                        'total_minutes' => 420,
+                        'total_break_minutes' => 60,
+                        'is_clocked_in' => false,
+                        'missing_time_out' => false,
+                    ],
                 ],
             ]);
 

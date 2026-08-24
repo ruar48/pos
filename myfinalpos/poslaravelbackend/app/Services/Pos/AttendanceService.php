@@ -26,6 +26,9 @@ class AttendanceService
 
     private static bool $photoUrlColumnReady = false;
 
+    /** @var array<string, mixed>|null */
+    private ?array $scheduleCache = null;
+
     public static function requiresGps(): bool
 
     {
@@ -68,6 +71,15 @@ class AttendanceService
 
     {
 
+        // schedule() is called once per user per day while summarizing an
+        // attendance range (payroll/punctuality reports), and read() re-runs
+        // its own hasTable/hasColumn probes on every call - caching per
+        // AttendanceService instance turns thousands of redundant schema
+        // queries into one for the life of a single report request.
+        if ($this->scheduleCache !== null) {
+            return $this->scheduleCache;
+        }
+
         $settings = app(AppSettingsService::class)->read();
 
         $morningAcceptStart = $this->normalizeTime((string) $settings['attendance_morning_accept_start']);
@@ -89,7 +101,7 @@ class AttendanceService
                 ->diffInMinutes(Carbon::createFromFormat('H:i', $morningGraceEnd), false),
         );
 
-        return [
+        $this->scheduleCache = [
             'morning_accept_start' => $morningAcceptStart,
             'morning_official_start' => $morningOfficialStart,
             'morning_grace_end' => $morningGraceEnd,
@@ -114,6 +126,8 @@ class AttendanceService
             'morning_absent_after_time' => $morningCutoff,
             'morning_in_end_time' => $morningCutoff,
         ];
+
+        return $this->scheduleCache;
 
     }
 
@@ -255,7 +269,99 @@ class AttendanceService
 
     }
 
+    /**
+     * Multi-day equivalent of dailyBoard() for reports that used to loop
+     * dailyBoard() once per calendar day (2 SQL queries per day - a payroll
+     * run over a month was ~60 queries). This issues the users query and the
+     * events query once for the whole range, then buckets events into local
+     * calendar days in PHP before reusing summarizeDay() per user/day.
+     *
+     * @return array<string, array<int, array<string, mixed>>> date (Y-m-d) => rows shaped like dailyBoard()
+     */
+    public function rangeBoard(string $startDate, string $endDate, ?int $branchId = null): array
+    {
+        if (! Schema::hasTable('staff_attendance') || ! Schema::hasTable('users')) {
+            return [];
+        }
 
+        $start = Carbon::parse($startDate, self::DISPLAY_TIMEZONE)->startOfDay();
+        $end = Carbon::parse($endDate, self::DISPLAY_TIMEZONE)->startOfDay();
+        if ($end->lt($start)) {
+            [$start, $end] = [$end, $start];
+        }
+
+        [$rangeStartUtc] = $this->dayBoundsUtc($start->format('Y-m-d'));
+        [, $rangeEndUtc] = $this->dayBoundsUtc($end->format('Y-m-d'));
+
+        $userParams = [];
+        $userBranchSql = '';
+        if ($branchId !== null && $branchId > 0) {
+            $userBranchSql = 'AND u.branch_id = ?';
+            $userParams[] = $branchId;
+        }
+
+        $users = DB::select(
+            "SELECT u.id, u.full_name, u.role, u.branch_id,
+                    COALESCE(b.name, 'Unassigned') AS branch_name
+             FROM users u
+             LEFT JOIN branches b ON b.id = u.branch_id
+             WHERE COALESCE(u.status, 1) = 1
+             {$userBranchSql}
+             ORDER BY u.full_name ASC",
+            $userParams,
+        );
+
+        $eventParams = [$rangeStartUtc, $rangeEndUtc];
+        $eventBranchSql = '';
+        if ($branchId !== null && $branchId > 0) {
+            $eventBranchSql = 'AND sa.branch_id = ?';
+            $eventParams[] = $branchId;
+        }
+
+        $events = DB::select(
+            "SELECT sa.*
+             FROM staff_attendance sa
+             WHERE sa.created_at BETWEEN ? AND ?
+             {$eventBranchSql}
+             ORDER BY sa.user_id ASC, sa.created_at ASC",
+            $eventParams,
+        );
+
+        $byUserDay = [];
+        foreach ($events as $event) {
+            $userId = (int) $event->user_id;
+            $localDate = Carbon::parse((string) $event->created_at, 'UTC')
+                ->timezone(self::DISPLAY_TIMEZONE)
+                ->format('Y-m-d');
+
+            $byUserDay[$userId][$localDate][] = $event;
+        }
+
+        $board = [];
+        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
+            $date = $day->format('Y-m-d');
+            $rows = [];
+
+            foreach ($users as $user) {
+                $userId = (int) $user->id;
+                $userEvents = $byUserDay[$userId][$date] ?? [];
+                $summary = $this->summarizeDay($userEvents, $date);
+
+                $rows[] = [
+                    'user_id' => $userId,
+                    'full_name' => (string) $user->full_name,
+                    'role' => (string) $user->role,
+                    'branch_id' => $user->branch_id !== null ? (int) $user->branch_id : null,
+                    'branch_name' => (string) $user->branch_name,
+                    ...$summary,
+                ];
+            }
+
+            $board[$date] = $rows;
+        }
+
+        return $board;
+    }
 
     /**
 
@@ -317,16 +423,22 @@ class AttendanceService
 
         $aggregates = [];
 
+        $board = $this->rangeBoard($start->format('Y-m-d'), $end->format('Y-m-d'), $branchId);
 
+        foreach ($board as $rows) {
+            $dayHasEvents = false;
+            foreach ($rows as $row) {
+                if ((int) ($row['punch_count'] ?? 0) > 0) {
+                    $dayHasEvents = true;
+                    break;
+                }
+            }
 
-        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
-            $date = $day->format('Y-m-d');
-
-            if (! $this->dayHasClockEvents($date, $branchId)) {
+            if (! $dayHasEvents) {
                 continue;
             }
 
-            foreach ($this->dailyBoard($date, $branchId) as $row) {
+            foreach ($rows as $row) {
 
                 $userId = (int) $row['user_id'];
 
@@ -429,32 +541,6 @@ class AttendanceService
 
         return $rows;
 
-    }
-
-    private function dayHasClockEvents(string $date, ?int $branchId = null): bool
-    {
-        if (! Schema::hasTable('staff_attendance')) {
-            return false;
-        }
-
-        [$start, $end] = $this->dayBoundsUtc($date);
-        $params = [$start, $end];
-        $branchSql = '';
-
-        if ($branchId !== null && $branchId > 0) {
-            $branchSql = 'AND sa.branch_id = ?';
-            $params[] = $branchId;
-        }
-
-        $row = DB::selectOne(
-            "SELECT COUNT(*) AS total
-             FROM staff_attendance sa
-             WHERE sa.created_at BETWEEN ? AND ?
-             {$branchSql}",
-            $params,
-        );
-
-        return (int) ($row->total ?? 0) > 0;
     }
 
     /**

@@ -26,10 +26,10 @@ class PayrollService
         /** @var array<int, array<string, mixed>> $totals */
         $totals = [];
 
-        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
-            $date = $day->format('Y-m-d');
+        $board = $this->attendance->rangeBoard($start->format('Y-m-d'), $end->format('Y-m-d'), $branchId);
 
-            foreach ($this->attendance->dailyBoard($date, $branchId) as $row) {
+        foreach ($board as $date => $rows) {
+            foreach ($rows as $row) {
                 $userId = (int) $row['user_id'];
 
                 if (! isset($totals[$userId])) {
