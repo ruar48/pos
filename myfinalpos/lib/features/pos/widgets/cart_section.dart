@@ -615,7 +615,7 @@ class CartListTile extends StatelessWidget {
                 color: hasDiscount ? AppColors.green : AppColors.muted,
                 size: 20,
               ),
-              tooltip: 'Item discount',
+              tooltip: 'Discount this item',
             ),
           ),
           SizedBox(
@@ -763,7 +763,7 @@ class _CartActionButtons extends StatelessWidget {
             children: [
               Expanded(
                 child: _ActionChip(
-                  label: 'Discount',
+                  label: 'Discount Total',
                   icon: Icons.percent,
                   onTap: hasItems ? () => _showDiscountDialog(context) : null,
                 ),
@@ -920,7 +920,7 @@ class _ManualDiscountDialogState extends State<_ManualDiscountDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text('Manual Discount'),
+      title: const Text('Discount on Total'),
       content: SizedBox(
         width: 360,
         child: TextField(
@@ -933,6 +933,7 @@ class _ManualDiscountDialogState extends State<_ManualDiscountDialog> {
           decoration: InputDecoration(
             prefixText: widget.pageState.settings.currencySymbol,
             labelText: 'Discount Amount',
+            helperText: 'Taken off the order subtotal, not a single item.',
           ),
         ),
       ),
@@ -972,8 +973,8 @@ class _ItemDiscountDialogState extends State<_ItemDiscountDialog> {
   void initState() {
     super.initState();
     controller = TextEditingController(
-      text: widget.item.discount > 0
-          ? widget.item.discount.toStringAsFixed(2)
+      text: widget.item.discountPerUnit > 0
+          ? widget.item.discountPerUnit.toStringAsFixed(2)
           : '',
     );
   }
@@ -982,6 +983,14 @@ class _ItemDiscountDialogState extends State<_ItemDiscountDialog> {
   void dispose() {
     controller.dispose();
     super.dispose();
+  }
+
+  /// What the shopper actually saves once the entered per-piece amount is
+  /// spread across the line's quantity.
+  double get _previewLineDiscount {
+    final perUnit =
+        toDouble(controller.text).clamp(0, widget.item.unitPrice).toDouble();
+    return perUnit * widget.item.quantity;
   }
 
   void _apply() {
@@ -1014,7 +1023,8 @@ class _ItemDiscountDialogState extends State<_ItemDiscountDialog> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Line total: ${formatMoney(currency, widget.item.grossTotal)}',
+              '${formatQuantity(widget.item.quantity)} x ${formatMoney(currency, widget.item.unitPrice)} = '
+              '${formatMoney(currency, widget.item.grossTotal)}',
               style: const TextStyle(color: AppColors.muted, fontSize: 13),
             ),
             const SizedBox(height: 16),
@@ -1025,16 +1035,23 @@ class _ItemDiscountDialogState extends State<_ItemDiscountDialog> {
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
               ],
+              onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 prefixText: currency,
-                labelText: 'Discount Amount',
+                labelText: 'Discount per piece',
+                helperText: 'Taken off every piece, so it follows the quantity.',
               ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Total off this line: ${formatMoney(currency, _previewLineDiscount)}',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             ),
           ],
         ),
       ),
       actions: [
-        if (widget.item.discount > 0)
+        if (widget.item.discountPerUnit > 0)
           TextButton(
             onPressed: _clearDiscount,
             child: const Text('Remove'),

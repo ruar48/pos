@@ -26,6 +26,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
     fetchAttendancePunctuality,
     fetchAuditTrail,
     fetchCustomerReport,
@@ -39,6 +46,7 @@ import {
     type CustomerRow,
     type ProductMixCategory,
     type ProfitItem,
+    type ProfitSort,
     type ReportSummary,
     type SalesVisualsReport,
 } from '@/lib/reports-api';
@@ -385,6 +393,7 @@ function ProfitBar({ item, max }: { item: ProfitItem; max: number }) {
             <div className="text-right text-xs tabular-nums text-muted-foreground">
                 <p>qty {formatInt(item.quantity_sold)}</p>
                 <p className="font-medium text-primary">tubo {item.margin_percent}%</p>
+                <p>markup {item.markup_percent}%</p>
             </div>
         </div>
     );
@@ -406,6 +415,9 @@ export default function PosReports() {
     );
     const [chartItems, setChartItems] = useState<ProfitItem[]>([]);
     const [topItem, setTopItem] = useState<ProfitItem | null>(null);
+    const [profitSort, setProfitSort] = useState<ProfitSort>('profit');
+    const [profitSearch, setProfitSearch] = useState('');
+    const [profitCategoryFilter, setProfitCategoryFilter] = useState('all');
     const [mix, setMix] = useState<ProductMixCategory[]>([]);
     const [customers, setCustomers] = useState<CustomerRow[]>([]);
     const [audit, setAudit] = useState<AuditRow[]>([]);
@@ -438,7 +450,7 @@ export default function PosReports() {
                     );
                 }
             } else if (tab === 'charts') {
-                const res = await fetchProfitCharts(start, end);
+                const res = await fetchProfitCharts(start, end, profitSort);
                 setChartItems(res.items ?? []);
                 setTopItem(res.top_profit_item ?? null);
             } else if (tab === 'product-mix') {
@@ -460,7 +472,7 @@ export default function PosReports() {
         } finally {
             setLoading(false);
         }
-    }, [start, end, tab, customerSearch, auditSearch]);
+    }, [start, end, tab, customerSearch, auditSearch, profitSort]);
 
     useEffect(() => {
         load();
@@ -477,6 +489,25 @@ export default function PosReports() {
         () => Math.max(...chartItems.map((i) => i.profit), 1),
         [chartItems],
     );
+
+    const profitCategories = useMemo(() => {
+        const names = new Set(chartItems.map((item) => item.category));
+        return Array.from(names).sort((a, b) => a.localeCompare(b));
+    }, [chartItems]);
+
+    const filteredChartItems = useMemo(() => {
+        const query = profitSearch.trim().toLowerCase();
+        return chartItems.filter((item) => {
+            const matchesCategory =
+                profitCategoryFilter === 'all' ||
+                item.category === profitCategoryFilter;
+            const matchesQuery =
+                query === '' ||
+                item.name.toLowerCase().includes(query) ||
+                item.category.toLowerCase().includes(query);
+            return matchesCategory && matchesQuery;
+        });
+    }, [chartItems, profitSearch, profitCategoryFilter]);
 
     const maxTrend = useMemo(
         () => Math.max(...(summary?.daily_trend ?? []).map((d) => d.net_sales), 1),
@@ -1005,12 +1036,90 @@ export default function PosReports() {
                                 title="Profit & COGS by Item"
                                 description={
                                     topItem
-                                        ? `Top earner: ${topItem.name} with ₱${formatMoney(topItem.profit)} tubo`
+                                        ? `Top earner: ${topItem.name} with ₱${formatMoney(topItem.profit)} tubo · ${chartItems.length} item${chartItems.length === 1 ? '' : 's'} total`
                                         : undefined
                                 }
                             />
+                            <div className="mb-3 flex flex-col gap-2.5 sm:flex-row">
+                                <div className="relative flex-1">
+                                    <Search className="absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Search by item name or category..."
+                                        value={profitSearch}
+                                        onChange={(e) =>
+                                            setProfitSearch(e.target.value)
+                                        }
+                                        className="h-11 pl-10 text-base"
+                                    />
+                                </div>
+                                <Select
+                                    value={profitCategoryFilter}
+                                    onValueChange={setProfitCategoryFilter}
+                                >
+                                    <SelectTrigger className="data-[size=default]:h-11 w-full text-base sm:w-64">
+                                        <SelectValue placeholder="All categories" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">
+                                            All categories
+                                        </SelectItem>
+                                        {profitCategories.map((category) => (
+                                            <SelectItem
+                                                key={category}
+                                                value={category}
+                                            >
+                                                {category}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="mb-4 flex flex-wrap items-center gap-2.5">
+                                <span className="text-sm font-semibold text-foreground">
+                                    Sort by:
+                                </span>
+                                {(
+                                    [
+                                        ['profit', 'Highest tubo'],
+                                        ['name', 'Item name (A–Z)'],
+                                        ['category', 'Category (A–Z)'],
+                                    ] as const
+                                ).map(([key, label]) => (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        onClick={() => setProfitSort(key)}
+                                        className={cn(
+                                            'rounded-full border-2 px-4 py-2 text-sm font-semibold transition-colors',
+                                            profitSort === key
+                                                ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                                                : 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/70',
+                                        )}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                            {(profitSearch.trim() !== '' ||
+                                profitCategoryFilter !== 'all') && (
+                                <p className="mb-2 text-xs text-muted-foreground">
+                                    {filteredChartItems.length} of{' '}
+                                    {chartItems.length} items match
+                                    {profitSearch.trim() !== ''
+                                        ? ` "${profitSearch.trim()}"`
+                                        : ''}
+                                    {profitCategoryFilter !== 'all'
+                                        ? `${profitSearch.trim() !== '' ? ' in' : ''} ${profitCategoryFilter}`
+                                        : ''}
+                                </p>
+                            )}
                             <div className="rounded-xl border border-border/60 bg-secondary/10 px-3">
-                                {chartItems.map((item) => (
+                                {filteredChartItems.length === 0 && (
+                                    <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                                        No items match your search.
+                                    </p>
+                                )}
+                                {filteredChartItems.map((item) => (
                                     <ProfitBar
                                         key={`${item.product_id}-${item.name}`}
                                         item={item}
@@ -1060,7 +1169,10 @@ export default function PosReports() {
                                             />
                                         </div>
                                         <p className="mt-2 text-xs text-muted-foreground">
-                                            {cat.margin_percent}% margin
+                                            {cat.margin_percent}% margin ·{' '}
+                                            <span className="font-medium text-primary">
+                                                {cat.markup_percent}% avg markup
+                                            </span>
                                         </p>
                                         <ul className="mt-3 max-h-52 space-y-2 overflow-y-auto border-t border-border/50 pt-3 text-sm">
                                             {cat.items.map((item) => (
@@ -1082,6 +1194,9 @@ export default function PosReports() {
                                                         </p>
                                                         <p className="text-xs text-primary">
                                                             +₱{formatMoney(item.profit)}
+                                                        </p>
+                                                        <p className="text-[11px] text-muted-foreground">
+                                                            {item.markup_percent}% markup
                                                         </p>
                                                     </div>
                                                 </li>

@@ -86,7 +86,12 @@ class CashDrawerService
 
         $businessDate = $this->resolveBusinessDate($request);
         $sinceRevision = trim((string) $request->query('revision', ''));
-        $deadline = microtime(true) + 25.0;
+        // Kept short on purpose: a long poll occupies a request worker for its
+        // whole lifetime, and PHP cannot notice the client aborting while it
+        // sleeps without writing output. A shorter window means a concurrent
+        // save waits seconds, not half a minute, on single-worker setups like
+        // `php artisan serve`.
+        $deadline = microtime(true) + 8.0;
 
         if ($sinceRevision === '') {
             return [

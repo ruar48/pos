@@ -409,6 +409,8 @@ class ReportService
                 'revenue' => $revenue,
                 'cogs' => $cogs,
                 'profit' => $profit,
+                'margin_percent' => $revenue > 0 ? round(($profit / $revenue) * 100, 1) : 0,
+                'markup_percent' => $cogs > 0 ? round(($profit / $cogs) * 100, 1) : 0,
             ];
             $categories[$cat]['quantity_sold'] += (float) $row->quantity_sold;
             $categories[$cat]['revenue'] += $revenue;

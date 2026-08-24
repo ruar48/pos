@@ -1488,7 +1488,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
 
   void applyItemDiscount(CartItem item, double value) {
     setState(() {
-      item.discount = value.clamp(0, item.grossTotal).toDouble();
+      item.discountPerUnit = value.clamp(0, item.unitPrice).toDouble();
     });
     _scheduleMonitorPublish();
   }

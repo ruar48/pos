@@ -44,7 +44,10 @@ export type ProfitItem = {
     cogs: number;
     profit: number;
     margin_percent: number;
+    markup_percent: number;
 };
+
+export type ProfitSort = 'profit' | 'name' | 'category';
 
 export type ProductMixCategory = {
     category: string;
@@ -54,12 +57,15 @@ export type ProductMixCategory = {
         revenue: number;
         cogs: number;
         profit: number;
+        margin_percent: number;
+        markup_percent: number;
     }[];
     quantity_sold: number;
     revenue: number;
     cogs: number;
     profit: number;
     margin_percent: number;
+    markup_percent: number;
 };
 
 export type CustomerRow = {
@@ -122,12 +128,16 @@ export async function fetchSalesVisuals(start: string, end: string) {
     );
 }
 
-export async function fetchProfitCharts(start: string, end: string) {
+export async function fetchProfitCharts(
+    start: string,
+    end: string,
+    sort: ProfitSort = 'profit',
+) {
     return laravelFetch<{
         range: { start: string; end: string };
         items: ProfitItem[];
         top_profit_item: ProfitItem | null;
-    }>(`/pos/reports/charts?${rangeQuery(start, end)}`);
+    }>(`/pos/reports/charts?${rangeQuery(start, end, { sort })}`);
 }
 
 export async function fetchProductMix(start: string, end: string) {

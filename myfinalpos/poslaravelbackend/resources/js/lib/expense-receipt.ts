@@ -74,7 +74,6 @@ export function buildExpenseReceiptLines(
     add('');
     add('EXPENSE RECEIPT');
     add('');
-    add(labelValue('REF NO', expense.reference_no));
     if (expense.series_no) {
         add(labelValue('SERIES', expense.series_no.slice(0, THERMAL_WIDTH - 7)));
     }
@@ -169,7 +168,6 @@ export function buildAllExpensesReceiptLines(
     for (const expense of expenses) {
         const when = parseServerDateTime(expense.created_at) ?? new Date();
 
-        add(labelValue('REF NO', expense.reference_no));
         if (expense.series_no) {
             add(labelValue('SERIES', expense.series_no.slice(0, THERMAL_WIDTH - 7)));
         }

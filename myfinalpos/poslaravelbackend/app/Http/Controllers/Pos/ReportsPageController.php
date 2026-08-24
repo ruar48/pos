@@ -45,9 +45,22 @@ class ReportsPageController extends Controller
     public function charts(Request $request): JsonResponse
     {
         [$start, $end] = $this->range($request);
-        $items = $this->reports->profitByItem($start, $end);
 
-        $top = $items[0] ?? null;
+        $sort = (string) $request->query('sort', 'profit');
+        if (! in_array($sort, ['profit', 'name', 'category'], true)) {
+            $sort = 'profit';
+        }
+
+        $items = $this->reports->profitByItem($start, $end, $sort);
+
+        // Compute independently of the requested sort so "top earner" stays
+        // correct even when the list itself is sorted alphabetically.
+        $top = null;
+        foreach ($items as $row) {
+            if ($top === null || $row['profit'] > $top['profit']) {
+                $top = $row;
+            }
+        }
 
         return response()->json([
             'success' => true,

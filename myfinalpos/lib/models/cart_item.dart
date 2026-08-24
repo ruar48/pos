@@ -6,15 +6,21 @@ class CartItem {
     required this.product,
     this.variety,
     this.quantity = 1,
-    this.discount = 0,
+    this.discountPerUnit = 0,
   });
 
   final Product product;
   final ProductVariety? variety;
   double quantity;
 
-  /// Fixed peso amount knocked off this line, entered per item.
-  double discount;
+  /// Peso amount knocked off each unit of this line. The cashier enters it
+  /// once and it scales automatically when the quantity changes.
+  double discountPerUnit;
+
+  /// Total peso amount knocked off this line (per-unit discount x quantity),
+  /// capped at the line gross so a line can never go negative.
+  double get discount =>
+      (discountPerUnit * quantity).clamp(0, grossTotal).toDouble();
 
   double get unitPrice => variety?.price ?? product.price;
 
@@ -44,6 +50,7 @@ class CartItem {
         if (variety != null) 'variety_name': variety!.name,
         'quantity': quantity,
         'price': unitPrice,
+        'discount_per_unit': discountPerUnit,
         'discount': discount,
         'total': total,
       };

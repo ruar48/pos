@@ -460,6 +460,16 @@ export default function CashDrawerPage() {
                 window.setTimeout(resolve, ms);
             });
 
+        // A save aborts the in-flight watch, but the server keeps running that
+        // poll until its own deadline. Restarting the watch straight away would
+        // queue another long-running request ahead of the save that is still
+        // waiting for a worker, so hold the loop until the save settles.
+        const waitForMutationToSettle = async () => {
+            while (active && mutationInFlightRef.current) {
+                await sleep(150);
+            }
+        };
+
         const runWatchLoop = async () => {
             while (active) {
                 if (document.hidden) {
@@ -481,6 +491,7 @@ export default function CashDrawerPage() {
                     }
 
                     if (mutationInFlightRef.current) {
+                        await waitForMutationToSettle();
                         continue;
                     }
 
@@ -498,6 +509,7 @@ export default function CashDrawerPage() {
                         error instanceof DOMException &&
                         error.name === 'AbortError'
                     ) {
+                        await waitForMutationToSettle();
                         continue;
                     }
                     await sleep(1000);
@@ -922,9 +934,8 @@ export default function CashDrawerPage() {
             const rows = response.data.rows;
             downloadCsv(
                 `drawer-expenses-${selectedDate}.csv`,
-                ['Reference No', 'Series No', 'Name', 'Amount', 'Payment Type', 'User', 'Created At'],
+                ['Series No', 'Name', 'Amount', 'Payment Type', 'User', 'Created At'],
                 rows.map((row: DrawerExpense) => [
-                    row.reference_no,
                     row.series_no ?? '',
                     row.name,
                     row.amount,
@@ -1400,12 +1411,11 @@ export default function CashDrawerPage() {
                                             className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-background/60 px-4 py-3"
                                         >
                                             <div className="min-w-0">
-                                                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                                                    Reference No. {row.reference_no}
-                                                    {row.series_no
-                                                        ? ` · Series ${row.series_no}`
-                                                        : ''}
-                                                </p>
+                                                {row.series_no ? (
+                                                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                                        Series {row.series_no}
+                                                    </p>
+                                                ) : null}
                                                 <p className="font-semibold text-foreground">
                                                     {row.name} · {row.user_name}
                                                 </p>
