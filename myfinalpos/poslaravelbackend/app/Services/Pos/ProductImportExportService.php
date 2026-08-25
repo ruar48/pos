@@ -22,6 +22,7 @@ class ProductImportExportService
         'cost_price',
         'deal',
         'stock',
+        'stock_snapshot',
         'reorder_level',
     ];
 
@@ -45,7 +46,7 @@ class ProductImportExportService
         $rows = DB::select(
             "SELECT p.id, c.name AS category, p.name AS item, {$optionSelect} {$barcodeSelect}
                     p.price, p.cost_price, {$dealSelect}
-                    p.stock, p.reorder_level
+                    p.stock, p.stock AS stock_snapshot, p.reorder_level
              FROM products p
              INNER JOIN categories c ON c.id = p.category_id
              WHERE p.status = 'active'
@@ -213,6 +214,7 @@ class ProductImportExportService
             'item', 'product', 'product_name' => 'name',
             'cost' => 'cost_price',
             'morning_inventory', 'morninginventory', 'morning_in', 'morning_inv', 'morninginv' => 'stock',
+            'stocksnapshot', 'stock_at_export', 'original_stock' => 'stock_snapshot',
             default => $key,
         };
     }
@@ -265,6 +267,7 @@ class ProductImportExportService
         $skipped = 0;
         $errors = [];
         $duplicateWarnings = [];
+        $stockDriftWarnings = [];
         $maxErrors = 50;
         $hasOption = Schema::hasColumn('products', 'option');
         $hasDeal = Schema::hasColumn('products', 'deal');
@@ -331,6 +334,7 @@ class ProductImportExportService
                 }
 
                 $stock = $this->parseQuantity($row['stock'] ?? 0, 0.0);
+                $hasSnapshot = array_key_exists('stock_snapshot', $row) && trim((string) $row['stock_snapshot']) !== '';
                 $reorder = max(0, $this->parseInt($row['reorder_level'] ?? 5, 5));
                 $description = trim((string) ($row['description'] ?? ''));
                 $deal = trim((string) ($row['deal'] ?? ''));
@@ -376,7 +380,6 @@ class ProductImportExportService
                     'description' => $description === '' ? null : $description,
                     'price' => $price,
                     'cost_price' => $costPrice,
-                    'stock' => $stock,
                     'reorder_level' => $reorder,
                     'status' => $status,
                     'updated_at' => $now,
@@ -396,18 +399,49 @@ class ProductImportExportService
 
                 if ($existing !== null) {
                     $productId = (int) $existing->id;
-                    $previousStock = (float) $existing->stock;
+                    $currentStock = (float) $existing->stock;
 
+                    // The snapshot column records what stock was when the file was exported. It
+                    // tells us whether the editor actually touched the stock cell:
+                    //   - untouched (file stock == snapshot): leave live stock alone, so sales or
+                    //     receiving that happened after the export are not rolled back.
+                    //   - edited: the typed number is the new count, applied as-is.
+                    if ($hasSnapshot) {
+                        $snapshotStock = $this->parseQuantity($row['stock_snapshot'], $currentStock);
+                        $stockEdited = round($stock - $snapshotStock, 3) !== 0.0;
+                        $drift = round($currentStock - $snapshotStock, 3);
+
+                        $resolvedStock = $stockEdited ? $stock : $currentStock;
+
+                        if ($drift !== 0.0 && $stockEdited && count($stockDriftWarnings) < $maxErrors) {
+                            $stockDriftWarnings[] = sprintf(
+                                "Row %d: '%s' stock already moved by %s since the file was exported; your typed count (%s) replaced the live value of %s.",
+                                $displayLine,
+                                $name,
+                                $this->formatQuantity($drift, true),
+                                $this->formatQuantity($stock),
+                                $this->formatQuantity($currentStock),
+                            );
+                        }
+                    } else {
+                        $resolvedStock = $stock;
+                    }
+
+                    if ($resolvedStock < 0) {
+                        $resolvedStock = 0.0;
+                    }
+
+                    $payload['stock'] = $resolvedStock;
                     DB::table('products')->where('id', $productId)->update($payload);
 
-                    $delta = round($stock - $previousStock, 3);
+                    $delta = round($resolvedStock - $currentStock, 3);
                     if ($delta !== 0.0) {
                         StockLedger::record(
                             productId: $productId,
                             varietyId: null,
                             type: 'adjustment',
                             quantityDelta: (float) $delta,
-                            balanceAfter: (float) $stock,
+                            balanceAfter: (float) $resolvedStock,
                             referenceType: 'import',
                             referenceId: null,
                             note: 'Stock updated via bulk import',
@@ -417,12 +451,13 @@ class ProductImportExportService
 
                     $indexed = (object) [
                         'id' => $productId,
-                        'stock' => $stock,
+                        'stock' => $resolvedStock,
                     ];
                     $productIndex[$matchKey] = $indexed;
                     $productIndexById[$productId] = $indexed;
                     $updated++;
                 } else {
+                    $payload['stock'] = $stock;
                     $payload['created_at'] = $now;
                     $productId = (int) DB::table('products')->insertGetId($payload);
 
@@ -463,6 +498,7 @@ class ProductImportExportService
                     'skipped' => $skipped,
                     'rows' => count($rows),
                     'possible_duplicates' => count($duplicateWarnings),
+                    'stock_drift_rows' => count($stockDriftWarnings),
                 ],
             );
 
@@ -481,7 +517,11 @@ class ProductImportExportService
             $duplicateWarnings[] = 'Additional duplicate warnings were omitted.';
         }
 
-        $warnings = $duplicateWarnings;
+        if (count($stockDriftWarnings) >= $maxErrors) {
+            $stockDriftWarnings[] = 'Additional stock change warnings were omitted.';
+        }
+
+        $warnings = array_merge($duplicateWarnings, $stockDriftWarnings);
 
         return compact('created', 'updated', 'skipped', 'errors', 'warnings');
     }
@@ -653,5 +693,15 @@ class ProductImportExportService
         }
 
         return round((float) $value, 3);
+    }
+
+    private function formatQuantity(float $value, bool $signed = false): string
+    {
+        $formatted = rtrim(rtrim(number_format($value, 3, '.', ''), '0'), '.');
+        if ($formatted === '' || $formatted === '-') {
+            $formatted = '0';
+        }
+
+        return $signed && $value > 0 ? '+'.$formatted : $formatted;
     }
 }

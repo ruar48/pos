@@ -202,7 +202,7 @@ class ItemsPageController extends Controller
         );
 
         if (! empty($result['warnings'])) {
-            $message .= sprintf(' (%d possible duplicate item%s — please review)', count($result['warnings']), count($result['warnings']) === 1 ? '' : 's');
+            $message .= sprintf(' (%d warning%s — please review)', count($result['warnings']), count($result['warnings']) === 1 ? '' : 's');
         }
 
         return response()->json([
