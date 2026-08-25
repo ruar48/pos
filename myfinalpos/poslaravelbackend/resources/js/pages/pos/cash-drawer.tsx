@@ -111,6 +111,12 @@ function formatExpenseReferenceNo(
     return `${businessDate}-${String(sequence).padStart(3, '0')}`;
 }
 
+// Optimistic rows are inserted with a negative placeholder id (-Date.now())
+// so they can never collide with a real server id.
+function isOptimisticRow(id: number): boolean {
+    return id < 0;
+}
+
 function mergeDrawerMutation(
     current: CashDrawerData,
     mutation: CashDrawerMutation,
@@ -119,6 +125,13 @@ function mergeDrawerMutation(
     let cashAdditions = current.cash_additions;
 
     if (mutation.expense) {
+        // A saved row comes back with a real id, so it never matches the
+        // placeholder it replaces — drop the pending row instead of leaving
+        // it stranded as a duplicate stuck on "Saving...".
+        if (!isOptimisticRow(mutation.expense.id)) {
+            expenses = expenses.filter((row) => !isOptimisticRow(row.id));
+        }
+
         const existingIndex = expenses.findIndex(
             (row) => row.id === mutation.expense?.id,
         );
@@ -138,6 +151,12 @@ function mergeDrawerMutation(
     }
 
     if (mutation.cash_addition) {
+        if (!isOptimisticRow(mutation.cash_addition.id)) {
+            cashAdditions = cashAdditions.filter(
+                (row) => !isOptimisticRow(row.id),
+            );
+        }
+
         const existingIndex = cashAdditions.findIndex(
             (row) => row.id === mutation.cash_addition?.id,
         );

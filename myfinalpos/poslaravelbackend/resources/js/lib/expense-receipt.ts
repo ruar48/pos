@@ -16,11 +16,52 @@ function labelValue(label: string, value: string): string {
     return `${label} ${value}`.slice(0, THERMAL_WIDTH);
 }
 
+function wrap(text: string, width = THERMAL_WIDTH): string[] {
+    const source = text.trim();
+    if (source === '') {
+        return [];
+    }
+
+    const lines: string[] = [];
+    let current = '';
+
+    const flush = () => {
+        if (current !== '') {
+            lines.push(current);
+            current = '';
+        }
+    };
+
+    for (const word of source.split(/\s+/)) {
+        let rest = word;
+
+        // A single token wider than the paper still has to break somewhere.
+        while (rest.length > width) {
+            flush();
+            lines.push(rest.slice(0, width));
+            rest = rest.slice(width);
+        }
+
+        if (current === '') {
+            current = rest;
+        } else if (current.length + 1 + rest.length <= width) {
+            current = `${current} ${rest}`;
+        } else {
+            flush();
+            current = rest;
+        }
+    }
+
+    flush();
+
+    return lines;
+}
+
 function labelValueLines(label: string, value: string): string[] {
     if (label.length + 1 + value.length <= THERMAL_WIDTH) {
         return [labelValue(label, value)];
     }
-    return [label, value.slice(0, THERMAL_WIDTH)];
+    return [label, ...wrap(value)];
 }
 
 function money(symbol: string, amount: number): string {
@@ -75,7 +116,7 @@ export function buildExpenseReceiptLines(
     add('EXPENSE RECEIPT');
     add('');
     if (expense.series_no) {
-        add(labelValue('SERIES', expense.series_no.slice(0, THERMAL_WIDTH - 7)));
+        labelValueLines('SERIES', expense.series_no).forEach(add);
     }
     add(labelValue('DATE', formatDate(when)));
     add(labelValue('TIME', formatTime(when)));
@@ -83,9 +124,9 @@ export function buildExpenseReceiptLines(
     add('');
     add('EXPENSE');
     add(divider());
-    add(expense.name.slice(0, THERMAL_WIDTH));
+    wrap(expense.name).forEach(add);
     add(divider());
-    add(labelValue('PAYMENT', expense.payment_label));
+    labelValueLines('PAYMENT', expense.payment_label).forEach(add);
     add(labelValue('AMOUNT', money(symbol, expense.amount)));
     add(divider('='));
     add('');
@@ -125,7 +166,12 @@ export function buildCashAdditionReceiptLines(
     add('');
     add('CASH ADDED');
     add(divider());
-    add(addition.remarks.slice(0, THERMAL_WIDTH) || 'No remarks');
+    const remarkLines = wrap(addition.remarks);
+    if (remarkLines.length === 0) {
+        add('No remarks');
+    } else {
+        remarkLines.forEach(add);
+    }
     add(divider());
     add(labelValue('AMOUNT', money(symbol, addition.amount)));
     add(divider('='));
@@ -169,15 +215,10 @@ export function buildAllExpensesReceiptLines(
         const when = parseServerDateTime(expense.created_at) ?? new Date();
 
         if (expense.series_no) {
-            add(labelValue('SERIES', expense.series_no.slice(0, THERMAL_WIDTH - 7)));
+            labelValueLines('SERIES', expense.series_no).forEach(add);
         }
-        add(expense.name.slice(0, THERMAL_WIDTH));
-        add(
-            `${expense.payment_label} · ${formatDate(when)}`.slice(
-                0,
-                THERMAL_WIDTH,
-            ),
-        );
+        wrap(expense.name).forEach(add);
+        wrap(`${expense.payment_label} · ${formatDate(when)}`).forEach(add);
         add(formatTime(when));
         labelValueLines('BY', expense.user_name).forEach(add);
         add(labelValue('AMOUNT', money(symbol, expense.amount)));
