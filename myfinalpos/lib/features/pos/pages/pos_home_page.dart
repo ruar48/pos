@@ -152,6 +152,19 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   }
 
   double get subtotal => cart.fold(0, (sum, item) => sum + item.total);
+
+  /// Peso amount taken off by per-item discounts. [subtotal] is already net
+  /// of these, so without breaking it out an item discount only shows up as
+  /// a quietly smaller subtotal - the totals panel surfaces it as its own
+  /// line the same way the printed receipt does (see
+  /// ThermalReceiptLayout._itemLevelDiscountTotal).
+  double get itemDiscountTotal =>
+      cart.fold(0, (sum, item) => sum + item.discount);
+
+  /// Subtotal before per-item discounts - pairs with [itemDiscountTotal] so
+  /// that gross minus the item discounts reduces back to [subtotal].
+  double get grossSubtotal => subtotal + itemDiscountTotal;
+
   double get couponDiscount {
     if (appliedCouponCode.isEmpty) return 0;
     final coupon = _findCouponByCode(appliedCouponCode);

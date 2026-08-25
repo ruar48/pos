@@ -629,6 +629,17 @@ class ThermalReceiptLayout {
   int get storeNameLineCount =>
       _wordWrapLines(data.store.storeName, _safeTextWidth).length;
 
+  /// Store name re-wrapped and re-centered for double-width printing - at
+  /// that size every glyph takes two printer columns, so both the wrap
+  /// width and the centering padding [buildLines] computed at normal width
+  /// overflow the paper and leave the printer wrapping the name mid-word.
+  List<String> get storeNameDoubleWidthLines {
+    final halfWidth = (_safeTextWidth / 2).floor();
+    return _wordWrapLines(data.store.storeName, halfWidth)
+        .map((line) => _sanitizeLine(_centerWithin(line, halfWidth)))
+        .toList();
+  }
+
   int get storeSubtitleLineCount =>
       _wordWrapLines(data.store.storeSubtitle, _safeTextWidth).length;
 
@@ -1176,19 +1187,25 @@ class PosReceiptService {
       ..selectFontA()
       ..setLineSpacing(24);
 
-    // Store name and subtitle both print small (matches the client's
-    // original small-header receipt) - everything else stays plain text.
-    // The layout already centers/aligns it via padded spaces (see
-    // ThermalReceiptLayout._center/_amountRow).
+    // The store name prints double-width and bold so it reads as the
+    // receipt's heading - it previously printed at the same condensed size
+    // as everything under it, which came out too small to make out as the
+    // business name on the printed slip. Its lines come from
+    // [storeNameDoubleWidthLines] rather than `lines`, since the padded
+    // copies in `lines` were centered for normal-width glyphs.
+    // The subtitle stays in condensed Font B (see _EscPosBuilder.text) so a
+    // subtitle long enough to overflow a physical printer's Font-A line
+    // width fits on one line instead of getting force-wrapped mid-word.
+    // Everything else stays plain text - the layout already centers/aligns
+    // it via padded spaces (see ThermalReceiptLayout._center/_amountRow).
+    for (final line in layout.storeNameDoubleWidthLines) {
+      builder.text(line, bold: true, doubleWidth: true);
+    }
     final nameLineCount = layout.storeNameLineCount;
     final subtitleLineCount = layout.storeSubtitleLineCount;
-    final subtitleStart = nameLineCount;
-    final subtitleEnd = subtitleStart + subtitleLineCount;
-    for (var i = 0; i < lines.length; i++) {
+    final subtitleEnd = nameLineCount + subtitleLineCount;
+    for (var i = nameLineCount; i < lines.length; i++) {
       if (i < subtitleEnd) {
-        // Subtitle prints in condensed Font B (see _EscPosBuilder.text) so a
-        // subtitle long enough to overflow a physical printer's Font-A line
-        // width fits on one line instead of getting force-wrapped mid-word.
         builder.text(lines[i], small: true);
       } else {
         builder.text(lines[i]);

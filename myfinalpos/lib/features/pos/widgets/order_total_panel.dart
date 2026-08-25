@@ -17,8 +17,14 @@ class OrderTotalPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currency = pageState.settings.currencySymbol;
-    final subtotal = pageState.subtotal;
-    final discount = pageState.totalDiscount;
+    // Subtotal is shown gross (before per-item discounts) with the item
+    // discounts broken out below it, matching the printed receipt - the net
+    // subtotal on its own hid how much the cashier had discounted per item.
+    // Grand Total is unaffected: gross minus the combined discount reduces
+    // to the same net total as before.
+    final subtotal = pageState.grossSubtotal;
+    final itemDiscount = pageState.itemDiscountTotal;
+    final discount = pageState.totalDiscount + itemDiscount;
     final vat = pageState.vatAmount;
     final total = pageState.grandTotal;
 
@@ -41,6 +47,13 @@ class OrderTotalPanel extends StatelessWidget {
             value: formatMoney(currency, subtotal),
             compact: compact,
           ),
+          if (itemDiscount > 0)
+            _TotalRow(
+              label: 'Item Discounts',
+              value: '-${formatMoney(currency, itemDiscount)}',
+              valueColor: AppColors.danger,
+              compact: compact,
+            ),
           if (pageState.manualDiscount > 0)
             _TotalRow(
               label: 'Manual Discount',

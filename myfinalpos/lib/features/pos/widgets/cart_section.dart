@@ -589,6 +589,25 @@ class CartListTile extends StatelessWidget {
                           height: 1.1,
                         ),
                       ),
+                      // Spells out the peso amount discounted on this line.
+                      // The struck-through gross total on the right only
+                      // implied it - the cashier had to subtract the two
+                      // figures themselves to see what was taken off.
+                      if (hasDiscount)
+                        Text(
+                          item.quantity > 1
+                              ? '-${formatMoney(currencySymbol, item.discount)} off '
+                                  '(${formatMoney(currencySymbol, item.discountPerUnit)} x ${formatQuantity(item.quantity)})'
+                              : '-${formatMoney(currencySymbol, item.discount)} off',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.green,
+                            height: 1.2,
+                          ),
+                        ),
                     ],
                   ),
                 ),

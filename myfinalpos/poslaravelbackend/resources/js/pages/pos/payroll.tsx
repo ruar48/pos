@@ -1,5 +1,11 @@
 import { Head } from '@inertiajs/react';
-import { AlertTriangle, Loader2, RefreshCw, Wallet } from 'lucide-react';
+import {
+    AlertTriangle,
+    Download,
+    Loader2,
+    RefreshCw,
+    Wallet,
+} from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header';
@@ -26,7 +32,10 @@ import {
     savePayrollRate,
     type PayrollRow,
 } from '@/lib/payroll-api';
-import { manualClockOutStaffAttendance } from '@/lib/staff-api';
+import {
+    downloadAttendanceExport,
+    manualClockOutStaffAttendance,
+} from '@/lib/staff-api';
 import { dashboard } from '@/routes';
 
 function pad(n: number): string {
@@ -65,6 +74,7 @@ export default function PosPayroll() {
     const [fixDate, setFixDate] = useState('');
     const [fixTime, setFixTime] = useState('');
     const [fixing, setFixing] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -87,6 +97,22 @@ export default function PosPayroll() {
     useEffect(() => {
         void load();
     }, [load]);
+
+    // Exports the same Start/End range the table above is showing, so what
+    // downloads always matches what's on screen. The workbook's Payroll
+    // sheet lists every staff member per day across the range, day after
+    // day - a 1st-to-20th range continues each following date underneath
+    // the previous one.
+    const exportRange = async () => {
+        setExporting(true);
+        try {
+            await downloadAttendanceExport(start, end);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Export failed');
+        } finally {
+            setExporting(false);
+        }
+    };
 
     const saveRate = async (row: PayrollRow) => {
         const draft = rateDrafts[row.user_id] ?? '0';
@@ -156,14 +182,34 @@ export default function PosPayroll() {
                     title="Payroll"
                     description="Break hours, total hours, and pay per staff member — set an hourly rate to compute Total Pay."
                     actions={
-                        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-                            {loading ? (
-                                <Loader2 className="size-4 animate-spin" />
-                            ) : (
-                                <RefreshCw className="size-4" />
-                            )}
-                            Refresh
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void exportRange()}
+                                disabled={exporting || loading}
+                            >
+                                {exporting ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                    <Download className="size-4" />
+                                )}
+                                Export Excel
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={load}
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="size-4" />
+                                )}
+                                Refresh
+                            </Button>
+                        </div>
                     }
                 />
 
