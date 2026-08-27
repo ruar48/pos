@@ -36,6 +36,7 @@ export type TransactionOrderRow = {
     vat?: number;
     vat_remaining?: number;
     discount: number;
+    notes?: string | null;
     costs: number;
     profits: number;
     items_count: number;

@@ -122,6 +122,7 @@ class TransactionReportService
                 o.subtotal,
                 o.vat,
                 o.total_amount,
+                o.receipt_note,
                 COALESCE(o.discount_amount, 0) + COALESCE(o.coupon_discount, 0) + COALESCE(o.loyalty_discount, 0) + {$itemDiscountExpr} AS discount_total,
                 {$cashierSelect}
                 COALESCE(c.customer_name, 'Walk In Farmer') AS customer_name,
@@ -225,6 +226,9 @@ class TransactionReportService
                     ? round($netTotal, 2)
                     : 0.0,
                 'discount' => round((float) $order->discount_total, 2),
+                'notes' => $order->receipt_note !== null && $order->receipt_note !== ''
+                    ? (string) $order->receipt_note
+                    : null,
                 'costs' => round($costs, 2),
                 'profits' => round($netTotal - $costs, 2),
                 'items_count' => $itemsCount,
@@ -390,14 +394,14 @@ class TransactionReportService
         $tz = BusinessDay::timezone();
 
         if ($view === 'hourly') {
-            return Carbon::parse($bucketKey, 'UTC')->timezone($tz)->format('g:ia j M Y');
+            return Carbon::parse($bucketKey, $tz)->format('g:ia j M Y');
         }
 
         if ($view === 'monthly') {
-            return Carbon::parse($bucketKey.'-01', 'UTC')->timezone($tz)->format('M Y');
+            return Carbon::parse($bucketKey.'-01', $tz)->format('M Y');
         }
 
-        return Carbon::parse($bucketKey, 'UTC')->timezone($tz)->format('j M Y');
+        return Carbon::parse($bucketKey, $tz)->format('j M Y');
     }
 
     /**
@@ -408,13 +412,13 @@ class TransactionReportService
         $tz = BusinessDay::timezone();
 
         if ($view === 'hourly') {
-            $start = Carbon::parse($bucketKey, 'UTC')->timezone($tz)->startOfHour();
+            $start = Carbon::parse($bucketKey, $tz)->startOfHour();
             $end = $start->copy()->endOfHour();
         } elseif ($view === 'monthly') {
-            $start = Carbon::parse($bucketKey.'-01', 'UTC')->timezone($tz)->startOfMonth();
+            $start = Carbon::parse($bucketKey.'-01', $tz)->startOfMonth();
             $end = $start->copy()->endOfMonth();
         } else {
-            $start = Carbon::parse($bucketKey, 'UTC')->timezone($tz)->startOfDay();
+            $start = Carbon::parse($bucketKey, $tz)->startOfDay();
             $end = $start->copy()->endOfDay();
         }
 

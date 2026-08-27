@@ -827,6 +827,16 @@ export default function PosTransactions() {
                                                     </div>
                                                     <div>
                                                         <p className="text-muted-foreground">
+                                                            Discount
+                                                        </p>
+                                                        <p className="font-semibold tabular-nums">
+                                                            {row.discount > 0
+                                                                ? `₱${formatMoney(row.discount)}`
+                                                                : '—'}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-muted-foreground">
                                                             Payment
                                                         </p>
                                                         <TransactionPaymentSummary row={row} />
@@ -841,6 +851,16 @@ export default function PosTransactions() {
                                                             )}
                                                         </p>
                                                     </div>
+                                                    {row.notes && (
+                                                        <div className="sm:col-span-2 lg:col-span-3">
+                                                            <p className="text-muted-foreground">
+                                                                Notes
+                                                            </p>
+                                                            <p className="font-medium whitespace-pre-wrap">
+                                                                {row.notes}
+                                                            </p>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 {row.items_count <= 0 &&
                                                     row.total > 0.01 && (
