@@ -455,6 +455,7 @@ export default function PosTransactions() {
                         'Profits',
                         'Items',
                         'Status',
+                        'Notes',
                     ],
                     rows.map((row) => [
                         row.receipt_number,
@@ -474,6 +475,7 @@ export default function PosTransactions() {
                         row.profits,
                         row.items_count,
                         row.status,
+                        row.notes ?? '',
                     ]),
                 );
             } else {
@@ -894,8 +896,10 @@ export default function PosTransactions() {
                                                 <th className="px-4 py-3">Items</th>
                                                 <th className="px-4 py-3 text-right">Total</th>
                                                 <th className="px-4 py-3 text-right">Refunded</th>
+                                                <th className="px-4 py-3 text-right">Discount</th>
                                                 <th className="px-4 py-3 text-right">Costs</th>
                                                 <th className="px-4 py-3">Status</th>
+                                                <th className="px-4 py-3">Notes</th>
                                             </>
                                         ) : (
                                             <>
@@ -962,6 +966,11 @@ export default function PosTransactions() {
                                                   <td className="px-4 py-3 text-right tabular-nums text-amber-700">
                                                       {formatRefundColumn(row.refunded_amount)}
                                                   </td>
+                                                  <td className="px-4 py-3 text-right tabular-nums">
+                                                      {row.discount > 0
+                                                          ? `₱${formatMoney(row.discount)}`
+                                                          : '—'}
+                                                  </td>
                                                   <td
                                                       className={cn(
                                                           'px-4 py-3 text-right tabular-nums',
@@ -981,6 +990,9 @@ export default function PosTransactions() {
                                                       >
                                                           {formatOrderStatus(row.status)}
                                                       </span>
+                                                  </td>
+                                                  <td className="max-w-[12rem] px-4 py-3 text-muted-foreground">
+                                                      {row.notes || '—'}
                                                   </td>
                                               </tr>
                                           ))
