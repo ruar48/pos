@@ -643,7 +643,7 @@ export default function PosTransactions() {
                             </div>
                         )}
                         {(tab === 'details' || tab === 'transactions') && (
-                            <div>
+                            <div className="w-40">
                                 <Label htmlFor="tx-unit">Unit</Label>
                                 <select
                                     id="tx-unit"
@@ -652,7 +652,7 @@ export default function PosTransactions() {
                                         setUnit(e.target.value);
                                         setPage(1);
                                     }}
-                                    className="mt-1 h-9 rounded-md border border-border bg-background px-2 text-sm"
+                                    className="mt-1 block h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
                                 >
                                     <option value="">All units</option>
                                     {unitOptions.map((option) => (
