@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Pos\InventoryReportController;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -24,6 +25,8 @@ class InventoryPageController extends Controller
 
     public function adjustStock(Request $request): JsonResponse
     {
+        $request->merge(['actor_user_id' => Auth::id()]);
+
         return app(PosInventoryApiController::class)->handle($request);
     }
 }

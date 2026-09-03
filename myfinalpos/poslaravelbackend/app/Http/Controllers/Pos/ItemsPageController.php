@@ -22,6 +22,8 @@ use Illuminate\Http\JsonResponse;
 
 use Illuminate\Http\Request;
 
+use Illuminate\Support\Facades\Auth;
+
 use Inertia\Inertia;
 
 use Inertia\Response;
@@ -116,6 +118,8 @@ class ItemsPageController extends Controller
 
     {
 
+        $request->merge(['actor_user_id' => Auth::id()]);
+
         return app(ProductController::class)->handle($request);
 
     }
@@ -126,6 +130,8 @@ class ItemsPageController extends Controller
 
     {
 
+        $request->merge(['actor_user_id' => Auth::id()]);
+
         return app(ProductController::class)->handle($request);
 
     }
@@ -134,6 +140,8 @@ class ItemsPageController extends Controller
 
     public function deleteProduct(Request $request): JsonResponse
     {
+        $request->merge(['actor_user_id' => Auth::id()]);
+
         return app(ProductController::class)->handle($request);
     }
 
@@ -185,7 +193,7 @@ class ItemsPageController extends Controller
             $result = app(ProductImportExportService::class)->importFromFile(
                 $path,
                 $extension !== '' ? $extension : 'csv',
-                PosHelpers::currentActorId($request),
+                PosHelpers::currentActorId($request) ?? Auth::id(),
             );
         } catch (\Throwable $e) {
             return response()->json([

@@ -503,8 +503,20 @@ class ReportService
         $params = ['start' => $startDt, 'end' => $endDt];
 
         if ($search !== null && trim($search) !== '') {
-            $searchSql = 'AND (a.description LIKE :search OR a.module LIKE :search OR a.action LIKE :search OR u.full_name LIKE :search)';
-            $params['search'] = '%'.trim($search).'%';
+            // Each LIKE clause needs its own named placeholder — MySQL's
+            // native (non-emulated) prepared statements reject the same
+            // named parameter bound more than once in one query.
+            $searchSql = 'AND (
+                a.description LIKE :search_description
+                OR a.module LIKE :search_module
+                OR a.action LIKE :search_action
+                OR u.full_name LIKE :search_user
+            )';
+            $searchTerm = '%'.trim($search).'%';
+            $params['search_description'] = $searchTerm;
+            $params['search_module'] = $searchTerm;
+            $params['search_action'] = $searchTerm;
+            $params['search_user'] = $searchTerm;
         }
 
         $rows = DB::select(
