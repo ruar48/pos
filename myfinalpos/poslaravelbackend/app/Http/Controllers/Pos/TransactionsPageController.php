@@ -42,6 +42,26 @@ class TransactionsPageController extends Controller
         }
     }
 
+    public function units(Request $request): JsonResponse
+    {
+        try {
+            return response()->json([
+                'success' => true,
+                'data' => $this->reports->distinctUnits($request),
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 400);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load unit list',
+            ], 500);
+        }
+    }
+
     public function refund(Request $request): JsonResponse
     {
         $request->merge([

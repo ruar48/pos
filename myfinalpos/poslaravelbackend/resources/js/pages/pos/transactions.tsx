@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     fetchTransactionReport,
+    fetchTransactionUnits,
     type TransactionLineItem,
     type TransactionOrderRow,
     type TransactionPeriodRow,
@@ -38,6 +39,7 @@ async function fetchAllTransactionRows(options: {
     start: string;
     end: string;
     search?: string;
+    unit?: string;
 }): Promise<(TransactionOrderRow | TransactionPeriodRow)[]> {
     const rows: (TransactionOrderRow | TransactionPeriodRow)[] = [];
     let page = 1;
@@ -373,6 +375,8 @@ export default function PosTransactions() {
     const [start, setStart] = useState(() => isoDateStartOfMonth());
     const [end, setEnd] = useState(today);
     const [search, setSearch] = useState('');
+    const [unit, setUnit] = useState('');
+    const [unitOptions, setUnitOptions] = useState<string[]>([]);
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(25);
     const [loading, setLoading] = useState(true);
@@ -394,6 +398,7 @@ export default function PosTransactions() {
                     page: opts?.nextPage ?? page,
                     perPage,
                     search: tab === 'details' || tab === 'transactions' ? search : undefined,
+                    unit: tab === 'details' || tab === 'transactions' ? unit : undefined,
                 });
                 setData(result);
                 setExpandedId(null);
@@ -406,12 +411,21 @@ export default function PosTransactions() {
                 setRefreshing(false);
             }
         },
-        [tab, start, end, page, perPage, search],
+        [tab, start, end, page, perPage, search, unit],
     );
 
     useEffect(() => {
         void load();
     }, [load]);
+
+    useEffect(() => {
+        fetchTransactionUnits({ start, end, search })
+            .then((options) => {
+                setUnitOptions(options);
+                setUnit((current) => (options.includes(current) ? current : ''));
+            })
+            .catch(() => setUnitOptions([]));
+    }, [start, end, search]);
 
     const handleGo = () => {
         setPage(1);
@@ -436,6 +450,7 @@ export default function PosTransactions() {
                 start,
                 end,
                 search: tab === 'details' || tab === 'transactions' ? search : undefined,
+                unit: tab === 'details' || tab === 'transactions' ? unit : undefined,
             });
             if (tab === 'details' || tab === 'transactions') {
                 const rows = allRows.filter(isOrderRow);
@@ -627,10 +642,33 @@ export default function PosTransactions() {
                                 </div>
                             </div>
                         )}
+                        {(tab === 'details' || tab === 'transactions') && (
+                            <div>
+                                <Label htmlFor="tx-unit">Unit</Label>
+                                <select
+                                    id="tx-unit"
+                                    value={unit}
+                                    onChange={(e) => {
+                                        setUnit(e.target.value);
+                                        setPage(1);
+                                    }}
+                                    className="mt-1 h-9 rounded-md border border-border bg-background px-2 text-sm"
+                                >
+                                    <option value="">All units</option>
+                                    {unitOptions.map((option) => (
+                                        <option key={option} value={option}>
+                                            {option}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">
                         Defaults to this month through today. Widen the range to see older
                         sales. Transactions can be viewed for a maximum 2-month date range.
+                        Search for an item first, then use Unit to narrow it down to a specific
+                        variant (e.g. "1 KILO").
                         Refunds are processed on the POS tablet under Orders — not from this
                         admin page.
                     </p>

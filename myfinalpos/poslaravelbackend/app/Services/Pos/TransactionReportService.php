@@ -24,6 +24,7 @@ class TransactionReportService
         $page = max(1, (int) $request->query('page', 1));
         $perPage = max(5, min(100, (int) $request->query('per_page', 25)));
         $search = trim((string) $request->query('search', ''));
+        $unit = trim((string) $request->query('unit', ''));
 
         if (! in_array($view, ['details', 'transactions', 'hourly', 'daily', 'monthly'], true)) {
             throw new \InvalidArgumentException('view must be details, transactions, hourly, daily, or monthly');
@@ -32,10 +33,48 @@ class TransactionReportService
         $this->assertRangeWithinTwoMonths($startDt, $endDt);
 
         if (in_array($view, ['details', 'transactions'], true)) {
-            return $this->orderRows($startDt, $endDt, $start, $end, $view, $page, $perPage, $search);
+            return $this->orderRows($startDt, $endDt, $start, $end, $view, $page, $perPage, $search, $unit);
         }
 
         return $this->periodRows($startDt, $endDt, $view, $page, $perPage);
+    }
+
+    /**
+     * Distinct per-item unit/variant labels (e.g. "1 KILO", "PIECE") seen
+     * within the requested date range, for the transactions page's unit
+     * filter dropdown.
+     *
+     * @return array<int, string>
+     */
+    public function distinctUnits(Request $request): array
+    {
+        [$startDt, $endDt] = $this->reportService->resolveRange($request);
+        $this->assertRangeWithinTwoMonths($startDt, $endDt);
+        $itemSearch = trim((string) $request->query('search', ''));
+
+        if (! Schema::hasTable('orders') || ! $this->hasVarietyColumn()) {
+            return [];
+        }
+
+        $params = ['start' => $startDt, 'end' => $endDt];
+        $itemFilterSql = '';
+        if ($itemSearch !== '') {
+            $itemFilterSql = 'AND oi.product_name LIKE :item_search';
+            $params['item_search'] = '%'.$itemSearch.'%';
+        }
+
+        $rows = DB::select(
+            "SELECT DISTINCT oi.variety_name
+             FROM order_items oi
+             INNER JOIN orders o ON o.id = oi.order_id
+             WHERE o.created_at BETWEEN :start AND :end
+             AND oi.variety_name IS NOT NULL AND oi.variety_name <> ''
+             {$itemFilterSql}
+             ORDER BY oi.variety_name ASC",
+            $params,
+        );
+
+        return array_map(static fn ($row) => (string) $row->variety_name, $rows);
     }
 
     private function assertRangeWithinTwoMonths(string $startDt, string $endDt): void
@@ -59,6 +98,7 @@ class TransactionReportService
         int $page,
         int $perPage,
         string $search,
+        string $unit = '',
     ): array {
         if (! Schema::hasTable('orders')) {
             return $this->emptyPayload($view, $startDt, $endDt, $page, $perPage, 0);
@@ -71,11 +111,19 @@ class TransactionReportService
         $searchSql = '';
         $params = $dateParams;
 
+        if ($unit !== '' && $this->hasVarietyColumn()) {
+            $searchSql .= 'AND EXISTS (
+                SELECT 1 FROM order_items oi
+                WHERE oi.order_id = o.id AND oi.variety_name = :filter_unit
+            )';
+            $params['filter_unit'] = $unit;
+        }
+
         if ($search !== '') {
             // Each LIKE clause needs its own named placeholder — MySQL's native
             // (non-emulated) prepared statements reject the same named
             // parameter bound more than once in one query.
-            $searchSql = 'AND (
+            $searchSql .= 'AND (
                 CAST(o.id AS CHAR) LIKE :search_id
                 OR COALESCE(c.customer_name, "") LIKE :search_customer
                 OR COALESCE(cashier.full_name, "") LIKE :search_cashier

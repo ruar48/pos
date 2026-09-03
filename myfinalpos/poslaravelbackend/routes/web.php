@@ -90,6 +90,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/pos/cash-drawer/expenses/export', [CashDrawerPageController::class, 'exportExpenses'])->name('pos.cash-drawer.expenses.export');
     Route::get('/pos/transactions', [TransactionsPageController::class, 'index'])->name('pos.transactions');
     Route::get('/pos/transactions/data', [TransactionsPageController::class, 'data'])->name('pos.transactions.data');
+    Route::get('/pos/transactions/units', [TransactionsPageController::class, 'units'])->name('pos.transactions.units');
     Route::post('/pos/transactions/refund', [TransactionsPageController::class, 'refund'])->name('pos.transactions.refund');
     Route::get('/pos/staff', [StaffPageController::class, 'index'])->name('pos.staff');
     Route::get('/pos/staff/users', [StaffPageController::class, 'users'])->name('pos.staff.users');

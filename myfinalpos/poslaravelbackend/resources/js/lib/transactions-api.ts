@@ -100,6 +100,7 @@ export async function fetchTransactionReport(options: {
     page?: number;
     perPage?: number;
     search?: string;
+    unit?: string;
 }): Promise<TransactionReportData> {
     const query = buildQuery({
         view: options.view,
@@ -108,6 +109,7 @@ export async function fetchTransactionReport(options: {
         page: options.page ?? 1,
         per_page: options.perPage ?? 25,
         search: options.search,
+        unit: options.unit,
     });
 
     const body = await laravelFetch<{ data?: TransactionReportData }>(
@@ -116,6 +118,28 @@ export async function fetchTransactionReport(options: {
 
     if (body.success === false || !body.data) {
         throw new Error(body.message ?? 'Failed to load transaction report');
+    }
+
+    return body.data;
+}
+
+export async function fetchTransactionUnits(options: {
+    start: string;
+    end: string;
+    search?: string;
+}): Promise<string[]> {
+    const query = buildQuery({
+        start: options.start,
+        end: options.end,
+        search: options.search,
+    });
+
+    const body = await laravelFetch<{ data?: string[] }>(
+        `/pos/transactions/units?${query}`,
+    );
+
+    if (body.success === false || !body.data) {
+        throw new Error(body.message ?? 'Failed to load unit list');
     }
 
     return body.data;
