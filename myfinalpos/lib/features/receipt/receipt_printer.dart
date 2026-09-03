@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -466,10 +467,18 @@ class ThermalReceiptLayout {
     // baked into a lower SUBTOTAL. TOTAL is unaffected: subtotal (net of
     // item discounts) already had order-level discounts subtracted from
     // it, and grossSubtotal - combinedDiscount reduces to that same value.
-    final orderLevelDiscount =
-        data.manualDiscount + data.couponDiscount + data.loyaltyDiscount;
+    //
+    // data.manualDiscount can arrive already covering the item-level
+    // portion depending on which endpoint produced it (see the same
+    // max()-not-sum guard in SalesHistoryRecord.totalDiscount and
+    // OrdersPage's totalDiscount) - summing it with a freshly recomputed
+    // itemLevelDiscount would then double-count the same peso amount, so
+    // take whichever of the two is larger instead of adding them.
+    final orderLevelDiscount = data.manualDiscount;
     final itemLevelDiscount = _itemLevelDiscountTotal;
-    final combinedDiscount = orderLevelDiscount + itemLevelDiscount;
+    final combinedDiscount = max(orderLevelDiscount, itemLevelDiscount) +
+        data.couponDiscount +
+        data.loyaltyDiscount;
     final grossSubtotal = data.subtotal + itemLevelDiscount;
     if (!data.hasRefunds) {
       // ORIGINAL TOTAL below already covers this for a refund reprint —
@@ -577,10 +586,14 @@ class ThermalReceiptLayout {
       }
     }
     add(_divider());
-    final orderLevelDiscount =
-        data.manualDiscount + data.couponDiscount + data.loyaltyDiscount;
+    // See the matching comment in the real print layout above -
+    // data.manualDiscount can already cover the item-level portion, so
+    // max() (not +) avoids double-counting the same discount.
+    final orderLevelDiscount = data.manualDiscount;
     final itemLevelDiscount = _itemLevelDiscountTotal;
-    final combinedDiscount = orderLevelDiscount + itemLevelDiscount;
+    final combinedDiscount = max(orderLevelDiscount, itemLevelDiscount) +
+        data.couponDiscount +
+        data.loyaltyDiscount;
     final grossSubtotal = data.subtotal + itemLevelDiscount;
     if (!data.hasRefunds) {
       add(previewLabelValue('SUBTOTAL', previewMoney(grossSubtotal)));
