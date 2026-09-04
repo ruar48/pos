@@ -7,6 +7,7 @@ import {
     User,
     WifiOff,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import {
     type PosMonitorState,
     type PosMonitorTerminal,
@@ -91,6 +92,17 @@ export function LiveTerminalCard({
     expanded = false,
     onSelect,
 }: LiveTerminalCardProps) {
+    // The monitor feed only re-renders this card when a register's state
+    // actually changes (see live-monitor-panel.tsx's watch loop) - without
+    // this, "Live · Xs ago" / "Last seen ..." would freeze at whatever it
+    // said the moment the register last went idle, no matter how much real
+    // time passes afterward. Tick locally so those labels stay honest.
+    const [, forceTick] = useState(0);
+    useEffect(() => {
+        const id = window.setInterval(() => forceTick((n) => n + 1), 5000);
+        return () => window.clearInterval(id);
+    }, []);
+
     const state = resolveState(terminal, terminalStates);
     const status = normalizeMonitorStatus(state.status);
     const meta = monitorStatusMeta(status);
