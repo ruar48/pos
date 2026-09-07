@@ -283,9 +283,9 @@ export default function PosPayroll() {
                                                             type="button"
                                                             title={`Incomplete attendance on ${row.missing_time_out_dates.join(', ')} — click to record the time-out. Hours/pay for that day stay at zero until it's recorded.`}
                                                             onClick={() => openFixTimeOut(row)}
-                                                            className="rounded-full p-0.5 hover:bg-amber-500/10"
+                                                            className="rounded-full p-0.5 hover:bg-caramel/12"
                                                         >
-                                                            <AlertTriangle className="size-3.5 text-amber-500" />
+                                                            <AlertTriangle className="size-3.5 text-caramel" />
                                                         </button>
                                                     )}
                                                 </div>

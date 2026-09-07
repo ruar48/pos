@@ -67,92 +67,169 @@
     --color-agri-leaf: var(--agri-leaf);
     --color-agri-wheat: var(--agri-wheat);
     --color-agri-soil: var(--agri-soil);
+
+    /* Café palette utilities — use these instead of raw Tailwind colours
+       (emerald/amber/sky/...) so status styling stays on-theme in both modes.
+       Every one of these is redefined under .dark below. */
+    --color-espresso: var(--cafe-espresso);
+    --color-espresso-deep: var(--cafe-espresso-deep);
+    --color-cream: var(--cafe-cream);
+    --color-caramel: var(--cafe-caramel);
+    --color-caramel-deep: var(--cafe-caramel-deep);
+    --color-caramel-soft: var(--cafe-caramel-soft);
+    --color-sage: var(--cafe-sage);
+    --color-sage-deep: var(--cafe-sage-deep);
+    --color-sage-soft: var(--cafe-sage-soft);
+    --color-clay: var(--cafe-clay);
+    --color-clay-soft: var(--cafe-clay-soft);
+    --color-latte: var(--cafe-latte);
+    --color-mocha: var(--cafe-mocha);
+    --color-mocha-soft: var(--cafe-mocha-soft);
+
+    /* Solid brand fills. Unlike the tokens above these are literal and do NOT
+       invert in dark mode — a filled caramel button should read the same in
+       both themes, so its ink has to stay fixed too. Use them in pairs:
+       bg-brand-caramel + text-brand-ink, bg-brand-sage + text-white. */
+    --color-brand-espresso: #4b2e24;
+    --color-brand-caramel: #c58b5a;
+    --color-brand-sage: #64754f;
+    --color-brand-clay: #c0453f;
+    --color-brand-ink: #35201a;
 }
 
+/*
+ * Artisan café / bakery palette — mirrors the Flutter tablet app
+ * (lib/core/theme/app_colors.dart). Espresso brown and warm cream carry the
+ * layout; caramel and sage are accents only.
+ *
+ *   espresso #4B2E24   cream   #FAF6EF   caramel #C58B5A
+ *   sage     #8A9A78   text    #332A26   muted   #7A6E66
+ */
 :root {
-    --background: oklch(0.97 0.018 155);
-    --foreground: oklch(0.22 0.04 168);
-    --card: oklch(0.995 0.008 155);
-    --card-foreground: oklch(0.22 0.04 168);
-    --popover: oklch(0.995 0.008 155);
-    --popover-foreground: oklch(0.22 0.04 168);
-    --primary: oklch(0.44 0.11 165);
-    --primary-foreground: oklch(0.98 0.01 155);
-    --secondary: oklch(0.94 0.025 155);
-    --secondary-foreground: oklch(0.32 0.06 168);
-    --muted: oklch(0.94 0.02 155);
-    --muted-foreground: oklch(0.5 0.04 168);
-    --accent: oklch(0.92 0.035 150);
-    --accent-foreground: oklch(0.28 0.06 168);
-    --destructive: oklch(0.55 0.2 25);
-    --destructive-foreground: oklch(0.98 0.01 25);
-    --border: oklch(0.88 0.03 155);
-    --input: oklch(0.9 0.025 155);
-    --ring: oklch(0.52 0.1 165);
-    --chart-1: oklch(0.52 0.12 165);
-    --chart-2: oklch(0.62 0.1 145);
-    --chart-3: oklch(0.72 0.12 85);
-    --chart-4: oklch(0.45 0.08 200);
-    --chart-5: oklch(0.38 0.06 168);
+    --background: oklch(0.974 0.01 81.8); /* warm cream */
+    --foreground: oklch(0.294 0.015 45.4); /* dark text */
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.294 0.015 45.4);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.294 0.015 45.4);
+    --primary: oklch(0.334 0.046 39.8); /* espresso */
+    --primary-foreground: oklch(0.955 0.014 74.4); /* milk */
+    --secondary: oklch(0.939 0.02 70); /* cream tint */
+    --secondary-foreground: oklch(0.269 0.035 36.7);
+    --muted: oklch(0.939 0.02 70);
+    --muted-foreground: oklch(0.547 0.019 55.9);
+    --accent: oklch(0.944 0.023 69.6); /* caramel wash */
+    --accent-foreground: oklch(0.511 0.089 62.8); /* caramel deep */
+    --destructive: oklch(0.56 0.159 26.3);
+    --destructive-foreground: oklch(0.98 0.008 22.4);
+    --border: oklch(0.914 0.019 72.6);
+    --input: oklch(0.883 0.032 68.9);
+    --ring: oklch(0.684 0.096 60.4); /* caramel */
+    --chart-1: oklch(0.334 0.046 39.8); /* espresso */
+    --chart-2: oklch(0.684 0.096 60.4); /* caramel */
+    --chart-3: oklch(0.664 0.052 128.3); /* sage */
+    --chart-4: oklch(0.504 0.081 36.5); /* clay */
+    --chart-5: oklch(0.846 0.053 78.3); /* latte */
     --radius: 0.75rem;
-    --sidebar: oklch(0.26 0.055 172);
-    --sidebar-foreground: oklch(0.94 0.02 155);
-    --sidebar-primary: oklch(0.55 0.12 155);
-    --sidebar-primary-foreground: oklch(0.98 0.01 155);
-    --sidebar-accent: oklch(0.32 0.06 168);
-    --sidebar-accent-foreground: oklch(0.96 0.02 155);
-    --sidebar-border: oklch(0.34 0.05 168);
-    --sidebar-ring: oklch(0.55 0.1 155);
-    --agri-mint: oklch(0.96 0.03 155);
-    --agri-leaf: oklch(0.48 0.12 155);
-    --agri-wheat: oklch(0.78 0.11 85);
-    --agri-soil: oklch(0.32 0.04 55);
+    /* Light cream sidebar with a caramel active pill. */
+    --sidebar: oklch(0.958 0.017 78);
+    --sidebar-foreground: oklch(0.33 0.026 45);
+    --sidebar-primary: oklch(0.334 0.046 39.8);
+    --sidebar-primary-foreground: oklch(0.955 0.014 74.4);
+    --sidebar-accent: oklch(0.874 0.053 71); /* caramel pill */
+    --sidebar-accent-foreground: oklch(0.3 0.04 42);
+    --sidebar-border: oklch(0.9 0.022 74);
+    --sidebar-ring: oklch(0.684 0.096 60.4);
+    --agri-mint: oklch(0.944 0.023 69.6);
+    --agri-leaf: oklch(0.664 0.052 128.3);
+    --agri-wheat: oklch(0.759 0.089 64.1);
+    --agri-soil: oklch(0.334 0.046 39.8);
+
+    /* Café palette utilities (see @theme above). */
+    --cafe-espresso: oklch(0.334 0.046 39.8);
+    --cafe-espresso-deep: oklch(0.269 0.035 36.7);
+    --cafe-cream: oklch(0.974 0.01 81.8);
+    --cafe-caramel: oklch(0.684 0.096 60.4);
+    --cafe-caramel-deep: oklch(0.511 0.089 62.8);
+    --cafe-caramel-soft: oklch(0.944 0.023 69.6);
+    --cafe-sage: oklch(0.664 0.052 128.3);
+    --cafe-sage-deep: oklch(0.538 0.06 127.9);
+    --cafe-sage-soft: oklch(0.952 0.015 123);
+    --cafe-clay: oklch(0.56 0.159 26.3);
+    --cafe-clay-soft: oklch(0.957 0.015 22.4);
+    --cafe-latte: oklch(0.846 0.053 78.3);
+    --cafe-mocha: oklch(0.527 0.063 249.1); /* muted denim — info only */
+    --cafe-mocha-soft: oklch(0.95 0.015 249.1);
+
+    /* Shadow tint — warm, never neutral grey. */
+    --agri-shadow: 0.334 0.046 39.8;
 
     /* Brand toast colors — mirrors the Flutter tablet app (lib/core/utils/top_toast.dart) */
-    --agri-toast-success: #1f8a4c;
-    --agri-toast-error: #e23a4e;
-    --agri-toast-warning: #e8891c;
-    --agri-toast-info: #2563eb;
+    --agri-toast-success: #64754f;
+    --agri-toast-error: #c0453f;
+    --agri-toast-warning: #9a5a28;
+    --agri-toast-info: #4e6e8e;
     --agri-toast-foreground: #ffffff;
 }
 
+/* Dark mode: a late-evening roastery — warm dark browns, never blue-black. */
 .dark {
-    --background: oklch(0.16 0.03 168);
-    --foreground: oklch(0.95 0.02 155);
-    --card: oklch(0.2 0.035 168);
-    --card-foreground: oklch(0.95 0.02 155);
-    --popover: oklch(0.2 0.035 168);
-    --popover-foreground: oklch(0.95 0.02 155);
-    --primary: oklch(0.62 0.12 155);
-    --primary-foreground: oklch(0.16 0.03 168);
-    --secondary: oklch(0.26 0.04 168);
-    --secondary-foreground: oklch(0.92 0.02 155);
-    --muted: oklch(0.26 0.04 168);
-    --muted-foreground: oklch(0.68 0.04 155);
-    --accent: oklch(0.28 0.05 168);
-    --accent-foreground: oklch(0.94 0.02 155);
-    --destructive: oklch(0.5 0.18 25);
-    --destructive-foreground: oklch(0.95 0.02 25);
-    --border: oklch(0.3 0.04 168);
-    --input: oklch(0.28 0.04 168);
-    --ring: oklch(0.55 0.1 155);
-    --chart-1: oklch(0.6 0.12 155);
-    --chart-2: oklch(0.68 0.1 145);
-    --chart-3: oklch(0.75 0.12 85);
-    --chart-4: oklch(0.5 0.08 200);
-    --chart-5: oklch(0.42 0.06 168);
-    --sidebar: oklch(0.18 0.04 172);
-    --sidebar-foreground: oklch(0.92 0.02 155);
-    --sidebar-primary: oklch(0.55 0.12 155);
-    --sidebar-primary-foreground: oklch(0.98 0.01 155);
-    --sidebar-accent: oklch(0.24 0.05 168);
-    --sidebar-accent-foreground: oklch(0.94 0.02 155);
-    --sidebar-border: oklch(0.28 0.04 168);
-    --sidebar-ring: oklch(0.5 0.1 155);
-    --agri-mint: oklch(0.22 0.035 155);
-    --agri-leaf: oklch(0.58 0.12 155);
-    --agri-wheat: oklch(0.72 0.11 85);
-    --agri-soil: oklch(0.38 0.04 55);
+    --background: oklch(0.185 0.018 42);
+    --foreground: oklch(0.955 0.014 74.4);
+    --card: oklch(0.235 0.024 41);
+    --card-foreground: oklch(0.955 0.014 74.4);
+    --popover: oklch(0.235 0.024 41);
+    --popover-foreground: oklch(0.955 0.014 74.4);
+    --primary: oklch(0.684 0.096 60.4); /* caramel leads on dark */
+    --primary-foreground: oklch(0.212 0.024 40);
+    --secondary: oklch(0.295 0.03 41);
+    --secondary-foreground: oklch(0.94 0.016 74);
+    --muted: oklch(0.295 0.03 41);
+    --muted-foreground: oklch(0.735 0.022 66);
+    --accent: oklch(0.335 0.038 42);
+    --accent-foreground: oklch(0.846 0.053 78.3);
+    --destructive: oklch(0.62 0.15 26.3);
+    --destructive-foreground: oklch(0.97 0.012 22.4);
+    --border: oklch(0.33 0.028 41);
+    --input: oklch(0.31 0.028 41);
+    --ring: oklch(0.684 0.096 60.4);
+    --chart-1: oklch(0.684 0.096 60.4); /* caramel */
+    --chart-2: oklch(0.846 0.053 78.3); /* latte */
+    --chart-3: oklch(0.7 0.055 128); /* sage */
+    --chart-4: oklch(0.606 0.087 59); /* toffee */
+    --chart-5: oklch(0.759 0.089 64.1); /* wheat */
+    --agri-mint: oklch(0.28 0.03 60);
+    --agri-leaf: oklch(0.7 0.055 128);
+    --agri-wheat: oklch(0.78 0.09 64);
+    --agri-soil: oklch(0.42 0.045 40);
+
+    /* The sidebar goes dark-roast rather than cream in dark mode. */
+    --sidebar: oklch(0.212 0.024 40);
+    --sidebar-foreground: oklch(0.94 0.016 74);
+    --sidebar-primary: oklch(0.684 0.096 60.4);
+    --sidebar-primary-foreground: oklch(0.212 0.024 40);
+    --sidebar-accent: oklch(0.36 0.045 45);
+    --sidebar-accent-foreground: oklch(0.955 0.014 74.4);
+    --sidebar-border: oklch(0.315 0.03 41);
+    --sidebar-ring: oklch(0.684 0.096 60.4);
+
+    /* Café palette utilities — lifted for contrast on dark grounds. */
+    --cafe-espresso: oklch(0.86 0.045 70); /* inverts to a light latte */
+    --cafe-espresso-deep: oklch(0.94 0.02 72);
+    --cafe-cream: oklch(0.235 0.024 41);
+    --cafe-caramel: oklch(0.75 0.095 62);
+    --cafe-caramel-deep: oklch(0.83 0.085 66);
+    --cafe-caramel-soft: oklch(0.33 0.045 55);
+    --cafe-sage: oklch(0.72 0.06 128);
+    --cafe-sage-deep: oklch(0.79 0.06 128);
+    --cafe-sage-soft: oklch(0.31 0.04 128);
+    --cafe-clay: oklch(0.68 0.15 26.3);
+    --cafe-clay-soft: oklch(0.32 0.06 26.3);
+    --cafe-latte: oklch(0.846 0.053 78.3);
+    --cafe-mocha: oklch(0.7 0.07 249.1);
+    --cafe-mocha-soft: oklch(0.31 0.045 249.1);
+
+    --agri-shadow: 0.12 0.02 40;
 }
 
 @layer base {
@@ -174,17 +251,146 @@
 }
 
 @layer components {
+    /* ------------------------------------------------------------------
+     * Dashboard KPI mosaic
+     *
+     * Each tile picks one tone from a warm café mosaic — creams, sage,
+     * caramel and roasted browns — rather than repeating one accent. Ink and
+     * icon-chip colours travel with the tone so contrast never depends on the
+     * caller, and every tone has a dark-mode counterpart.
+     * ------------------------------------------------------------------ */
+    .kpi-tile {
+        @apply relative flex min-h-[88px] flex-col justify-center overflow-hidden rounded-2xl px-4 py-3.5 sm:min-h-[104px] sm:px-5;
+        background-color: var(--kpi-bg);
+        color: var(--kpi-ink);
+        border: 1px solid var(--kpi-edge, transparent);
+    }
+
+    .kpi-chip {
+        @apply flex size-9 shrink-0 items-center justify-center rounded-xl;
+        background-color: var(--kpi-chip);
+        color: var(--kpi-ink);
+    }
+
+    /* The motif is decoration only — it must never compete with the value. */
+    .kpi-motif {
+        @apply pointer-events-none absolute -right-3 -bottom-3 select-none;
+        color: var(--kpi-ink);
+        opacity: var(--kpi-motif-opacity, 0.16);
+    }
+
+    .kpi-cream {
+        --kpi-bg: #f3ebdd;
+        --kpi-ink: #3a2c24;
+        --kpi-chip: #e5d4bb;
+        --kpi-edge: #e9dcc9;
+    }
+
+    .kpi-linen {
+        --kpi-bg: #f9f4ea;
+        --kpi-ink: #3a2c24;
+        --kpi-chip: #ece1cd;
+        --kpi-edge: #efe6d6;
+    }
+
+    .kpi-sage {
+        --kpi-bg: #a9b994;
+        --kpi-ink: #2b3324;
+        --kpi-chip: #bcc9aa;
+    }
+
+    .kpi-olive {
+        --kpi-bg: #6e8158;
+        --kpi-ink: #ffffff;
+        --kpi-chip: #ffffff2e;
+        --kpi-motif-opacity: 0.22;
+    }
+
+    .kpi-caramel {
+        --kpi-bg: #ebc79c;
+        --kpi-ink: #462f16;
+        --kpi-chip: #f3dcc0;
+    }
+
+    .kpi-espresso {
+        --kpi-bg: #4b2e24;
+        --kpi-ink: #f6efe6;
+        --kpi-chip: #ffffff24;
+        --kpi-motif-opacity: 0.2;
+    }
+
+    .kpi-mocha {
+        --kpi-bg: #7b5344;
+        --kpi-ink: #f6efe6;
+        --kpi-chip: #ffffff28;
+        --kpi-motif-opacity: 0.22;
+    }
+
+    .kpi-roast {
+        --kpi-bg: #33241d;
+        --kpi-ink: #f6efe6;
+        --kpi-chip: #ffffff1f;
+        --kpi-motif-opacity: 0.2;
+    }
+
+    .kpi-mint {
+        --kpi-bg: #dce4d0;
+        --kpi-ink: #313827;
+        --kpi-chip: #e9eee1;
+    }
+
+    .dark .kpi-cream {
+        --kpi-bg: #33261e;
+        --kpi-ink: #f1e6d8;
+        --kpi-chip: #ffffff1a;
+        --kpi-edge: #402f25;
+        --kpi-motif-opacity: 0.2;
+    }
+
+    .dark .kpi-linen {
+        --kpi-bg: #2b211a;
+        --kpi-ink: #f1e6d8;
+        --kpi-chip: #ffffff17;
+        --kpi-edge: #392b22;
+        --kpi-motif-opacity: 0.2;
+    }
+
+    .dark .kpi-sage {
+        --kpi-bg: #4a5840;
+        --kpi-ink: #eaf0e0;
+        --kpi-chip: #ffffff22;
+        --kpi-motif-opacity: 0.22;
+    }
+
+    .dark .kpi-caramel {
+        --kpi-bg: #6b4a2a;
+        --kpi-ink: #fae9d5;
+        --kpi-chip: #ffffff24;
+        --kpi-motif-opacity: 0.22;
+    }
+
+    .dark .kpi-mint {
+        --kpi-bg: #3a4433;
+        --kpi-ink: #e6eddd;
+        --kpi-chip: #ffffff20;
+        --kpi-motif-opacity: 0.22;
+    }
+
+    .dark .kpi-roast {
+        --kpi-bg: #241a15;
+    }
+
     .agri-main-surface {
         @apply min-h-svh bg-background;
         background-image:
             radial-gradient(
                 ellipse 80% 50% at 50% -20%,
-                oklch(0.92 0.04 155 / 0.5),
+                oklch(0.944 0.023 69.6 / 0.7),
                 transparent
             ),
             radial-gradient(
                 ellipse 60% 40% at 100% 100%,
-                oklch(0.9 0.03 145 / 0.25),
+                oklch(0.952 0.015 123 / 0.35),
                 transparent
             );
     }
@@ -192,15 +398,15 @@
     .agri-card {
         @apply rounded-2xl border border-border/60 bg-card shadow-sm;
         box-shadow:
-            0 1px 2px oklch(0.22 0.04 168 / 0.04),
-            0 4px 16px oklch(0.22 0.04 168 / 0.03);
+            0 1px 2px oklch(var(--agri-shadow) / 0.04),
+            0 4px 16px oklch(var(--agri-shadow) / 0.03);
     }
 
     .agri-card-interactive {
         @apply rounded-2xl border border-border/60 bg-card shadow-sm transition-all duration-200;
         box-shadow:
-            0 1px 2px oklch(0.22 0.04 168 / 0.04),
-            0 4px 16px oklch(0.22 0.04 168 / 0.03);
+            0 1px 2px oklch(var(--agri-shadow) / 0.04),
+            0 4px 16px oklch(var(--agri-shadow) / 0.03);
     }
 
     .agri-card-interactive:hover {
@@ -224,8 +430,8 @@
     .agri-stat-card {
         @apply flex h-full min-h-[7.5rem] flex-col rounded-2xl border border-border/60 bg-card p-5 shadow-sm;
         box-shadow:
-            0 1px 2px oklch(0.22 0.04 168 / 0.04),
-            0 4px 16px oklch(0.22 0.04 168 / 0.03);
+            0 1px 2px oklch(var(--agri-shadow) / 0.04),
+            0 4px 16px oklch(var(--agri-shadow) / 0.03);
     }
 
     .agri-stat-label {
@@ -239,8 +445,8 @@
     .agri-action-card {
         @apply flex h-full min-h-[11rem] flex-col rounded-2xl border border-border/60 bg-card p-6 shadow-sm;
         box-shadow:
-            0 1px 2px oklch(0.22 0.04 168 / 0.04),
-            0 4px 16px oklch(0.22 0.04 168 / 0.03);
+            0 1px 2px oklch(var(--agri-shadow) / 0.04),
+            0 4px 16px oklch(var(--agri-shadow) / 0.03);
     }
 
     .agri-sidebar-badge {
@@ -265,26 +471,22 @@
         font-family: var(--font-display);
     }
 
+    /* A solid caramel pill carries the active state — on a cream sidebar the
+       fill is unmistakable on its own, so there is no extra edge marker. */
     .agri-sidebar-nav-active {
-        @apply relative bg-sidebar-accent text-sidebar-accent-foreground;
-    }
-
-    .agri-sidebar-nav-active::before {
-        content: '';
-        @apply absolute top-1/2 left-0 h-6 w-1 -translate-y-1/2 rounded-r-full;
-        background-color: var(--agri-wheat);
+        @apply relative rounded-lg bg-sidebar-accent font-semibold text-sidebar-accent-foreground;
     }
 
     .agri-landing-hero {
         background-image:
             radial-gradient(
                 ellipse 90% 60% at 70% -10%,
-                oklch(0.88 0.06 155 / 0.45),
+                oklch(0.9 0.05 68 / 0.5),
                 transparent
             ),
             radial-gradient(
                 ellipse 50% 40% at 0% 80%,
-                oklch(0.9 0.05 85 / 0.3),
+                oklch(0.93 0.03 123 / 0.35),
                 transparent
             );
     }
@@ -297,18 +499,18 @@
         background:
             radial-gradient(
                 ellipse 70% 55% at 75% -5%,
-                oklch(0.85 0.08 155 / 0.55),
+                oklch(0.87 0.06 66 / 0.6),
                 transparent 70%
             ),
             radial-gradient(
                 ellipse 55% 45% at 5% 75%,
-                oklch(0.88 0.06 85 / 0.35),
+                oklch(0.9 0.04 123 / 0.4),
                 transparent 70%
             ),
             linear-gradient(
                 180deg,
-                oklch(0.985 0.012 155),
-                oklch(0.96 0.02 155)
+                oklch(0.99 0.008 82),
+                oklch(0.958 0.016 76)
             );
     }
 
@@ -316,13 +518,13 @@
         background:
             radial-gradient(
                 ellipse 60% 80% at 100% 0%,
-                oklch(0.42 0.1 165),
+                oklch(0.45 0.07 45),
                 transparent 70%
             ),
             linear-gradient(
                 135deg,
-                oklch(0.3 0.07 172),
-                oklch(0.24 0.055 172)
+                oklch(0.334 0.046 39.8),
+                oklch(0.245 0.03 38)
             );
     }
 
@@ -358,16 +560,16 @@
     .agri-feature-card {
         @apply relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-border/60 bg-card p-6 transition-all duration-200;
         box-shadow:
-            0 1px 2px oklch(0.22 0.04 168 / 0.04),
-            0 4px 16px oklch(0.22 0.04 168 / 0.03);
+            0 1px 2px oklch(var(--agri-shadow) / 0.04),
+            0 4px 16px oklch(var(--agri-shadow) / 0.03);
     }
 
     .agri-feature-card:hover {
         @apply border-primary/30;
         transform: translateY(-2px);
         box-shadow:
-            0 8px 24px oklch(0.22 0.04 168 / 0.08),
-            0 2px 8px oklch(0.22 0.04 168 / 0.05);
+            0 8px 24px oklch(var(--agri-shadow) / 0.08),
+            0 2px 8px oklch(var(--agri-shadow) / 0.05);
     }
 
     .agri-feature-card::before {
@@ -393,8 +595,8 @@
         border-radius: 14px !important;
         border-width: 0 !important;
         box-shadow:
-            0 8px 24px oklch(0.22 0.04 168 / 0.18),
-            0 2px 6px oklch(0.22 0.04 168 / 0.12) !important;
+            0 8px 24px oklch(var(--agri-shadow) / 0.18),
+            0 2px 6px oklch(var(--agri-shadow) / 0.12) !important;
     }
 
     .agri-toast [data-title] {

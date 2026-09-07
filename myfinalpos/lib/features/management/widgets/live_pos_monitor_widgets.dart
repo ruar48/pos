@@ -500,11 +500,11 @@ class _LiveTerminalCard extends StatelessWidget {
     if (!terminal.online) return AppColors.muted;
     switch (state?.status ?? terminal.status) {
       case 'success':
-        return AppColors.green;
+        return AppColors.success;
       case 'payment':
         return AppColors.orange;
       case 'cart':
-        return const Color(0xFF0284C7);
+        return AppColors.blue;
       default:
         return AppColors.darkGreen;
     }

@@ -493,11 +493,11 @@ class _DashboardTrendPainter extends CustomPainter {
       ..shader = const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [Color(0x59F5A962), Color(0x05F5A962)],
+        colors: [Color(0x4DC58B5A), Color(0x05C58B5A)],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height - 24));
 
     final linePaint = Paint()
-      ..color = const Color(0xFFE8924A)
+      ..color = AppColors.caramelDeep
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -544,16 +544,16 @@ class _PaymentIcon extends StatelessWidget {
     late IconData icon;
 
     if (lower.contains('cash')) {
-      bg = const Color(0xFFD1FAE5);
-      fg = const Color(0xFF059669);
+      bg = AppColors.successSoft;
+      fg = AppColors.success;
       icon = Icons.account_balance_wallet_outlined;
     } else if (lower.contains('bank') || lower.contains('gcash')) {
-      bg = const Color(0xFFFFEDD5);
-      fg = const Color(0xFFEA580C);
+      bg = AppColors.caramelSoft;
+      fg = AppColors.caramelDeep;
       icon = Icons.payments_outlined;
     } else {
-      bg = const Color(0xFFF1F5F9);
-      fg = const Color(0xFF475569);
+      bg = AppColors.lightGreen;
+      fg = AppColors.muted;
       icon = Icons.shopping_bag_outlined;
     }
 

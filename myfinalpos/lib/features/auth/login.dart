@@ -563,7 +563,7 @@ class _LoginFormCard extends StatelessWidget {
           border: Border.all(color: AppColors.border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
+              color: AppColors.espresso.withValues(alpha: 0.10),
               blurRadius: 28,
               offset: const Offset(0, 12),
             ),

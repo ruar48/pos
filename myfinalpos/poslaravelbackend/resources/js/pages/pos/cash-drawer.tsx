@@ -253,18 +253,19 @@ function SummaryCard({
     editable?: boolean;
     onEdit?: () => void;
 }) {
+    // Tone names are historic; the colours are the café palette.
     const toneClass = {
-        green: 'border-emerald-500/30 bg-emerald-500/5',
-        orange: 'border-amber-500/30 bg-amber-500/5',
-        red: 'border-orange-500/30 bg-orange-500/5',
-        teal: 'border-teal-500/30 bg-teal-500/5',
+        green: 'border-sage/40 bg-sage/8',
+        orange: 'border-caramel/40 bg-caramel/8',
+        red: 'border-clay/30 bg-clay/6',
+        teal: 'border-primary/25 bg-primary/6',
     }[tone];
 
     const valueClass = {
-        green: 'text-emerald-700',
-        orange: 'text-amber-700',
-        red: 'text-orange-700',
-        teal: 'text-teal-700',
+        green: 'text-sage-deep',
+        orange: 'text-caramel-deep',
+        red: 'text-clay',
+        teal: 'text-primary',
     }[tone];
 
     return (
@@ -298,8 +299,8 @@ function PanelHeader({
 }) {
     const toneClass =
         tone === 'orange'
-            ? 'border-amber-500/30 bg-amber-500/10 text-amber-800'
-            : 'border-teal-500/30 bg-teal-500/10 text-teal-800';
+            ? 'border-caramel/40 bg-caramel/12 text-caramel-deep'
+            : 'border-primary/25 bg-primary/8 text-primary';
 
     return (
         <div
@@ -1007,7 +1008,7 @@ export default function CashDrawerPage() {
                 <Head title="Cash Drawer" />
                 <div className="flex min-h-[70vh] items-center justify-center p-6">
                     <div className="w-full max-w-sm rounded-2xl border border-border/60 bg-card p-6 text-center shadow-sm">
-                        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+                        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-caramel/12 text-caramel-deep">
                             <Lock className="size-6" />
                         </div>
                         <h1 className="text-lg font-bold text-foreground">
@@ -1080,8 +1081,8 @@ export default function CashDrawerPage() {
                     actions={
                         <div className="flex flex-wrap items-center gap-2">
                             {isToday && (
-                                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-800">
-                                    <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
+                                <div className="flex items-center gap-2 rounded-xl border border-sage/40 bg-sage/12 px-3 py-2 text-xs font-semibold text-sage-deep">
+                                    <span className="size-2 animate-pulse rounded-full bg-sage" />
                                     Live
                                 </div>
                             )}
@@ -1230,7 +1231,7 @@ export default function CashDrawerPage() {
                                 </Button>
                                 <Button
                                     size="sm"
-                                    className="bg-amber-600 text-white shadow-sm hover:bg-amber-700"
+                                    className="bg-caramel-deep text-white shadow-sm hover:bg-caramel-deep/90"
                                     onClick={() => void handleAddCash()}
                                     disabled={savingCash}
                                 >
@@ -1316,7 +1317,7 @@ export default function CashDrawerPage() {
                                         className={cn(
                                             'rounded-full px-3 py-1 text-xs font-semibold transition-colors',
                                             expenseFilter === key
-                                                ? 'bg-teal-600 text-white'
+                                                ? 'bg-primary text-primary-foreground'
                                                 : 'bg-muted text-muted-foreground hover:bg-muted/80',
                                         )}
                                     >
@@ -1406,7 +1407,7 @@ export default function CashDrawerPage() {
                                 </Button>
                                 <Button
                                     size="sm"
-                                    className="bg-teal-600 text-white shadow-sm hover:bg-teal-700"
+                                    className="bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
                                     onClick={() => void handleAddExpense()}
                                     disabled={savingExpense}
                                 >
@@ -1443,7 +1444,7 @@ export default function CashDrawerPage() {
                                                 </p>
                                             </div>
                                             <div className="flex shrink-0 items-start gap-2">
-                                                <p className="font-bold text-teal-700">
+                                                <p className="font-bold text-primary">
                                                     {peso(row.amount)}
                                                 </p>
                                                 <button

@@ -30,7 +30,7 @@ export function ThermalReceiptPreview({
                     />
                 </div>
             )}
-            <pre className="whitespace-pre-wrap text-center font-mono text-[10px] leading-[1.35] text-neutral-900">
+            <pre className="whitespace-pre-wrap text-center font-mono text-[10px] leading-[1.35] text-foreground">
                 {lines.join('\n')}
             </pre>
         </div>

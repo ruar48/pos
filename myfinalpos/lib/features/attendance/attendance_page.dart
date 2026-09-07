@@ -796,9 +796,7 @@ class _AdminBoardView extends StatelessWidget {
                 final iso = toIsoDate(date);
                 final selected = iso == boardDate;
                 return Material(
-                  color: selected
-                      ? const Color(0xFFD4A574)
-                      : const Color(0xFFF3EDE6),
+                  color: selected ? AppColors.espresso : AppColors.lightGreen,
                   borderRadius: BorderRadius.circular(14),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(14),
@@ -813,9 +811,8 @@ class _AdminBoardView extends StatelessWidget {
                           Icon(
                             Icons.calendar_today_outlined,
                             size: 14,
-                            color: selected
-                                ? Colors.white
-                                : const Color(0xFF8B7355),
+                            color:
+                                selected ? Colors.white : AppColors.mutedSoft,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -824,9 +821,8 @@ class _AdminBoardView extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: selected
-                                    ? Colors.white
-                                    : const Color(0xFF5C4A3A),
+                                color:
+                                    selected ? Colors.white : AppColors.text,
                               ),
                             ),
                           ),

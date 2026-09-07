@@ -110,9 +110,9 @@ function statusTone(label: Exclude<StatusFilter, 'All'>): string {
         case 'Active':
             return 'bg-primary/10 text-primary';
         case 'Scheduled':
-            return 'bg-blue-500/10 text-blue-600';
+            return 'bg-mocha-soft text-mocha';
         case 'Expired':
-            return 'bg-amber-500/10 text-amber-600';
+            return 'bg-caramel/12 text-caramel-deep';
         default:
             return 'bg-secondary text-muted-foreground';
     }
@@ -131,7 +131,7 @@ function StatCard({
 }) {
     const toneClass =
         tone === 'amber'
-            ? 'bg-amber-500/10 text-amber-600'
+            ? 'bg-caramel/12 text-caramel-deep'
             : 'bg-primary/10 text-primary';
 
     return (

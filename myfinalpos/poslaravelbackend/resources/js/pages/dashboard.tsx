@@ -1,14 +1,32 @@
 import { Head } from '@inertiajs/react';
 import {
     Banknote,
+    BarChart3,
+    Box,
+    Calendar,
+    Coffee,
     CircleHelp,
+    CreditCard,
     Loader2,
+    Package,
+    Percent,
+    ReceiptText,
     RefreshCw,
+    RotateCcw,
     ShoppingBag,
+    ShoppingCart,
+    Users,
     Wallet,
+    Wifi,
+    type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import {
+    CafeMotif,
+    CafeVignette,
+    type CafeMotifName,
+} from '@/components/pos/cafe-motifs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -119,56 +137,97 @@ const GRANULARITY_TABS: { key: DashboardGranularity; label: string }[] = [
     { key: 'monthly', label: 'Monthly' },
 ];
 
-type KpiTone = 'orange' | 'teal' | 'green' | 'coral';
-
-const KPI_STYLES: Record<KpiTone, string> = {
-    orange: 'bg-gradient-to-br from-[#f5a962] to-[#e8924a] text-white',
-    teal: 'bg-gradient-to-br from-[#5ec4b8] to-[#45b5a8] text-white',
-    green: 'bg-gradient-to-br from-[#6fcf97] to-[#56c486] text-white',
-    coral: 'bg-gradient-to-br from-[#f2847a] to-[#e86a5e] text-white',
-};
+// The tile tones are defined in app.css (.kpi-*) so ink and icon-chip colours
+// travel with the background and each has a dark-mode counterpart.
+type KpiTone =
+    | 'cream'
+    | 'linen'
+    | 'sage'
+    | 'olive'
+    | 'caramel'
+    | 'espresso'
+    | 'mocha'
+    | 'roast'
+    | 'mint';
 
 type KpiCardProps = {
     label: string;
     value: string;
     tone: KpiTone;
+    icon: LucideIcon;
+    motif: CafeMotifName;
 };
 
-function KpiCard({ label, value, tone }: KpiCardProps) {
+function KpiCard({ label, value, tone, icon: Icon, motif }: KpiCardProps) {
     return (
-        <div
-            className={cn(
-                'flex min-h-[88px] flex-col justify-center rounded-2xl px-4 py-3 shadow-sm sm:min-h-[96px] sm:px-5',
-                KPI_STYLES[tone],
-            )}
-        >
-            <p className="text-xs font-medium leading-tight opacity-95 sm:text-sm">
-                {label}
-            </p>
-            <p className="mt-1.5 text-xl font-bold tracking-tight sm:text-2xl">
-                {value}
-            </p>
+        <div className={cn('kpi-tile', `kpi-${tone}`)}>
+            <CafeMotif name={motif} size={92} className="kpi-motif" />
+            <div className="relative flex items-start gap-3">
+                <span className="kpi-chip">
+                    <Icon className="size-4.5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold leading-tight opacity-85 sm:text-xs">
+                        {label}
+                    </p>
+                    <p className="mt-1 truncate text-xl font-extrabold tracking-tight sm:text-[1.6rem]">
+                        {value}
+                    </p>
+                </div>
+            </div>
         </div>
+    );
+}
+
+function SectionHeading({
+    icon: Icon,
+    children,
+}: {
+    icon: LucideIcon;
+    children: React.ReactNode;
+}) {
+    return (
+        <h2 className="flex items-center gap-2 text-base font-bold text-foreground">
+            <Icon className="size-4.5 text-caramel-deep" />
+            {children}
+        </h2>
+    );
+}
+
+/** Initials avatar for the attendance list. */
+function StaffAvatar({ name }: { name: string }) {
+    const initials = name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0])
+        .join('')
+        .toUpperCase();
+
+    return (
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-[11px] font-bold text-muted-foreground">
+            {initials || <Users className="size-4" />}
+        </span>
     );
 }
 
 function PaymentIcon({ type }: { type: 'cash' | 'bank' | 'other' }) {
     if (type === 'cash') {
         return (
-            <span className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+            <span className="flex size-8 items-center justify-center rounded-full bg-sage-soft text-sage-deep">
                 <Wallet className="size-4" />
             </span>
         );
     }
     if (type === 'bank') {
         return (
-            <span className="flex size-8 items-center justify-center rounded-full bg-orange-100 text-orange-600">
+            <span className="flex size-8 items-center justify-center rounded-full bg-caramel-soft text-caramel-deep">
                 <Banknote className="size-4" />
             </span>
         );
     }
     return (
-        <span className="flex size-8 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+        <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-muted-foreground">
             <ShoppingBag className="size-4" />
         </span>
     );
@@ -185,14 +244,17 @@ function AttendanceStatusPill({
     time?: string | null;
     tone: 'teal' | 'orange';
 }) {
-    const toneClass = tone === 'teal' ? 'bg-teal-500' : 'bg-orange-500';
+    // The dot colour labels which slot this is (sage = in, caramel = out);
+    // whether it happened is carried by the value below — a time, or a dash.
+    const toneClass = tone === 'teal' ? 'bg-brand-sage' : 'bg-brand-caramel';
     return (
         <div className="text-right">
             <div className="flex items-center justify-end gap-1.5 text-[11px] font-semibold text-muted-foreground">
                 <span
                     className={cn(
                         'size-2 rounded-full',
-                        active ? toneClass : 'bg-border',
+                        toneClass,
+                        !active && 'opacity-45',
                     )}
                 />
                 {label}
@@ -249,6 +311,15 @@ function SalesLineChart({
         return { path: line, areaPath: area };
     }, [series, maxSales]);
 
+    // Four evenly spaced gridlines, labelled top-down (max → 0).
+    const axisTicks = useMemo(() => {
+        const steps = 4;
+        return Array.from({ length: steps + 1 }, (_, i) => {
+            const value = (maxSales / steps) * (steps - i);
+            return { value, top: `${(i / steps) * 100}%` };
+        });
+    }, [maxSales]);
+
     if (series.length === 0) {
         return (
             <p className="py-20 text-center text-sm text-muted-foreground">
@@ -258,41 +329,84 @@ function SalesLineChart({
     }
 
     return (
-        <div className="relative h-52 w-full sm:h-56">
-            <svg
-                viewBox="0 0 1000 220"
-                preserveAspectRatio="none"
-                className="h-full w-full"
-                aria-hidden
-            >
-                <defs>
-                    <linearGradient id="salesArea" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#f5a962" stopOpacity="0.35" />
-                        <stop offset="100%" stopColor="#f5a962" stopOpacity="0.02" />
-                    </linearGradient>
-                </defs>
-                {areaPath && (
-                    <path d={areaPath} fill="url(#salesArea)" />
-                )}
-                <polyline
-                    fill="none"
-                    stroke="#e8924a"
-                    strokeWidth="3"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    points={path}
-                />
-            </svg>
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-between gap-1 overflow-hidden px-1">
-                {series.map((point) => (
+        <div className="flex w-full gap-2">
+            {/* Y axis */}
+            <div className="relative h-52 w-14 shrink-0 sm:h-56">
+                {axisTicks.map((tick) => (
                     <span
-                        key={point.key}
-                        className="min-w-0 flex-1 truncate text-center text-[10px] text-muted-foreground"
-                        title={`₱${formatMoney(point.net_sales, false)}`}
+                        key={tick.top}
+                        className="absolute right-0 -translate-y-1/2 text-[10px] tabular-nums text-muted-foreground"
+                        style={{ top: tick.top }}
                     >
-                        {point.label}
+                        ₱{Math.round(tick.value).toLocaleString()}
                     </span>
                 ))}
+            </div>
+
+            <div className="min-w-0 flex-1">
+                <div className="relative h-52 w-full sm:h-56">
+                    {/* Gridlines */}
+                    <div className="pointer-events-none absolute inset-0">
+                        {axisTicks.map((tick) => (
+                            <span
+                                key={tick.top}
+                                className="absolute inset-x-0 border-t border-border/70"
+                                style={{ top: tick.top }}
+                            />
+                        ))}
+                    </div>
+
+                    <CafeVignette className="pointer-events-none absolute right-2 bottom-1 h-28 text-caramel opacity-[0.18]" />
+
+                    <svg
+                        viewBox="0 0 1000 220"
+                        preserveAspectRatio="none"
+                        className="relative h-full w-full"
+                        aria-hidden
+                    >
+                        <defs>
+                            <linearGradient
+                                id="salesArea"
+                                x1="0"
+                                y1="0"
+                                x2="0"
+                                y2="1"
+                            >
+                                <stop
+                                    offset="0%"
+                                    stopColor="#c58b5a"
+                                    stopOpacity="0.35"
+                                />
+                                <stop
+                                    offset="100%"
+                                    stopColor="#c58b5a"
+                                    stopOpacity="0.02"
+                                />
+                            </linearGradient>
+                        </defs>
+                        {areaPath && <path d={areaPath} fill="url(#salesArea)" />}
+                        <polyline
+                            fill="none"
+                            stroke="#8a5a2b"
+                            strokeWidth="3"
+                            strokeLinejoin="round"
+                            strokeLinecap="round"
+                            points={path}
+                        />
+                    </svg>
+                </div>
+
+                <div className="mt-1.5 flex justify-between gap-1 overflow-hidden">
+                    {series.map((point) => (
+                        <span
+                            key={point.key}
+                            className="min-w-0 flex-1 truncate text-center text-[10px] text-muted-foreground"
+                            title={`₱${formatMoney(point.net_sales, false)}`}
+                        >
+                            {point.label}
+                        </span>
+                    ))}
+                </div>
             </div>
         </div>
     );
@@ -360,12 +474,12 @@ export default function Dashboard() {
     return (
         <>
             <Head title="Dashboard" />
-            <div className="flex min-h-full flex-col bg-[#f4f6f5]">
+            <div className="flex min-h-full flex-col bg-background">
                 {/* Top bar — Dashboard title, last synced, date range */}
                 <div className="border-b border-border/50 bg-background px-4 py-3 sm:px-6">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-center gap-2">
-                            <h1 className="text-lg font-semibold text-foreground">
+                            <h1 className="text-xl font-extrabold tracking-tight text-foreground">
                                 Dashboard
                             </h1>
                             <CircleHelp
@@ -374,11 +488,19 @@ export default function Dashboard() {
                             />
                         </div>
                         <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-                            <p className="text-xs text-muted-foreground sm:text-sm">
-                                <span className="font-medium text-foreground">
-                                    Last synced:
-                                </span>{' '}
-                                {formatSyncedAt(data?.last_synced_at ?? null)}
+                            <p className="flex items-center gap-2 text-xs text-muted-foreground sm:text-sm">
+                                <span
+                                    className="size-2 shrink-0 rounded-full bg-brand-sage"
+                                    aria-hidden
+                                />
+                                <span>
+                                    <span className="font-medium text-foreground">
+                                        Last synced:
+                                    </span>{' '}
+                                    {formatSyncedAt(
+                                        data?.last_synced_at ?? null,
+                                    )}
+                                </span>
                             </p>
                             <div className="relative">
                                 <button
@@ -386,8 +508,9 @@ export default function Dashboard() {
                                     onClick={() =>
                                         setShowDatePicker((open) => !open)
                                     }
-                                    className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground shadow-sm hover:bg-secondary/50 sm:text-sm"
+                                    className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground shadow-sm hover:bg-secondary/60 sm:text-sm"
                                 >
+                                    <Calendar className="size-4 text-caramel-deep" />
                                     {formatRangePickerLabel(start, end)}
                                 </button>
                                 {showDatePicker && (
@@ -477,7 +600,7 @@ export default function Dashboard() {
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="size-8 shrink-0"
+                                className="size-9 shrink-0 rounded-full border border-border bg-card"
                                 onClick={() => void load()}
                                 disabled={loading}
                                 title="Refresh"
@@ -494,7 +617,7 @@ export default function Dashboard() {
 
                 <div className="flex-1 space-y-5 px-4 py-5 sm:px-6">
                     {error && (
-                        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                        <div className="rounded-xl border border-destructive/30 bg-destructive/8 px-4 py-3 text-sm text-destructive">
                             {error}
                         </div>
                     )}
@@ -509,27 +632,37 @@ export default function Dashboard() {
                                 <KpiCard
                                     label="Gross Sales"
                                     value={formatMoney(metrics.gross_sales)}
-                                    tone="orange"
+                                    tone="cream"
+                                    icon={Coffee}
+                                    motif="cup"
                                 />
                                 <KpiCard
                                     label="Net Sales After Refunds"
                                     value={formatMoney(metrics.net_sales)}
-                                    tone="teal"
+                                    tone="linen"
+                                    icon={ReceiptText}
+                                    motif="croissant"
                                 />
                                 <KpiCard
                                     label="Total Discounts"
                                     value={formatMoney(metrics.total_discounts)}
-                                    tone="green"
+                                    tone="sage"
+                                    icon={Percent}
+                                    motif="leaf"
                                 />
                                 <KpiCard
                                     label="No. of Transactions"
                                     value={metrics.order_count.toLocaleString()}
-                                    tone="orange"
+                                    tone="caramel"
+                                    icon={CreditCard}
+                                    motif="cake"
                                 />
                                 <KpiCard
                                     label="Cost of Goods"
                                     value={formatMoney(metrics.cogs, false)}
-                                    tone="teal"
+                                    tone="espresso"
+                                    icon={Package}
+                                    motif="beans"
                                 />
                             </div>
 
@@ -538,47 +671,63 @@ export default function Dashboard() {
                                 <KpiCard
                                     label="No. of Items"
                                     value={formatItems(metrics.items_sold)}
-                                    tone="green"
+                                    tone="olive"
+                                    icon={Box}
+                                    motif="wheat"
                                 />
                                 <KpiCard
                                     label="Profit"
                                     value={formatMoney(metrics.profit)}
-                                    tone="orange"
+                                    tone="linen"
+                                    icon={BarChart3}
+                                    motif="leaf"
                                 />
                                 <KpiCard
                                     label="Refunds Deducted"
                                     value={formatMoney(metrics.refunded_amount)}
-                                    tone="coral"
+                                    tone="mocha"
+                                    icon={RotateCcw}
+                                    motif="cake"
                                 />
                                 <KpiCard
                                     label="Total Unpaid Orders"
                                     value={formatMoney(metrics.unpaid_orders)}
-                                    tone="teal"
+                                    tone="roast"
+                                    icon={ShoppingCart}
+                                    motif="bag"
                                 />
                                 <KpiCard
                                     label="No. of Online Orders"
                                     value={metrics.online_orders.toLocaleString()}
-                                    tone="green"
+                                    tone="mint"
+                                    icon={Wifi}
+                                    motif="monitor"
                                 />
                             </div>
 
                             {/* Greeting */}
-                            <p className="text-base font-medium text-foreground sm:text-lg">
-                                {greetingForHour()},{' '}
-                                <span className="font-semibold uppercase">
-                                    {storeName}
+                            <p className="flex items-center gap-2.5 text-lg font-semibold text-foreground sm:text-xl">
+                                <Coffee
+                                    className="size-6 shrink-0 text-caramel-deep"
+                                    aria-hidden
+                                />
+                                <span>
+                                    {greetingForHour()},{' '}
+                                    <span className="font-extrabold uppercase">
+                                        {storeName}
+                                    </span>
+                                    !
                                 </span>
-                                !
                             </p>
 
                             {/* Sales chart + Payment types */}
-                            <div className="grid gap-4 lg:grid-cols-[1fr_260px]">
-                                <div className="rounded-2xl border border-border/60 bg-background p-4 sm:p-5">
+                            <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+                                <div className="agri-card p-4 sm:p-5">
                                     <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <h2 className="text-base font-semibold text-foreground">
+                                        <SectionHeading icon={BarChart3}>
                                             Sales by Date
-                                        </h2>
-                                        <div className="flex rounded-lg border border-border bg-secondary/30 p-0.5">
+                                        </SectionHeading>
+                                        <div className="flex rounded-full bg-secondary p-1">
                                             {GRANULARITY_TABS.map((tab) => {
                                                 const disabled =
                                                     tab.key === 'hourly' &&
@@ -594,10 +743,10 @@ export default function Dashboard() {
                                                             )
                                                         }
                                                         className={cn(
-                                                            'rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm',
+                                                            'rounded-full px-4 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm',
                                                             granularity ===
                                                                 tab.key
-                                                                ? 'bg-background text-foreground shadow-sm'
+                                                                ? 'bg-primary text-primary-foreground shadow-sm'
                                                                 : 'text-muted-foreground hover:text-foreground',
                                                         )}
                                                     >
@@ -613,15 +762,19 @@ export default function Dashboard() {
                                     />
                                 </div>
 
-                                <div className="rounded-2xl border border-border/60 bg-background p-4 sm:p-5">
-                                    <h2 className="mb-4 text-base font-semibold text-foreground">
+                                <div className="agri-card flex flex-col p-4 sm:p-5">
+                                    <SectionHeading icon={CreditCard}>
                                         Payment Types
-                                    </h2>
+                                    </SectionHeading>
+                                    <div className="mt-4 flex-1">
                                     {(data?.payment_types ?? []).length ===
                                     0 ? (
-                                        <p className="text-sm text-muted-foreground">
-                                            No payments recorded.
-                                        </p>
+                                        <div className="flex h-full flex-col items-center justify-center gap-2 py-4">
+                                            <p className="self-start text-sm text-muted-foreground">
+                                                No payments recorded.
+                                            </p>
+                                            <CafeVignette className="h-28 w-full text-caramel opacity-25" />
+                                        </div>
                                     ) : (
                                         <ul className="space-y-4">
                                             {(data?.payment_types ?? []).map(
@@ -650,13 +803,16 @@ export default function Dashboard() {
                                             )}
                                         </ul>
                                     )}
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="mt-4 rounded-2xl border border-border/60 bg-background p-4 sm:p-5">
-                                <h2 className="mb-4 text-base font-semibold text-foreground">
-                                    Attendance Today
-                                </h2>
+                            <div className="agri-card mt-4 p-4 sm:p-5">
+                                <div className="mb-4">
+                                    <SectionHeading icon={Users}>
+                                        Attendance Today
+                                    </SectionHeading>
+                                </div>
                                 {(data?.attendance_today ?? []).length ===
                                 0 ? (
                                     <p className="text-sm text-muted-foreground">
@@ -670,14 +826,19 @@ export default function Dashboard() {
                                                     key={row.user_id}
                                                     className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
                                                 >
-                                                    <div>
-                                                        <p className="text-sm font-semibold text-foreground">
-                                                            {row.full_name}
-                                                        </p>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {row.role} ·{' '}
-                                                            {row.branch_name}
-                                                        </p>
+                                                    <div className="flex min-w-0 items-center gap-3">
+                                                        <StaffAvatar
+                                                            name={row.full_name}
+                                                        />
+                                                        <div className="min-w-0">
+                                                            <p className="truncate text-sm font-bold uppercase text-foreground">
+                                                                {row.full_name}
+                                                            </p>
+                                                            <p className="truncate text-xs text-muted-foreground">
+                                                                {row.role} ·{' '}
+                                                                {row.branch_name}
+                                                            </p>
+                                                        </div>
                                                     </div>
                                                     <div className="flex items-center gap-5">
                                                         <AttendanceStatusPill

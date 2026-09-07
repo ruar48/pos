@@ -70,7 +70,7 @@ function StatCard({
 }) {
     const toneClass =
         tone === 'amber'
-            ? 'bg-amber-500/10 text-amber-600'
+            ? 'bg-caramel/12 text-caramel-deep'
             : tone === 'primary'
               ? 'bg-primary/10 text-primary'
               : 'bg-primary/10 text-primary';
@@ -134,7 +134,7 @@ function CustomerLoyaltyCard({
             ? 'bg-primary/10 text-primary'
             : statusLabel === 'No card'
               ? 'bg-secondary text-muted-foreground'
-              : 'bg-amber-500/10 text-amber-600';
+              : 'bg-caramel/12 text-caramel-deep';
 
     return (
         <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">

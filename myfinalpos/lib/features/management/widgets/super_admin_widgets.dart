@@ -921,12 +921,12 @@ class _UserFormDialogState extends State<_UserFormDialog> {
                       _AttendanceLegendChip(
                         label: 'IN',
                         caption: 'Time In',
-                        color: AppColors.green,
+                        color: AppColors.success,
                       ),
                       _AttendanceLegendChip(
                         label: 'START\nBREAK',
                         caption: 'Break',
-                        color: Color(0xFF38BDF8),
+                        color: AppColors.blue,
                         compact: true,
                       ),
                       _AttendanceLegendChip(

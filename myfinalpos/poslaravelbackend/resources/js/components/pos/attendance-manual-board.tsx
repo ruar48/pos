@@ -108,11 +108,11 @@ function breakOutTime(row: AttendanceRow): string {
 function actionClass(label: string): string {
     switch (label) {
         case 'OUT':
-            return 'bg-orange-500 hover:bg-orange-600 text-white';
+            return 'bg-brand-caramel hover:bg-brand-caramel/90 text-brand-ink';
         case 'DONE':
             return 'bg-muted text-muted-foreground';
         default:
-            return 'bg-emerald-600 hover:bg-emerald-700 text-white';
+            return 'bg-brand-sage hover:bg-brand-sage/90 text-white';
     }
 }
 
@@ -604,7 +604,7 @@ function ManualAttendanceRow({
                     row.day_out_is_manual ? (
                         <span
                             title="Time-out fixed by admin — no selfie taken"
-                            className="text-[11px] font-extrabold text-amber-600"
+                            className="text-[11px] font-extrabold text-caramel-deep"
                         >
                             FT
                         </span>
@@ -639,9 +639,9 @@ function ManualAttendanceRow({
                     className={cn(
                         'inline-flex size-16 items-center justify-center rounded-full text-center text-xs font-extrabold leading-tight shadow-sm transition disabled:cursor-not-allowed',
                         row.is_on_break
-                            ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                            ? 'bg-brand-caramel hover:bg-brand-caramel/90 text-brand-ink'
                             : breakEnabled
-                                ? 'bg-amber-100 hover:bg-amber-200 text-amber-700'
+                                ? 'bg-caramel-soft hover:bg-caramel/25 text-caramel-deep'
                                 : 'bg-muted text-muted-foreground',
                     )}
                 >
@@ -658,11 +658,11 @@ function ManualAttendanceRow({
                         type="button"
                         title="Forgot to time out — click to manually record it"
                         onClick={onManualClockOut}
-                        className="inline-flex size-16 animate-pulse items-center justify-center rounded-full border-2 border-amber-500 bg-amber-50 text-center text-amber-700 shadow-sm transition hover:bg-amber-100"
+                        className="inline-flex size-16 animate-pulse items-center justify-center rounded-full border-2 border-caramel bg-caramel-soft text-center text-caramel-deep shadow-sm transition hover:bg-caramel/20"
                     >
                         <Clock className="size-6" />
                     </button>
-                    <span className="text-[11px] font-bold text-amber-600">
+                    <span className="text-[11px] font-bold text-caramel-deep">
                         Fix Time-Out
                     </span>
                 </div>
@@ -746,10 +746,10 @@ function SelfieMeta({
                         'size-2 rounded-full',
                         hasTime
                             ? tone === 'teal'
-                                ? 'bg-teal-500'
+                                ? 'bg-brand-sage'
                                 : tone === 'amber'
-                                    ? 'bg-amber-500'
-                                    : 'bg-orange-500'
+                                    ? 'bg-brand-caramel'
+                                    : 'bg-brand-clay'
                             : 'bg-border',
                     )}
                 />
@@ -767,7 +767,7 @@ function SelfieMeta({
                 <p className="text-xs font-semibold text-muted-foreground">{time}</p>
             ) : null}
             {note ? (
-                <p className="text-[11px] font-bold text-amber-600">{note}</p>
+                <p className="text-[11px] font-bold text-caramel-deep">{note}</p>
             ) : null}
         </div>
     );

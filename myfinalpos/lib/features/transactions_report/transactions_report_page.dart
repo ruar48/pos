@@ -521,7 +521,10 @@ class _PaginationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: AppColors.lightGreen.withValues(alpha: 0.35),
+      decoration: const BoxDecoration(
+        color: AppColors.lightGreen,
+        border: Border(top: BorderSide(color: AppColors.greenBorder)),
+      ),
       child: Row(
         children: [
           Text(

@@ -71,7 +71,7 @@ export function BrandLogo({
         >
             <div
                 className={cn(
-                    'flex shrink-0 items-center justify-center overflow-hidden rounded-xl',
+                    'flex shrink-0 items-center justify-center overflow-hidden rounded-full',
                     dims.box,
                     showImage
                         ? cn('border p-1', imageMarkClasses)

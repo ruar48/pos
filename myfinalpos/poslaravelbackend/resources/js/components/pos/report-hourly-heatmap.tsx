@@ -30,23 +30,31 @@ function formatCellValue(value: number, mode: HeatmapMode): string {
         : value.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
+// Cream → espresso ramp. Monotonic in lightness, so the busiest hours read
+// as the darkest cells even without relying on hue.
 function heatColor(ratio: number): string {
     if (ratio <= 0) {
-        return '#475569';
+        return '#ede5da';
     }
     if (ratio < 0.2) {
-        return '#fdba74';
+        return '#e5d3bc';
     }
     if (ratio < 0.4) {
-        return '#fb923c';
+        return '#d9b58c';
     }
     if (ratio < 0.6) {
-        return '#f59e0b';
+        return '#c58b5a';
     }
     if (ratio < 0.8) {
-        return '#34d399';
+        return '#9a5a28';
     }
-    return '#0f766e';
+    return '#4b2e24';
+}
+
+// The ramp starts light, so quiet cells need dark ink and busy cells need
+// light ink. Both sides clear 4.5:1 against their own cell.
+function heatTextColor(ratio: number): string {
+    return ratio < 0.6 ? '#332a26' : '#ffffff';
 }
 
 export function ReportHourlyHeatmap({
@@ -79,7 +87,7 @@ export function ReportHourlyHeatmap({
         <div className={cn('agri-card p-5', className)}>
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                    <h3 className="text-base font-semibold text-teal-800">
+                    <h3 className="text-base font-semibold text-foreground">
                         Units Sold by Hour
                     </h3>
                     <p className="mt-0.5 text-xs text-muted-foreground">{rangeLabel}</p>
@@ -91,7 +99,7 @@ export function ReportHourlyHeatmap({
                         className={cn(
                             'rounded-md px-3 py-1 text-xs font-semibold transition-colors',
                             mode === 'units'
-                                ? 'bg-white text-teal-800 shadow-sm'
+                                ? 'bg-card text-primary shadow-sm'
                                 : 'text-muted-foreground hover:text-foreground',
                         )}
                     >
@@ -103,7 +111,7 @@ export function ReportHourlyHeatmap({
                         className={cn(
                             'rounded-md px-3 py-1 text-xs font-semibold transition-colors',
                             mode === 'price'
-                                ? 'bg-white text-teal-800 shadow-sm'
+                                ? 'bg-card text-primary shadow-sm'
                                 : 'text-muted-foreground hover:text-foreground',
                         )}
                     >
@@ -148,8 +156,11 @@ export function ReportHourlyHeatmap({
                                     return (
                                         <div
                                             key={`${day}-${hour}`}
-                                            className="flex aspect-square min-h-8 items-center justify-center rounded-full text-[10px] font-semibold tabular-nums text-white"
-                                            style={{ backgroundColor: color }}
+                                            className="flex aspect-square min-h-8 items-center justify-center rounded-full text-[10px] font-semibold tabular-nums"
+                                            style={{
+                                                backgroundColor: color,
+                                                color: heatTextColor(ratio),
+                                            }}
                                             title={`${data.day_labels[dayIndex] ?? day} ${data.hour_labels[hour] ?? hour}: ${formatCellValue(value, mode)}`}
                                         >
                                             {formatCellValue(value, mode)}
@@ -165,12 +176,14 @@ export function ReportHourlyHeatmap({
             <div className="mt-4 flex items-center gap-2 text-[10px] text-muted-foreground">
                 <span>Low</span>
                 <div className="flex h-2 flex-1 overflow-hidden rounded-full">
-                    <div className="flex-1 bg-slate-600" />
-                    <div className="flex-1 bg-orange-300" />
-                    <div className="flex-1 bg-orange-400" />
-                    <div className="flex-1 bg-amber-500" />
-                    <div className="flex-1 bg-emerald-400" />
-                    <div className="flex-1 bg-teal-700" />
+                    {/* One ratio inside each heatColor bucket. */}
+                    {[0, 0.1, 0.3, 0.5, 0.7, 0.9].map((stop) => (
+                        <div
+                            key={stop}
+                            className="flex-1"
+                            style={{ backgroundColor: heatColor(stop) }}
+                        />
+                    ))}
                 </div>
                 <span>High</span>
             </div>

@@ -51,7 +51,7 @@ export function LiveMonitorSalesTab({
     return (
         <div className="live-monitor-sales space-y-4 sm:space-y-5">
             {error && (
-                <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                <p className="rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-sm text-destructive">
                     {error}
                 </p>
             )}

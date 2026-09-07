@@ -609,8 +609,8 @@ export function FaceIdDemo({ users }: { users: StaffUser[] }) {
                     className={cn(
                         'inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-semibold',
                         modelsReady
-                            ? 'bg-emerald-500/15 text-emerald-700'
-                            : 'bg-amber-500/15 text-amber-700',
+                            ? 'bg-sage/15 text-sage-deep'
+                            : 'bg-caramel/15 text-caramel-deep',
                     )}
                 >
                     {modelsReady ? 'Ready' : 'Loading models...'}
@@ -694,11 +694,11 @@ export function FaceIdDemo({ users }: { users: StaffUser[] }) {
                                     phase === 'scanning'
                                         ? 'border-primary shadow-[0_0_24px_rgba(var(--primary),0.35)]'
                                         : phase === 'success'
-                                          ? 'border-emerald-500'
+                                          ? 'border-brand-sage'
                                           : phase === 'failed'
                                             ? 'border-destructive'
                                             : faceInFrame
-                                              ? 'border-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.45)]'
+                                              ? 'border-brand-sage shadow-[0_0_18px_rgba(138,154,120,0.55)]'
                                               : 'border-white/70',
                                 )}
                             >
@@ -709,14 +709,14 @@ export function FaceIdDemo({ users }: { users: StaffUser[] }) {
                         </div>
 
                         {phase === 'success' && matchName && (
-                            <div className="absolute inset-x-4 bottom-4 rounded-xl bg-emerald-600/90 px-4 py-3 text-white shadow-lg backdrop-blur-sm">
+                            <div className="absolute inset-x-4 bottom-4 rounded-xl bg-brand-sage/95 px-4 py-3 text-white shadow-lg backdrop-blur-sm">
                                 <div className="flex items-center gap-2">
                                     <CheckCircle2 className="size-5 shrink-0" />
                                     <div>
                                         <p className="text-sm font-semibold">
                                             {matchName}
                                         </p>
-                                        <p className="text-xs text-emerald-100">
+                                        <p className="text-xs text-white/80">
                                             {scanAction === 'verify'
                                                 ? 'Identity verified'
                                                 : scanAction === 'update'
@@ -763,7 +763,7 @@ export function FaceIdDemo({ users }: { users: StaffUser[] }) {
                                             className={cn(
                                                 'rounded-full px-2.5 py-1 text-[11px] font-semibold',
                                                 enrollmentStep > index + 1
-                                                    ? 'bg-emerald-500 text-white'
+                                                    ? 'bg-brand-sage text-white'
                                                     : enrollmentStep === index + 1
                                                       ? 'bg-primary text-primary-foreground'
                                                       : 'bg-black/50 text-white/80',
@@ -783,7 +783,7 @@ export function FaceIdDemo({ users }: { users: StaffUser[] }) {
                                         <p className="text-sm font-semibold">
                                             {failBanner.title}
                                         </p>
-                                        <p className="text-xs text-red-100">
+                                        <p className="text-xs text-white/80">
                                             {failBanner.detail}
                                         </p>
                                     </div>
@@ -797,7 +797,7 @@ export function FaceIdDemo({ users }: { users: StaffUser[] }) {
                             className={cn(
                                 'mt-3 text-center text-xs font-medium',
                                 faceInFrame
-                                    ? 'text-emerald-700'
+                                    ? 'text-sage-deep'
                                     : 'text-muted-foreground',
                             )}
                         >

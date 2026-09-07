@@ -162,7 +162,7 @@ function StatCard({ label, value, hint, icon: Icon, tone = 'default' }: StatCard
         tone === 'positive'
             ? 'bg-primary/10 text-primary'
             : tone === 'warning'
-              ? 'bg-amber-500/10 text-amber-600'
+              ? 'bg-caramel/12 text-caramel-deep'
               : tone === 'danger'
                 ? 'bg-destructive/10 text-destructive'
                 : 'bg-primary/10 text-primary';
@@ -955,7 +955,7 @@ export default function PosReports() {
                                         </div>
                                         <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
                                             <p className="text-xs text-muted-foreground">Discounts (at sale)</p>
-                                            <p className="mt-1 font-semibold tabular-nums text-amber-600">
+                                            <p className="mt-1 font-semibold tabular-nums text-caramel-deep">
                                                 −₱{formatMoney(summary.total_discounts)}
                                             </p>
                                         </div>
@@ -970,7 +970,7 @@ export default function PosReports() {
                                         </div>
                                         <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
                                             <p className="text-xs text-muted-foreground">Refunds</p>
-                                            <p className="mt-1 font-semibold tabular-nums text-rose-600">
+                                            <p className="mt-1 font-semibold tabular-nums text-destructive">
                                                 −₱{formatMoney(summary.refunded_amount)}
                                             </p>
                                         </div>
@@ -1399,10 +1399,10 @@ export default function PosReports() {
                                                     <td className="px-3 py-3 text-center tabular-nums">
                                                         {row.days_early}
                                                     </td>
-                                                    <td className="px-3 py-3 text-center tabular-nums text-emerald-700">
+                                                    <td className="px-3 py-3 text-center tabular-nums text-sage-deep">
                                                         {row.days_on_time}
                                                     </td>
-                                                    <td className="px-3 py-3 text-center tabular-nums text-amber-700">
+                                                    <td className="px-3 py-3 text-center tabular-nums text-caramel-deep">
                                                         {row.days_almost_late}
                                                     </td>
                                                     <td className="px-3 py-3 text-center tabular-nums text-destructive">

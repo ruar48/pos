@@ -13,6 +13,54 @@ class CategoryIconOption {
 }
 
 const List<CategoryIconOption> categoryIconOptions = [
+  // Café, bakery & dessert categories.
+  CategoryIconOption(key: 'coffee', label: 'Coffee', icon: Icons.local_cafe),
+  CategoryIconOption(
+    key: 'espresso',
+    label: 'Espresso Bar',
+    icon: Icons.coffee_maker,
+  ),
+  CategoryIconOption(
+    key: 'tea',
+    label: 'Tea',
+    icon: Icons.emoji_food_beverage,
+  ),
+  CategoryIconOption(
+    key: 'cold_drinks',
+    label: 'Cold Drinks',
+    icon: Icons.local_drink,
+  ),
+  CategoryIconOption(key: 'smoothie', label: 'Smoothies', icon: Icons.blender),
+  CategoryIconOption(
+    key: 'pastry',
+    label: 'Pastries',
+    icon: Icons.bakery_dining,
+  ),
+  CategoryIconOption(
+    key: 'bread',
+    label: 'Bread',
+    icon: Icons.breakfast_dining,
+  ),
+  CategoryIconOption(key: 'cake', label: 'Cakes', icon: Icons.cake),
+  CategoryIconOption(key: 'cookie', label: 'Cookies', icon: Icons.cookie),
+  CategoryIconOption(key: 'dessert', label: 'Desserts', icon: Icons.icecream),
+  CategoryIconOption(
+    key: 'sandwich',
+    label: 'Sandwiches',
+    icon: Icons.lunch_dining,
+  ),
+  CategoryIconOption(
+    key: 'brunch',
+    label: 'Brunch',
+    icon: Icons.brunch_dining,
+  ),
+  CategoryIconOption(
+    key: 'merch',
+    label: 'Merch & Beans',
+    icon: Icons.storefront_outlined,
+  ),
+
+  // Existing agricultural categories — kept so saved icon keys still resolve.
   CategoryIconOption(key: 'eco', label: 'Seeds', icon: Icons.eco),
   CategoryIconOption(key: 'grass', label: 'Crops', icon: Icons.grass),
   CategoryIconOption(
@@ -77,6 +125,84 @@ const List<CategoryIconOption> categoryIconOptions = [
 String suggestCategoryIconKey(String name) {
   final normalized = name.trim().toLowerCase();
   if (normalized.isEmpty) return 'category';
+
+  // Café, bakery & dessert names first — this is a coffee shop catalog.
+  if (normalized.contains('espresso') ||
+      normalized.contains('barista') ||
+      normalized.contains('brew')) {
+    return 'espresso';
+  }
+  if (normalized.contains('coffee') ||
+      normalized.contains('latte') ||
+      normalized.contains('mocha') ||
+      normalized.contains('cappuccino') ||
+      normalized.contains('americano')) {
+    return 'coffee';
+  }
+  if (normalized.contains('tea') || normalized.contains('matcha')) {
+    return 'tea';
+  }
+  if (normalized.contains('smoothie') ||
+      normalized.contains('shake') ||
+      normalized.contains('frappe')) {
+    return 'smoothie';
+  }
+  if (normalized.contains('cold') ||
+      normalized.contains('iced') ||
+      normalized.contains('juice') ||
+      normalized.contains('soda') ||
+      normalized.contains('milk') ||
+      normalized.contains('beverage') ||
+      normalized.contains('drink')) {
+    return 'cold_drinks';
+  }
+  if (normalized.contains('cake') ||
+      normalized.contains('slice') ||
+      normalized.contains('cheesecake')) {
+    return 'cake';
+  }
+  if (normalized.contains('cookie') || normalized.contains('biscuit')) {
+    return 'cookie';
+  }
+  if (normalized.contains('pastr') ||
+      normalized.contains('croissant') ||
+      normalized.contains('danish') ||
+      normalized.contains('donut') ||
+      normalized.contains('doughnut') ||
+      normalized.contains('muffin') ||
+      normalized.contains('pie') ||
+      normalized.contains('tart')) {
+    return 'pastry';
+  }
+  if (normalized.contains('bread') ||
+      normalized.contains('loaf') ||
+      normalized.contains('bun') ||
+      normalized.contains('bake')) {
+    return 'bread';
+  }
+  if (normalized.contains('dessert') ||
+      normalized.contains('ice cream') ||
+      normalized.contains('gelato') ||
+      normalized.contains('sweet')) {
+    return 'dessert';
+  }
+  if (normalized.contains('sandwich') ||
+      normalized.contains('panini') ||
+      normalized.contains('bagel') ||
+      normalized.contains('toast')) {
+    return 'sandwich';
+  }
+  if (normalized.contains('brunch') ||
+      normalized.contains('breakfast') ||
+      normalized.contains('meal')) {
+    return 'brunch';
+  }
+  if (normalized.contains('merch') ||
+      normalized.contains('bean') ||
+      normalized.contains('mug') ||
+      normalized.contains('tumbler')) {
+    return 'merch';
+  }
 
   if (normalized.contains('seedling') ||
       normalized.contains('nursery') ||

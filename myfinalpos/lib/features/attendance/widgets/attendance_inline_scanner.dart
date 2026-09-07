@@ -206,7 +206,7 @@ class _AttendanceInlineScannerState extends State<AttendanceInlineScanner> {
     final hideWebPreview = kIsWeb && drawerOpen;
 
     final preview = hideWebPreview
-        ? const ColoredBox(color: Color(0xFF111827))
+        ? const ColoredBox(color: AppColors.scannerShell)
         : _engine!.preview();
 
     return Stack(
@@ -356,7 +356,7 @@ class _AttendanceInlineScannerState extends State<AttendanceInlineScanner> {
         ),
         DecoratedBox(
           decoration: BoxDecoration(
-            color: const Color(0xFF0B1220),
+            color: AppColors.scannerBar,
             border: Border(
               top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
             ),
@@ -372,7 +372,7 @@ class _AttendanceInlineScannerState extends State<AttendanceInlineScanner> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: _ready ? const Color(0xFF86EFAC) : Colors.white70,
+                        color: _ready ? AppColors.scannerReady : Colors.white70,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
@@ -430,7 +430,7 @@ class _AttendanceInlineScannerState extends State<AttendanceInlineScanner> {
     if (widget.expand) {
       return Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF111827),
+          color: AppColors.scannerShell,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.border),
         ),
@@ -471,13 +471,13 @@ class _AttendanceInlineScannerState extends State<AttendanceInlineScanner> {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF7E6),
+            color: AppColors.caramelSoft,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFFCD34D)),
+            border: Border.all(color: AppColors.caramel),
           ),
           child: const Text(
             'Viewing a past date — scanner is live, but clock in/out only works for today.',
-            style: TextStyle(fontSize: 11, color: Color(0xFFB45309)),
+            style: TextStyle(fontSize: 11, color: AppColors.caramelDeep),
           ),
         ),
       ],

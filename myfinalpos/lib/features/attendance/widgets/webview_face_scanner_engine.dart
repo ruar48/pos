@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
+
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:webview_flutter/webview_flutter.dart';
@@ -52,7 +54,7 @@ class WebViewFaceScannerEngine implements FaceScannerEngine {
 
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
 
-      ..setBackgroundColor(const Color(0xFF111827))
+      ..setBackgroundColor(AppColors.scannerShell)
 
       ..addJavaScriptChannel(
 

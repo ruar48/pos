@@ -58,11 +58,11 @@ class BrandLogo extends StatelessWidget {
               ? Colors.white.withValues(alpha: 0.1)
               : AppColors.border,
         ),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: AppColors.shadowSoft,
+            blurRadius: 6,
+            offset: Offset(0, 2),
           ),
         ],
       ),

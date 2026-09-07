@@ -31,15 +31,15 @@ function formatMoney(value: number): string {
 
 function cardAccent(status: string, online: boolean): string {
     if (!online) {
-        return 'from-slate-400 to-slate-500 border-slate-300';
+        return 'from-muted-foreground/70 to-muted-foreground border-border';
     }
     switch (normalizeMonitorStatus(status)) {
         case 'success':
-            return 'from-emerald-500 to-emerald-600 border-emerald-400 shadow-emerald-500/25';
+            return 'from-sage to-sage-deep border-sage/60 shadow-sage/25';
         case 'payment':
-            return 'from-amber-500 to-orange-500 border-amber-400 shadow-amber-500/25';
+            return 'from-caramel to-caramel-deep border-caramel/60 shadow-caramel/25';
         case 'cart':
-            return 'from-sky-500 to-blue-600 border-sky-400 shadow-sky-500/25';
+            return 'from-mocha to-mocha/80 border-mocha/60 shadow-mocha/25';
         default:
             return 'from-primary/95 to-primary border-primary/30 shadow-primary/15';
     }
@@ -227,17 +227,17 @@ export function LiveTerminalCard({
                     </div>
                 ) : isSuccess ? (
                     <div className="flex flex-1 flex-col gap-3">
-                        <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3">
-                            <CheckCircle2 className="mt-0.5 size-8 shrink-0 text-emerald-600" />
+                        <div className="flex items-start gap-3 rounded-xl border border-sage/30 bg-sage-soft px-3 py-3">
+                            <CheckCircle2 className="mt-0.5 size-8 shrink-0 text-sage-deep" />
                             <div className="min-w-0">
-                                <p className="font-bold text-emerald-900">
+                                <p className="font-bold text-sage-deep">
                                     Order complete
                                 </p>
-                                <p className="truncate text-sm text-emerald-800">
+                                <p className="truncate text-sm text-sage-deep">
                                     {success?.invoice_number ?? 'Receipt'} ·{' '}
                                     {success?.payment_method ?? 'Cash'}
                                 </p>
-                                <p className="mt-1 text-xs font-medium text-emerald-700">
+                                <p className="mt-1 text-xs font-medium text-sage-deep">
                                     {meta.emptyHint}
                                 </p>
                             </div>
@@ -247,12 +247,12 @@ export function LiveTerminalCard({
                             .map((item, index) => (
                                 <div
                                     key={`${item.name}-${index}`}
-                                    className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50/60 px-3 py-2 text-sm"
+                                    className="flex items-center justify-between gap-2 rounded-lg bg-sage-soft/70 px-3 py-2 text-sm"
                                 >
-                                    <span className="truncate font-medium text-emerald-950">
+                                    <span className="truncate font-medium text-sage-deep">
                                         {item.quantity}× {item.name}
                                     </span>
-                                    <span className="shrink-0 tabular-nums font-semibold text-emerald-900">
+                                    <span className="shrink-0 tabular-nums font-semibold text-sage-deep">
                                         ₱{formatMoney(item.total)}
                                     </span>
                                 </div>
@@ -261,16 +261,16 @@ export function LiveTerminalCard({
                 ) : isBusy ? (
                     <div className="flex flex-1 flex-col gap-2">
                         {state.is_payment_mode && (
-                            <div className="mb-1 inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                            <div className="mb-1 inline-flex w-fit items-center gap-1.5 rounded-full bg-caramel-soft px-2.5 py-1 text-xs font-semibold text-caramel-deep">
                                 <CreditCard className="size-3.5" />
                                 Customer at payment screen
                             </div>
                         )}
                         {previewItems.length === 0 ? (
-                            <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-sky-200 bg-sky-50/70 px-4 py-6 text-center">
+                            <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-mocha/30 bg-mocha-soft/70 px-4 py-6 text-center">
                                 <div>
-                                    <ShoppingCart className="mx-auto mb-2 size-8 text-sky-400" />
-                                    <p className="text-sm font-semibold text-sky-900">
+                                    <ShoppingCart className="mx-auto mb-2 size-8 text-mocha" />
+                                    <p className="text-sm font-semibold text-mocha">
                                         {meta.emptyHint}
                                     </p>
                                 </div>
@@ -279,12 +279,12 @@ export function LiveTerminalCard({
                             previewItems.map((item, index) => (
                                 <div
                                     key={`${item.name}-${index}`}
-                                    className="flex items-center justify-between gap-2 rounded-lg border border-sky-100 bg-sky-50/80 px-3 py-2 text-sm transition-colors"
+                                    className="flex items-center justify-between gap-2 rounded-lg border border-mocha/20 bg-mocha-soft/80 px-3 py-2 text-sm transition-colors"
                                 >
-                                    <span className="truncate font-medium text-sky-950">
+                                    <span className="truncate font-medium text-foreground">
                                         {item.quantity}× {item.name}
                                     </span>
-                                    <span className="shrink-0 tabular-nums font-semibold text-sky-900">
+                                    <span className="shrink-0 tabular-nums font-semibold text-mocha">
                                         ₱{formatMoney(item.total)}
                                     </span>
                                 </div>

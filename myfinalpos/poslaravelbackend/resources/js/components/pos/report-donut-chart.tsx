@@ -7,17 +7,19 @@ export type DonutSlice = {
     hint?: string;
 };
 
+// Café palette — mirrors AppColors.chartPalette in the Flutter tablet app.
+// Ordered so neighbouring slices differ in both hue and lightness.
 const SLICE_COLORS = [
-    '#0f766e',
-    '#14b8a6',
-    '#2dd4bf',
-    '#5eead4',
-    '#059669',
-    '#34d399',
-    '#f97316',
-    '#fb923c',
-    '#fdba74',
-    '#64748b',
+    '#4b2e24', // espresso
+    '#c58b5a', // caramel
+    '#8a9a78', // sage
+    '#8c5343', // clay
+    '#e0c9a6', // latte
+    '#64754f', // deep sage
+    '#a9754b', // toffee
+    '#d9a574', // golden caramel
+    '#6b6259', // warm grey
+    '#3b241c', // dark roast
 ];
 
 function polarToCartesian(
@@ -120,7 +122,7 @@ export function ReportDonutChart({
     return (
         <div className={cn('agri-card flex h-full flex-col p-5', className)}>
             <div className="mb-4">
-                <h3 className="text-base font-semibold text-teal-800">{title}</h3>
+                <h3 className="text-base font-semibold text-foreground">{title}</h3>
                 {subtitle && (
                     <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
                 )}

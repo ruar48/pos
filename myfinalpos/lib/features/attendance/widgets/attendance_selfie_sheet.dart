@@ -178,7 +178,7 @@ class _AttendanceSelfieDialogState extends State<_AttendanceSelfieDialog> {
                   _error!,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Color(0xFFB91C1C),
+                    color: AppColors.danger,
                     fontSize: 13,
                   ),
                 ),

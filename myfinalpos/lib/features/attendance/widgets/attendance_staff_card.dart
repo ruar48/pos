@@ -118,7 +118,7 @@ class AttendanceStaffCard extends StatelessWidget {
             photoUrl: inUrl,
             hasRecord: hasIn,
             emptyIcon: Icons.login_rounded,
-            accent: const Color(0xFF0D9488),
+            accent: AppColors.success,
           ),
           if (hasSelfieBreak) ...[
             _LabeledPhotoCircle(
@@ -166,7 +166,7 @@ class AttendanceStaffCard extends StatelessWidget {
             child: _SelfieInfo(
               label: 'Selfie-In',
               time: inTime,
-              color: const Color(0xFF0D9488),
+              color: AppColors.success,
             ),
           ),
           SizedBox(

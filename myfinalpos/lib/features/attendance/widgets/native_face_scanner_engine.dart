@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../../../core/theme/app_colors.dart';
+
 import 'face_scanner_engine.dart';
 import 'attendance_scanner_oval_overlay.dart';
 
@@ -37,7 +39,7 @@ class NativeFaceScannerEngine with WidgetsBindingObserver implements FaceScanner
 
     final web = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0xFF111827))
+      ..setBackgroundColor(AppColors.scannerShell)
       ..addJavaScriptChannel(
         'FaceCapture',
         onMessageReceived: _onScannerMessage,
@@ -336,7 +338,7 @@ class _NativeScannerPreviewHostState extends State<_NativeScannerPreviewHost> {
   Widget build(BuildContext context) {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) {
-      return const ColoredBox(color: Color(0xFF111827));
+      return const ColoredBox(color: AppColors.scannerShell);
     }
     return _NativeCameraPreview(controller: controller);
   }
@@ -351,7 +353,7 @@ class _NativeCameraPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final previewSize = controller.value.previewSize;
     if (previewSize == null) {
-      return const ColoredBox(color: Color(0xFF111827));
+      return const ColoredBox(color: AppColors.scannerShell);
     }
 
     // CameraPreview already respects sensor orientation on Android.

@@ -236,7 +236,12 @@ void showTopSuccess(
   String message, {
   IconData icon = Icons.check_circle_outline,
 }) {
-  showTopMessage(context, message, icon: icon);
+  showTopMessage(
+    context,
+    message,
+    backgroundColor: AppColors.success,
+    icon: icon,
+  );
 }
 
 void showTopError(
@@ -269,7 +274,11 @@ void showTopWarning(
 
 /// App-wide toast — safe after closing dialogs (uses root navigator).
 void showAppTopSuccess(String message, {IconData icon = Icons.check_circle_outline}) {
-  _showTopMessageImpl(message, icon: icon);
+  _showTopMessageImpl(
+    message,
+    backgroundColor: AppColors.success,
+    icon: icon,
+  );
 }
 
 void showAppTopError(

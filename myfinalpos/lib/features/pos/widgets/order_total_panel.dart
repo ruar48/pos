@@ -33,10 +33,10 @@ class OrderTotalPanel extends StatelessWidget {
         horizontal: compact ? 12 : 16,
         vertical: compact ? 10 : 16,
       ),
-      decoration: BoxDecoration(
-        color: AppColors.softSurface,
+      decoration: const BoxDecoration(
+        color: AppColors.lightGreen,
         border: Border(
-          top: BorderSide(color: AppColors.border.withValues(alpha: 0.8)),
+          top: BorderSide(color: AppColors.caramel, width: 2),
         ),
       ),
       child: Column(
@@ -92,7 +92,7 @@ class OrderTotalPanel extends StatelessWidget {
             ),
           Padding(
             padding: EdgeInsets.symmetric(vertical: compact ? 6 : 8),
-            child: const Divider(height: 1, color: AppColors.border),
+            child: const Divider(height: 1, color: AppColors.greenBorder),
           ),
           _TotalRow(
             label: 'Grand Total',
@@ -127,8 +127,10 @@ class SidebarTotalRow extends StatelessWidget {
     final labelSize = emphasize
         ? (compact ? 15.0 : 16.0)
         : (compact ? 13.0 : 14.0);
+    // The grand total is the one number a cashier must read across the
+    // counter, so it gets the largest, heaviest treatment in the panel.
     final valueSize = emphasize
-        ? (compact ? 17.0 : 18.0)
+        ? (compact ? 21.0 : 24.0)
         : (compact ? 13.0 : 14.0);
 
     return Padding(
@@ -140,17 +142,26 @@ class SidebarTotalRow extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: labelSize,
-              fontWeight: emphasize ? FontWeight.w700 : FontWeight.w500,
+              fontWeight: emphasize ? FontWeight.w800 : FontWeight.w500,
+              letterSpacing: emphasize ? -0.2 : 0,
               color: emphasize ? AppColors.text : AppColors.muted,
             ),
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: valueSize,
-              fontWeight: FontWeight.w700,
-              color: valueColor ??
-                  (emphasize ? AppColors.green : AppColors.text),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: valueSize,
+                  fontWeight: emphasize ? FontWeight.w900 : FontWeight.w700,
+                  letterSpacing: emphasize ? -0.4 : 0,
+                  color: valueColor ??
+                      (emphasize ? AppColors.darkGreen : AppColors.text),
+                ),
+              ),
             ),
           ),
         ],

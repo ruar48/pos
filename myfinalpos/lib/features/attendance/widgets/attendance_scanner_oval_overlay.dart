@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
+
 /// Shared face-guide oval used on web, Android, and iOS scanners.
 class AttendanceScannerOvalOverlay extends StatelessWidget {
   const AttendanceScannerOvalOverlay({super.key});
@@ -22,7 +24,7 @@ class AttendanceScannerOvalPainter extends CustomPainter {
       height: size.height * AttendanceScannerOvalOverlay.heightFactor,
     );
 
-    final dim = Paint()..color = const Color(0x59111827);
+    final dim = Paint()..color = AppColors.scannerDim;
     final path = Path()
       ..addRect(Offset.zero & size)
       ..addOval(hole)

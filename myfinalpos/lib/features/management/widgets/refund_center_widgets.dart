@@ -117,8 +117,8 @@ class RefundCenterContent extends StatelessWidget {
                       value: formatMoney('₱', state.totalRefundedAmount),
                       hint: '${state.refunds.length} records',
                       icon: Icons.payments_outlined,
-                      accent: AppColors.amber,
-                      background: const Color(0xFFFFF6E8),
+                      accent: AppColors.caramelDeep,
+                      background: AppColors.caramelSoft,
                     ),
                   ),
                 ],
@@ -491,13 +491,13 @@ class _RefundHistoryCardState extends State<_RefundHistoryCard> {
   }
 
   Color get _statusColor {
-    if (refund.orderStatus == 'refunded') return AppColors.green;
-    return AppColors.amber;
+    if (refund.orderStatus == 'refunded') return AppColors.success;
+    return AppColors.caramelDeep;
   }
 
   Color get _statusBackground {
-    if (refund.orderStatus == 'refunded') return AppColors.lightGreen;
-    return const Color(0xFFFFF6E8);
+    if (refund.orderStatus == 'refunded') return AppColors.successSoft;
+    return AppColors.caramelSoft;
   }
 
   @override

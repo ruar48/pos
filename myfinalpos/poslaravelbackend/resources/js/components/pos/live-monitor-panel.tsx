@@ -96,16 +96,16 @@ function ExpandedTerminalModal({
 
                 {state.status === 'success' && success ? (
                     <div className="space-y-3">
-                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                        <div className="rounded-xl border border-sage/30 bg-sage-soft px-4 py-3">
                             <p
                                 className={cn(
-                                    'font-bold text-emerald-900',
+                                    'font-bold text-sage-deep',
                                     isLarge && 'text-xl',
                                 )}
                             >
                                 {success.invoice_number} · {success.payment_method}
                             </p>
-                            <p className="text-sm text-emerald-800">
+                            <p className="text-sm text-sage-deep">
                                 Customer: {success.customer_name}
                             </p>
                         </div>
@@ -384,11 +384,11 @@ export function LiveMonitorPanel({
                         )}
                         {(!wallMode || wallTab === 'live') && (
                             <>
-                                <span className="live-monitor-chip inline-flex items-center gap-1.5 rounded-full bg-emerald-100 font-semibold text-emerald-800">
+                                <span className="live-monitor-chip inline-flex items-center gap-1.5 rounded-full bg-sage-soft font-semibold text-sage-deep">
                                     <Radio className="live-monitor-chip-icon animate-pulse" />
                                     {onlineCount} online
                                 </span>
-                                <span className="live-monitor-chip inline-flex items-center gap-1.5 rounded-full bg-sky-100 font-semibold text-sky-800">
+                                <span className="live-monitor-chip inline-flex items-center gap-1.5 rounded-full bg-mocha-soft font-semibold text-mocha">
                                     <Store className="live-monitor-chip-icon" />
                                     {activeCount} in sale
                                 </span>
@@ -472,7 +472,7 @@ export function LiveMonitorPanel({
                         </div>
                     )}
                     {monitorError && (
-                        <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 sm:text-base">
+                        <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-sm text-destructive sm:text-base">
                             {monitorError}
                         </p>
                     )}

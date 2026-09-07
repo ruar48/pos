@@ -18,7 +18,7 @@ class AgriRangePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? AppColors.green : AppColors.softSurface,
+      color: selected ? AppColors.espresso : AppColors.lightGreen,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
         onTap: onTap,

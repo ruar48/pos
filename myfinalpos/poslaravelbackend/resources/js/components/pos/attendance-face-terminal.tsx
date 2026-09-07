@@ -442,8 +442,8 @@ export function AttendanceFaceTerminal({
                     className={cn(
                         'inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold',
                         modelsReady
-                            ? 'bg-emerald-500/15 text-emerald-700'
-                            : 'bg-amber-500/15 text-amber-700',
+                            ? 'bg-sage/15 text-sage-deep'
+                            : 'bg-caramel/15 text-caramel-deep',
                     )}
                 >
                     {modelsReady ? 'Ready to scan' : 'Loading models…'}
@@ -451,7 +451,7 @@ export function AttendanceFaceTerminal({
             </div>
 
             {!clockEnabled && (
-                <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800">
+                <p className="mb-3 rounded-lg border border-caramel/40 bg-caramel/12 px-3 py-2 text-[11px] text-caramel-deep">
                     Viewing a past date — scanner is live, but clock in/out only
                     works for today.
                 </p>
@@ -508,11 +508,11 @@ export function AttendanceFaceTerminal({
                             phase === 'scanning'
                                 ? 'border-primary shadow-[0_0_24px_rgba(var(--primary),0.35)]'
                                 : phase === 'success'
-                                  ? 'border-emerald-500'
+                                  ? 'border-brand-sage'
                                   : phase === 'failed'
                                     ? 'border-destructive'
                                     : faceInFrame
-                                      ? 'border-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.45)]'
+                                      ? 'border-brand-sage shadow-[0_0_18px_rgba(138,154,120,0.55)]'
                                       : 'border-white/70',
                         )}
                     >
@@ -531,14 +531,14 @@ export function AttendanceFaceTerminal({
                 )}
 
                 {phase === 'success' && result && (
-                    <div className="absolute inset-x-3 bottom-3 rounded-xl bg-emerald-600/90 px-3 py-2 text-white shadow-lg backdrop-blur-sm">
+                    <div className="absolute inset-x-3 bottom-3 rounded-xl bg-brand-sage/95 px-3 py-2 text-white shadow-lg backdrop-blur-sm">
                         <div className="flex items-center gap-2">
                             <CheckCircle2 className="size-4 shrink-0" />
                             <div>
                                 <p className="text-xs font-semibold">
                                     {result.title}
                                 </p>
-                                <p className="text-[10px] text-emerald-100">
+                                <p className="text-[10px] text-white/80">
                                     {result.detail}
                                 </p>
                             </div>
@@ -554,7 +554,7 @@ export function AttendanceFaceTerminal({
                                 <p className="text-xs font-semibold">
                                     {result.title}
                                 </p>
-                                <p className="text-[10px] text-red-100">
+                                <p className="text-[10px] text-white/80">
                                     {result.detail}
                                 </p>
                             </div>
@@ -567,7 +567,7 @@ export function AttendanceFaceTerminal({
                 <p
                     className={cn(
                         'mt-3 text-center text-xs font-medium',
-                        faceInFrame ? 'text-emerald-700' : 'text-muted-foreground',
+                        faceInFrame ? 'text-sage-deep' : 'text-muted-foreground',
                     )}
                 >
                     {faceInFrame

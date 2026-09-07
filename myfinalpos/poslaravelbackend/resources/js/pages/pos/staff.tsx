@@ -647,10 +647,10 @@ export default function PosStaff() {
                                                                 )}
                                                             </p>
                                                         </td>
-                                                        <td className="px-3 py-3 text-center tabular-nums text-emerald-700">
+                                                        <td className="px-3 py-3 text-center tabular-nums text-sage-deep">
                                                             {row.days_present}
                                                         </td>
-                                                        <td className="px-3 py-3 text-center tabular-nums text-amber-700">
+                                                        <td className="px-3 py-3 text-center tabular-nums text-caramel-deep">
                                                             {row.days_half_day}
                                                         </td>
                                                         <td className="px-3 py-3 text-center tabular-nums text-destructive">
@@ -724,7 +724,7 @@ export default function PosStaff() {
                                                                     row.event_type ===
                                                                         'clock_in'
                                                                         ? 'bg-primary/10 text-primary'
-                                                                        : 'bg-teal-500/10 text-teal-700',
+                                                                        : 'bg-primary/10 text-primary',
                                                                 )}
                                                             >
                                                                 {row.event_type.replace(
@@ -905,7 +905,7 @@ export default function PosStaff() {
                             </p>
                             <div className="mt-3 flex items-center justify-evenly gap-2">
                                 <div className="flex flex-col items-center gap-1">
-                                    <span className="flex size-14 items-center justify-center rounded-full bg-emerald-600 text-sm font-extrabold text-white">
+                                    <span className="flex size-14 items-center justify-center rounded-full bg-brand-sage text-sm font-extrabold text-white">
                                         IN
                                     </span>
                                     <span className="text-[11px] font-bold text-muted-foreground">
@@ -913,7 +913,7 @@ export default function PosStaff() {
                                     </span>
                                 </div>
                                 <div className="flex flex-col items-center gap-1">
-                                    <span className="flex size-16 items-center justify-center rounded-full bg-sky-400 px-1 text-center text-[10px] font-extrabold leading-tight text-white">
+                                    <span className="flex size-16 items-center justify-center rounded-full bg-mocha px-1 text-center text-[10px] font-extrabold leading-tight text-white">
                                         START
                                         <br />
                                         BREAK
@@ -923,7 +923,7 @@ export default function PosStaff() {
                                     </span>
                                 </div>
                                 <div className="flex flex-col items-center gap-1">
-                                    <span className="flex size-14 items-center justify-center rounded-full bg-orange-500 text-sm font-extrabold text-white">
+                                    <span className="flex size-14 items-center justify-center rounded-full bg-brand-caramel text-sm font-extrabold text-white">
                                         OUT
                                     </span>
                                     <span className="text-[11px] font-bold text-muted-foreground">

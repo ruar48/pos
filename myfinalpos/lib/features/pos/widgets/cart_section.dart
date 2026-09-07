@@ -22,9 +22,16 @@ class CartSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      // The cart is its own workspace: white against the cream product grid,
+      // fenced off with a caramel rule so the cashier's eye finds it instantly.
       decoration: const BoxDecoration(
         color: AppColors.surface,
-        border: Border(left: BorderSide(color: AppColors.border)),
+        // Left rule for the side-by-side layout, top rule for the stacked
+        // one, so the cart is fenced off whichever way the POS is laid out.
+        border: Border(
+          left: BorderSide(color: AppColors.caramel, width: 2),
+          top: BorderSide(color: AppColors.caramel, width: 2),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -104,14 +111,29 @@ class EmptyCart extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.shopping_cart_outlined,
-              size: 56, color: AppColors.muted.withValues(alpha: 0.5)),
-          const SizedBox(height: 12),
+          Container(
+            width: 84,
+            height: 84,
+            decoration: const BoxDecoration(
+              color: AppColors.lightGreen,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.shopping_cart_outlined,
+              size: 38,
+              color: AppColors.caramelDeep,
+            ),
+          ),
+          const SizedBox(height: 16),
           const Text(
             'Cart is empty',
-            style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.muted),
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: AppColors.text,
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           const Text(
             'Tap products to add items',
             style: TextStyle(color: AppColors.muted, fontSize: 13),
@@ -832,10 +854,19 @@ class _CartActionButtons extends StatelessWidget {
             label: Text(
               'Charge ${formatMoney(pageState.settings.currencySymbol, pageState.grandTotal)}',
             ),
+            // Caramel keeps the single most important action distinct from
+            // every espresso-toned secondary control on the screen.
             style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-              backgroundColor: AppColors.amber,
-              foregroundColor: AppColors.text,
+              minimumSize: const Size.fromHeight(54),
+              backgroundColor: AppColors.caramel,
+              foregroundColor: AppColors.darkGreen,
+              disabledBackgroundColor: AppColors.border,
+              disabledForegroundColor: AppColors.mutedSoft,
+              textStyle: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.2,
+              ),
             ),
           ),
         ],

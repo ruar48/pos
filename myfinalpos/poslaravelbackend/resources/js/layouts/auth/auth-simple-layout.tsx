@@ -16,7 +16,7 @@ export default function AuthSimpleLayout({
                 className="pointer-events-none absolute inset-0"
                 style={{
                     background:
-                        'radial-gradient(ellipse 70% 50% at 50% -10%, oklch(0.55 0.12 155 / 0.12), transparent), radial-gradient(ellipse 50% 40% at 100% 80%, oklch(0.78 0.11 85 / 0.08), transparent), oklch(0.97 0.018 155)',
+                        'radial-gradient(ellipse 70% 50% at 50% -10%, oklch(0.684 0.096 60.4 / 0.16), transparent), radial-gradient(ellipse 50% 40% at 100% 80%, oklch(0.664 0.052 128.3 / 0.12), transparent), var(--background)',
                 }}
             />
 

@@ -22,7 +22,7 @@ export function NavLogout() {
                 <SidebarMenuButton
                     asChild
                     tooltip={{ children: 'Log out' }}
-                    className="text-sidebar-foreground/70 hover:bg-destructive/15 hover:text-red-200"
+                    className="text-sidebar-foreground/70 hover:bg-destructive/15 hover:text-destructive-foreground"
                 >
                     <Link
                         href={logout()}

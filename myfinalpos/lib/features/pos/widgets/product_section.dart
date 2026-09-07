@@ -110,10 +110,16 @@ class ProductSection extends StatelessWidget {
                     ),
                     selected: selected,
                     onSelected: (_) => pageState.selectCategory(category),
-                    selectedColor: AppColors.green,
+                    selectedColor: AppColors.espresso,
+                    backgroundColor: AppColors.surface,
+                    side: BorderSide(
+                      color: selected
+                          ? AppColors.espresso
+                          : AppColors.greenBorder,
+                    ),
                     labelStyle: TextStyle(
                       color: selected ? Colors.white : AppColors.text,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
                     ),
                   );
                 },
@@ -123,7 +129,7 @@ class ProductSection extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Material(
-                  color: AppColors.amber.withValues(alpha: 0.15),
+                  color: AppColors.caramelSoft,
                   borderRadius: BorderRadius.circular(10),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -134,7 +140,7 @@ class ProductSection extends StatelessWidget {
                       children: [
                         const Icon(
                           Icons.shopping_cart_outlined,
-                          color: AppColors.amber,
+                          color: AppColors.caramelDeep,
                           size: 20,
                         ),
                         const SizedBox(width: 10),
@@ -158,7 +164,7 @@ class ProductSection extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Material(
-                  color: AppColors.danger.withValues(alpha: 0.08),
+                  color: AppColors.dangerSoft,
                   borderRadius: BorderRadius.circular(10),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -321,13 +327,36 @@ class ProductGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (products.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'No products in the catalog.\nAdd products in Products & Inventory.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.muted, height: 1.4),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 76,
+                height: 76,
+                decoration: const BoxDecoration(
+                  color: AppColors.lightGreen,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.local_cafe_outlined,
+                  size: 34,
+                  color: AppColors.caramelDeep,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'No products in the catalog.\nAdd products in Products & Inventory.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.muted,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -385,16 +414,18 @@ class ProductCard extends StatelessWidget {
 
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       elevation: 1,
-      shadowColor: Colors.black.withValues(alpha: 0.08),
+      shadowColor: AppColors.espresso.withValues(alpha: 0.16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
+        hoverColor: AppColors.lightGreen.withValues(alpha: 0.5),
+        splashColor: AppColors.lightGreen,
         child: Container(
           decoration: BoxDecoration(
             border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
           clipBehavior: Clip.antiAlias,
           child: Padding(
@@ -470,18 +501,18 @@ class ProductCard extends StatelessWidget {
                             vertical: 5,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.amber.withValues(alpha: 0.14),
+                            color: AppColors.caramelSoft,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: AppColors.amber.withValues(alpha: 0.45),
+                              color: AppColors.caramel.withValues(alpha: 0.45),
                             ),
                           ),
                           child: Text(
                             deal,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: AppColors.amber.withValues(alpha: 0.98),
+                            style: const TextStyle(
+                              color: AppColors.caramelDeep,
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
                               height: 1.15,
@@ -523,9 +554,10 @@ class ProductCard extends StatelessWidget {
                               maxLines: 1,
                               style: const TextStyle(
                                 color: AppColors.darkGreen,
-                                fontSize: 14,
+                                fontSize: 17,
                                 fontWeight: FontWeight.w900,
                                 height: 1.05,
+                                letterSpacing: -0.2,
                               ),
                             ),
                           ),
@@ -559,7 +591,7 @@ class _ProductCategoryChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: AppColors.lightGreen.withValues(alpha: 0.35),
+        color: AppColors.lightGreen,
         borderRadius: BorderRadius.circular(11),
         border: Border.all(color: AppColors.greenBorder),
       ),
@@ -568,7 +600,7 @@ class _ProductCategoryChip extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
-          color: AppColors.green,
+          color: AppColors.espresso,
           fontSize: 9,
           fontWeight: FontWeight.w800,
           height: 1,
@@ -595,7 +627,7 @@ class _ProductStockBadge extends StatelessWidget {
         ? AppColors.danger
         : isLow
             ? AppColors.orange
-            : AppColors.green;
+            : AppColors.success;
     final label = isOut
         ? (stock < 0 ? '${formatQuantity(stock)} in stock' : 'Out of stock')
         : isLow
@@ -638,7 +670,7 @@ class _ProductMetaChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: AppColors.lightGreen.withValues(alpha: 0.35),
+        color: AppColors.lightGreen,
         borderRadius: BorderRadius.circular(11),
         border: Border.all(color: AppColors.greenBorder),
       ),
@@ -647,7 +679,7 @@ class _ProductMetaChip extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
-          color: AppColors.green,
+          color: AppColors.espresso,
           fontSize: 9,
           fontWeight: FontWeight.w800,
           height: 1,

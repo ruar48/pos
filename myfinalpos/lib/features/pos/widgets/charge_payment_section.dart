@@ -303,7 +303,10 @@ class _ChargePaymentSectionState extends State<ChargePaymentSection> {
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.surface,
-        border: Border(left: BorderSide(color: AppColors.border)),
+        border: Border(
+          left: BorderSide(color: AppColors.caramel, width: 2),
+          top: BorderSide(color: AppColors.caramel, width: 2),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -460,9 +463,17 @@ class _ChargePaymentSectionState extends State<ChargePaymentSection> {
                     ? 'Processing...'
                     : 'Complete ${formatMoney(currency, widget.pageState.grandTotal)}',
               ),
+              // Sage marks the final, confirming step — visibly different
+              // from the caramel "Charge" that opened this panel.
               style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-                backgroundColor: AppColors.green,
+                minimumSize: const Size.fromHeight(54),
+                backgroundColor: AppColors.success,
+                foregroundColor: Colors.white,
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.2,
+                ),
               ),
             ),
           ),

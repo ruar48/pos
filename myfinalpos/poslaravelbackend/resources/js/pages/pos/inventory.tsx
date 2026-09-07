@@ -203,7 +203,7 @@ function StatCard({ label, value, hint, icon: Icon, tone = 'default' }: StatCard
         tone === 'positive'
             ? 'bg-primary/10 text-primary'
             : tone === 'warning'
-              ? 'bg-amber-500/10 text-amber-600'
+              ? 'bg-caramel/12 text-caramel-deep'
               : tone === 'danger'
                 ? 'bg-destructive/10 text-destructive'
                 : 'bg-primary/10 text-primary';
@@ -830,7 +830,7 @@ export default function PosInventory() {
                                         <td className="px-3 py-3 text-right tabular-nums text-primary">
                                             {formatInt(filteredTotals.added)}
                                         </td>
-                                        <td className="px-3 py-3 text-right tabular-nums text-amber-600">
+                                        <td className="px-3 py-3 text-right tabular-nums text-caramel-deep">
                                             {formatInt(filteredTotals.deducted)}
                                         </td>
                                         <td className="px-3 py-3 text-right tabular-nums">
@@ -898,7 +898,7 @@ export default function PosInventory() {
                                             <ArrowUpRight className="size-3" />
                                             {formatInt(c.added)}
                                         </span>
-                                        <span className="inline-flex items-center gap-1 text-amber-600">
+                                        <span className="inline-flex items-center gap-1 text-caramel-deep">
                                             <ArrowDownRight className="size-3" />
                                             {formatInt(c.deducted)}
                                         </span>
@@ -953,7 +953,7 @@ function StockStatusBadges({
     }
     if (isLow) {
         return (
-            <span className="inline-flex shrink-0 items-center rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
+            <span className="inline-flex shrink-0 items-center rounded-full bg-caramel/12 px-1.5 py-0.5 text-[10px] font-semibold text-caramel-deep">
                 {hasVarieties && (lowCount ?? 0) > 0 ? `${lowCount} Low` : 'Low'}
             </span>
         );
@@ -995,7 +995,7 @@ function MovementCells({
             </td>
             <td className={cn(cellClass, 'text-right tabular-nums')}>
                 {deducted > 0 ? (
-                    <span className="font-semibold text-amber-600">
+                    <span className="font-semibold text-caramel-deep">
                         −{formatInt(deducted)}
                     </span>
                 ) : (
@@ -1029,7 +1029,7 @@ function CurrentStockCell({
                     isOut
                         ? 'text-destructive'
                         : isLow
-                          ? 'text-amber-600'
+                          ? 'text-caramel-deep'
                           : 'text-foreground',
                 )}
             >

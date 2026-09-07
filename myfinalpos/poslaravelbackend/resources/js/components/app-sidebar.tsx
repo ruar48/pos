@@ -15,6 +15,7 @@ import {
     Warehouse,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
+import { CafeMotif } from '@/components/pos/cafe-motifs';
 import { NavLogout } from '@/components/nav-logout';
 import { NavMain } from '@/components/nav-main';
 import {
@@ -126,12 +127,19 @@ export function AppSidebar() {
                 </SidebarMenu>
             </SidebarHeader>
 
-            <SidebarContent className="min-w-0 gap-0 overflow-x-hidden py-3">
+            <SidebarContent className="relative min-w-0 gap-0 overflow-x-hidden py-3">
                 <NavMain items={mainNavItems} label="Overview" />
                 <SidebarSeparator className="my-2 bg-sidebar-border/40" />
                 <NavMain items={operationsNavItems} label="Operations" />
                 <SidebarSeparator className="my-2 bg-sidebar-border/40" />
                 <NavMain items={managementNavItems} label="Management" />
+
+                {/* Foliage watermark — decoration, hidden when collapsed to icons. */}
+                <CafeMotif
+                    name="leaf"
+                    size={190}
+                    className="pointer-events-none absolute -bottom-6 -left-8 text-sidebar-foreground opacity-[0.07] group-data-[collapsible=icon]:hidden"
+                />
             </SidebarContent>
 
             <SidebarFooter className="min-w-0 overflow-x-hidden border-t border-sidebar-border/40 px-1 py-3">

@@ -8,18 +8,7 @@ import '../../../core/utils/format_utils.dart';
 import '../../../models/sales_history_record.dart';
 import '../../../services/analytics_engine.dart';
 
-const _sliceColors = [
-  Color(0xFF0F766E),
-  Color(0xFF14B8A6),
-  Color(0xFF2DD4BF),
-  Color(0xFF5EEAD4),
-  Color(0xFF059669),
-  Color(0xFF34D399),
-  Color(0xFFF97316),
-  Color(0xFFFB923C),
-  Color(0xFFFDBA74),
-  Color(0xFF64748B),
-];
+const _sliceColors = AppColors.chartPalette;
 
 class ReportDonutChartCard extends StatelessWidget {
   const ReportDonutChartCard({
@@ -215,12 +204,12 @@ class _ReportHourlyHeatmapCardState extends State<ReportHourlyHeatmapCard> {
   }
 
   Color _heatColor(double ratio) {
-    if (ratio <= 0) return const Color(0xFF475569);
-    if (ratio < 0.2) return const Color(0xFFFDBA74);
-    if (ratio < 0.4) return const Color(0xFFFB923C);
-    if (ratio < 0.6) return const Color(0xFFF59E0B);
-    if (ratio < 0.8) return const Color(0xFF34D399);
-    return const Color(0xFF0F766E);
+    if (ratio <= 0) return AppColors.chartHeatRamp[0];
+    if (ratio < 0.2) return AppColors.chartHeatRamp[1];
+    if (ratio < 0.4) return AppColors.chartHeatRamp[2];
+    if (ratio < 0.6) return AppColors.chartHeatRamp[3];
+    if (ratio < 0.8) return AppColors.chartHeatRamp[4];
+    return AppColors.chartHeatRamp[5];
   }
 
   @override
@@ -369,13 +358,9 @@ class _ReportHourlyHeatmapCardState extends State<ReportHourlyHeatmapCard> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(999),
                   child: Row(
-                    children: const [
-                      Expanded(child: ColoredBox(color: Color(0xFF475569))),
-                      Expanded(child: ColoredBox(color: Color(0xFFFDBA74))),
-                      Expanded(child: ColoredBox(color: Color(0xFFFB923C))),
-                      Expanded(child: ColoredBox(color: Color(0xFFF59E0B))),
-                      Expanded(child: ColoredBox(color: Color(0xFF34D399))),
-                      Expanded(child: ColoredBox(color: Color(0xFF0F766E))),
+                    children: [
+                      for (final step in AppColors.chartHeatRamp)
+                        Expanded(child: ColoredBox(color: step)),
                     ],
                   ),
                 ),

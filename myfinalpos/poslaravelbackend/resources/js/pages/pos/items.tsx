@@ -451,22 +451,22 @@ type InlineValue = string | number | null;
 
 const SPREADSHEET_INPUT = cn(
     'h-full w-full min-w-0 border-0 bg-transparent px-1.5 py-1 text-sm outline-none',
-    'focus:bg-white focus:ring-2 focus:ring-blue-500 focus:ring-inset',
+    'focus:bg-white focus:ring-2 focus:ring-[#c58b5a] focus:ring-inset',
     'disabled:cursor-wait disabled:opacity-50',
 );
 const SPREADSHEET_INPUT_INVALID =
-    'bg-red-50 ring-2 ring-red-400 ring-inset focus:ring-red-400';
+    'bg-[#fbedec] ring-2 ring-[#c0453f] ring-inset focus:ring-[#c0453f]';
 
 const DEAL_MAX_LENGTH = 500;
 
-const SPREADSHEET_CELL = 'border border-gray-300 p-0 align-middle bg-white';
+const SPREADSHEET_CELL = 'border border-[#e7d5c2] p-0 align-middle bg-white';
 const SPREADSHEET_HEADER =
-    'border border-gray-300 bg-gray-50 px-1.5 py-1 text-left text-xs font-semibold text-gray-600';
+    'border border-[#e7d5c2] bg-[#faf6ef] px-1.5 py-1 text-left text-xs font-semibold text-[#7a6e66]';
 const SPREADSHEET_ROW_NUM =
-    'border border-gray-300 bg-gray-100 px-1 py-1 text-center text-xs tabular-nums text-gray-500 select-none';
-const SPREADSHEET_NEW_ROW = 'bg-emerald-50/50';
+    'border border-[#e7d5c2] bg-[#f4e9dd] px-1 py-1 text-center text-xs tabular-nums text-[#8d8179] select-none';
+const SPREADSHEET_NEW_ROW = 'bg-[#edf1e6]/60';
 const SPREADSHEET_TOOLBAR =
-    'flex flex-col gap-3 border border-gray-300 bg-gray-50 p-2 lg:flex-row lg:items-center lg:justify-between';
+    'flex flex-col gap-3 border border-[#e7d5c2] bg-[#faf6ef] p-2 lg:flex-row lg:items-center lg:justify-between';
 
 type ProductFormState = {
     id?: number;
@@ -1549,19 +1549,19 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                 className={cn(
                     scrollLayout
                         ? cn(
-                              'flex h-full flex-col overflow-hidden bg-white text-gray-900',
-                              '[&_.agri-stat-card]:border-gray-300 [&_.agri-stat-card]:bg-white [&_.agri-stat-card]:text-gray-900',
-                              '[&_.agri-stat-label]:text-gray-500',
-                              '[&_.text-foreground]:text-gray-900',
-                              '[&_.text-muted-foreground]:text-gray-600',
+                              'flex h-full flex-col overflow-hidden bg-white text-[#332a26]',
+                              '[&_.agri-stat-card]:border-[#e7d5c2] [&_.agri-stat-card]:bg-white [&_.agri-stat-card]:text-[#332a26]',
+                              '[&_.agri-stat-label]:text-[#8d8179]',
+                              '[&_.text-foreground]:text-[#332a26]',
+                              '[&_.text-muted-foreground]:text-[#7a6e66]',
                           )
                         : 'agri-page-container',
                     standalone && 'h-svh',
-                    'fullscreen:flex fullscreen:h-full fullscreen:flex-col fullscreen:overflow-hidden fullscreen:bg-white fullscreen:text-gray-900',
+                    'fullscreen:flex fullscreen:h-full fullscreen:flex-col fullscreen:overflow-hidden fullscreen:bg-white fullscreen:text-[#332a26]',
                 )}
             >
                 {standalone ? (
-                    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-300 bg-gray-50 px-3 py-2">
+                    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#e7d5c2] bg-[#faf6ef] px-3 py-2">
                         <div className="flex min-w-0 items-center gap-3">
                             <button
                                 type="button"
@@ -1571,15 +1571,15 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                         router.visit('/pos/items');
                                     })
                                 }
-                                className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900"
+                                className="inline-flex items-center gap-1 text-xs text-[#7a6e66] hover:text-[#332a26]"
                             >
                                 <ArrowLeft className="size-3.5" />
                                 Items
                             </button>
-                            <span className="text-sm font-semibold text-gray-900">
+                            <span className="text-sm font-semibold text-[#332a26]">
                                 Spreadsheet
                             </span>
-                            <span className="hidden text-xs text-gray-500 sm:inline">
+                            <span className="hidden text-xs text-[#8d8179] sm:inline">
                                 {catalogTotal} products · {categories.length}{' '}
                                 categories
                             </span>
@@ -1589,7 +1589,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="h-8 rounded-sm border-gray-300 bg-white px-3 text-xs shadow-none"
+                                className="h-8 rounded-sm border-[#e7d5c2] bg-white px-3 text-xs shadow-none"
                                 onClick={() => void toggleBrowserFullscreen()}
                             >
                                 {browserFullscreen ? (
@@ -1685,14 +1685,14 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                     )}
                 >
                     <div className="relative w-full lg:max-w-sm">
-                        <Search className="absolute top-1/2 left-2 size-4 -translate-y-1/2 text-gray-500" />
+                        <Search className="absolute top-1/2 left-2 size-4 -translate-y-1/2 text-[#8d8179]" />
                         <input
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search by name"
                             className={cn(
                                 SPREADSHEET_INPUT,
-                                'h-8 border border-gray-300 bg-white pl-8 text-left focus:ring-1',
+                                'h-8 border border-[#e7d5c2] bg-white pl-8 text-left focus:ring-1',
                             )}
                         />
                     </div>
@@ -1701,7 +1701,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-8 rounded-sm border-gray-300 bg-white px-3 text-xs shadow-none"
+                            className="h-8 rounded-sm border-[#e7d5c2] bg-white px-3 text-xs shadow-none"
                             onClick={openAddCategory}
                         >
                             <Tag className="size-3.5" />
@@ -1711,7 +1711,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-8 rounded-sm border-gray-300 bg-white px-3 text-xs shadow-none"
+                            className="h-8 rounded-sm border-[#e7d5c2] bg-white px-3 text-xs shadow-none"
                             onClick={() => setCategoryManageDialogOpen(true)}
                             disabled={categories.length === 0}
                         >
@@ -1738,7 +1738,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    className="h-8 rounded-sm border-gray-300 bg-white px-3 text-xs shadow-none"
+                                    className="h-8 rounded-sm border-[#e7d5c2] bg-white px-3 text-xs shadow-none"
                                     disabled={savingAll}
                                     onClick={discardAllChanges}
                                 >
@@ -1751,7 +1751,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-8 rounded-sm border-gray-300 bg-white px-3 text-xs shadow-none"
+                            className="h-8 rounded-sm border-[#e7d5c2] bg-white px-3 text-xs shadow-none"
                             disabled={exportingProducts}
                             onClick={() => void handleExportProducts()}
                         >
@@ -1766,7 +1766,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-8 rounded-sm border-gray-300 bg-white px-3 text-xs shadow-none"
+                            className="h-8 rounded-sm border-[#e7d5c2] bg-white px-3 text-xs shadow-none"
                             onClick={openImportDialog}
                         >
                             <Upload className="size-3.5" />
@@ -1775,7 +1775,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                         <Button
                             type="button"
                             size="sm"
-                            className="h-8 rounded-sm border border-gray-300 bg-white px-3 text-xs text-gray-700 shadow-none hover:bg-gray-100"
+                            className="h-8 rounded-sm border border-[#e7d5c2] bg-white px-3 text-xs text-[#4a3d36] shadow-none hover:bg-[#f4e9dd]"
                             variant="outline"
                             onClick={openAddProduct}
                         >
@@ -1787,7 +1787,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 <Button
                                     type="button"
                                     size="sm"
-                                    className="h-8 rounded-sm border border-gray-300 bg-white px-3 text-xs text-gray-700 shadow-none hover:bg-gray-100"
+                                    className="h-8 rounded-sm border border-[#e7d5c2] bg-white px-3 text-xs text-[#4a3d36] shadow-none hover:bg-[#f4e9dd]"
                                     variant="outline"
                                     onClick={openItemsSheetTab}
                                 >
@@ -1797,7 +1797,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 <Button
                                     type="button"
                                     size="sm"
-                                    className="h-8 rounded-sm border border-gray-300 bg-white px-3 text-xs text-gray-700 shadow-none hover:bg-gray-100"
+                                    className="h-8 rounded-sm border border-[#e7d5c2] bg-white px-3 text-xs text-[#4a3d36] shadow-none hover:bg-[#f4e9dd]"
                                     variant="outline"
                                     onClick={() => void toggleBrowserFullscreen()}
                                 >
@@ -1815,12 +1815,12 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                 {hasUnsavedChanges ? (
                     <div
                         className={cn(
-                            'flex flex-wrap items-center justify-between gap-2 border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950',
+                            'flex flex-wrap items-center justify-between gap-2 border border-[#dfb98b] bg-[#f7eadc] px-3 py-2 text-xs text-[#7a4a20]',
                             scrollLayout && 'shrink-0',
                         )}
                     >
                         <div className="flex items-center gap-2">
-                            <AlertTriangle className="size-3.5 shrink-0 text-amber-600" />
+                            <AlertTriangle className="size-3.5 shrink-0 text-[#8a5a2b]" />
                             <span>
                                 Unsaved changes —{' '}
                                 {unsavedEditCount > 0
@@ -1897,7 +1897,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                     <div
                         ref={tableScrollRef}
                         className={cn(
-                            'overflow-auto border border-gray-300 bg-white',
+                            'overflow-auto border border-[#e7d5c2] bg-white',
                             scrollLayout
                                 ? 'min-h-0 flex-1 fullscreen:min-h-0 fullscreen:flex-1 fullscreen:overflow-auto'
                                 : 'max-h-[70vh]',
@@ -1905,19 +1905,19 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                     >
                         {products.length === 0 &&
                         (search.trim() !== '' || activeCategory !== ALL) ? (
-                            <p className="border-b border-gray-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                            <p className="border-b border-[#e7d5c2] bg-[#f7eadc] px-3 py-1.5 text-xs text-[#8a5a2b]">
                                 No products match your current filter. Clear
                                 search or choose another category.
                             </p>
                         ) : null}
                         {products.length > 0 && filteredProducts.length === 0 ? (
-                            <p className="border-b border-gray-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                            <p className="border-b border-[#e7d5c2] bg-[#f7eadc] px-3 py-1.5 text-xs text-[#8a5a2b]">
                                 No products match your current filter. Clear
                                 search or choose another category.
                             </p>
                         ) : null}
                         {categories.length === 0 ? (
-                            <p className="border-b border-gray-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                            <p className="border-b border-[#e7d5c2] bg-[#f7eadc] px-3 py-1.5 text-xs text-[#8a5a2b]">
                                 Add a category first, then type in the blank row
                                 below to add products.
                             </p>
@@ -1994,7 +1994,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                             key={row.key}
                                             className={
                                                 row.isPending
-                                                    ? 'bg-amber-50'
+                                                    ? 'bg-[#f7eadc]'
                                                     : undefined
                                             }
                                         >
@@ -2150,7 +2150,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                                             : 'Delete product'
                                                     }
                                                     disabled={saving}
-                                                    className="inline-flex size-7 items-center justify-center rounded-sm text-gray-400 transition-colors hover:bg-red-50 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                                                    className="inline-flex size-7 items-center justify-center rounded-sm text-[#a99c92] transition-colors hover:bg-[#fbedec] hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
                                                     onClick={() =>
                                                         requestDeleteRow(row)
                                                     }
@@ -2183,7 +2183,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                             <button
                                                 type="button"
                                                 onClick={() => void loadMore()}
-                                                className="w-full border-t border-gray-200 bg-gray-50 px-3 py-2 text-center text-xs font-medium text-gray-600 hover:bg-gray-100"
+                                                className="w-full border-t border-[#e7d5c2] bg-[#faf6ef] px-3 py-2 text-center text-xs font-medium text-[#7a6e66] hover:bg-[#f4e9dd]"
                                             >
                                                 Load 100 more ({products.length}
                                                 /{filteredTotal})
@@ -2195,7 +2195,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                     <tr>
                                         <td
                                             colSpan={10}
-                                            className="border border-gray-300 px-3 py-2 text-center text-xs text-muted-foreground"
+                                            className="border border-[#e7d5c2] px-3 py-2 text-center text-xs text-muted-foreground"
                                         >
                                             <span className="inline-flex items-center gap-2">
                                                 <Loader2 className="size-3.5 animate-spin" />
@@ -2206,15 +2206,15 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 ) : null}
                             </tbody>
                             <tfoot>
-                                <tr className="bg-gray-50 font-semibold">
+                                <tr className="bg-[#faf6ef] font-semibold">
                                     <td
-                                        className="border border-gray-300 px-1.5 py-1 text-gray-700"
+                                        className="border border-[#e7d5c2] px-1.5 py-1 text-[#4a3d36]"
                                         colSpan={8}
                                     >
                                         {tableRows.length} product row
                                         {tableRows.length === 1 ? '' : 's'}
                                     </td>
-                                    <td className="border border-gray-300 px-1.5 py-1 text-right tabular-nums text-gray-700">
+                                    <td className="border border-[#e7d5c2] px-1.5 py-1 text-right tabular-nums text-[#4a3d36]">
                                         {tableRows.reduce(
                                             (sum, row) =>
                                                 sum + tableRowStock(row),
@@ -3453,7 +3453,7 @@ function SpreadsheetIntegerCell({
             className={cn(
                 SPREADSHEET_INPUT,
                 'text-right tabular-nums',
-                low && !invalid && 'text-red-600',
+                low && !invalid && 'text-[#c0453f]',
                 invalid && SPREADSHEET_INPUT_INVALID,
             )}
             onChange={(event) => setDraft(event.target.value)}
@@ -3487,7 +3487,7 @@ function NewProductSpreadsheetRow({
     onFocusRow: () => void;
 }) {
     const hasCategories = categoryNames.length > 0;
-    const placeholderClass = 'placeholder:text-gray-400';
+    const placeholderClass = 'placeholder:text-[#a99c92]';
     const priceInvalid = isInvalidDecimalDraft(draft.price, true);
     const costInvalid = isInvalidDecimalDraft(draft.cost_price, true);
     const stockInvalid = isInvalidDecimalDraft(draft.stock, true, stockMin);
@@ -3505,12 +3505,12 @@ function NewProductSpreadsheetRow({
             <td
                 className={cn(
                     SPREADSHEET_ROW_NUM,
-                    'cursor-pointer hover:bg-gray-200',
+                    'cursor-pointer hover:bg-[#ece0d2]',
                 )}
                 title="Add new product"
                 onClick={onFocusRow}
             >
-                <Plus className="mx-auto size-3.5 text-emerald-700" />
+                <Plus className="mx-auto size-3.5 text-[#64754f]" />
             </td>
             <td className={SPREADSHEET_CELL}>
                 {hasCategories ? (
@@ -3522,7 +3522,7 @@ function NewProductSpreadsheetRow({
                         data-col={1}
                         className={cn(
                             SPREADSHEET_INPUT,
-                            'cursor-pointer text-left italic text-gray-600',
+                            'cursor-pointer text-left italic text-[#7a6e66]',
                             saving && 'opacity-50',
                         )}
                         onChange={(event) =>
@@ -3538,7 +3538,7 @@ function NewProductSpreadsheetRow({
                         ))}
                     </select>
                 ) : (
-                    <span className="block px-1.5 py-1 text-xs text-gray-400 italic">
+                    <span className="block px-1.5 py-1 text-xs text-[#a99c92] italic">
                         Add category first
                     </span>
                 )}
@@ -3555,7 +3555,7 @@ function NewProductSpreadsheetRow({
                     data-col={2}
                     className={cn(
                         SPREADSHEET_INPUT,
-                        'text-left italic text-gray-700',
+                        'text-left italic text-[#4a3d36]',
                         placeholderClass,
                     )}
                     onChange={(event) =>
@@ -3577,7 +3577,7 @@ function NewProductSpreadsheetRow({
                     data-col={3}
                     className={cn(
                         SPREADSHEET_INPUT,
-                        'text-left italic text-gray-700',
+                        'text-left italic text-[#4a3d36]',
                         placeholderClass,
                     )}
                     onChange={(event) =>
@@ -3599,7 +3599,7 @@ function NewProductSpreadsheetRow({
                     data-col={4}
                     className={cn(
                         SPREADSHEET_INPUT,
-                        'text-right tabular-nums text-gray-700',
+                        'text-right tabular-nums text-[#4a3d36]',
                         placeholderClass,
                         priceInvalid && SPREADSHEET_INPUT_INVALID,
                     )}
@@ -3622,7 +3622,7 @@ function NewProductSpreadsheetRow({
                     data-col={5}
                     className={cn(
                         SPREADSHEET_INPUT,
-                        'text-right tabular-nums text-gray-700',
+                        'text-right tabular-nums text-[#4a3d36]',
                         placeholderClass,
                         costInvalid && SPREADSHEET_INPUT_INVALID,
                     )}
@@ -3645,7 +3645,7 @@ function NewProductSpreadsheetRow({
                     data-col={6}
                     className={cn(
                         SPREADSHEET_INPUT,
-                        'text-left italic text-gray-700',
+                        'text-left italic text-[#4a3d36]',
                         placeholderClass,
                     )}
                     onChange={(event) =>
@@ -3667,7 +3667,7 @@ function NewProductSpreadsheetRow({
                     data-col={7}
                     className={cn(
                         SPREADSHEET_INPUT,
-                        'text-left text-gray-700',
+                        'text-left text-[#4a3d36]',
                         placeholderClass,
                         dealInvalid && SPREADSHEET_INPUT_INVALID,
                     )}
@@ -3690,7 +3690,7 @@ function NewProductSpreadsheetRow({
                     data-col={8}
                     className={cn(
                         SPREADSHEET_INPUT,
-                        'text-right tabular-nums text-gray-700',
+                        'text-right tabular-nums text-[#4a3d36]',
                         placeholderClass,
                         stockInvalid && SPREADSHEET_INPUT_INVALID,
                     )}

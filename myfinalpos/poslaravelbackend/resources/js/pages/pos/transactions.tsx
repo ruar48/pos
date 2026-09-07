@@ -214,7 +214,7 @@ function statusBadgeClass(status: string): string {
         return 'border-muted-foreground/30 bg-muted text-muted-foreground';
     }
     if (status === 'partial_refund') {
-        return 'border-amber-500/40 bg-amber-50 text-amber-800';
+        return 'border-caramel/40 bg-caramel-soft text-caramel-deep';
     }
     return 'border-primary/20 bg-primary/5 text-primary';
 }
@@ -324,12 +324,12 @@ function TransactionLineItemsTable({
                                         {itemDisplayName(item)}
                                     </p>
                                     {fullyRefunded && (
-                                        <p className="text-xs text-amber-700">
+                                        <p className="text-xs text-caramel-deep">
                                             Fully refunded
                                         </p>
                                     )}
                                     {partiallyRefunded && (
-                                        <p className="text-xs text-amber-700">
+                                        <p className="text-xs text-caramel-deep">
                                             {item.refunded_quantity} refunded ·{' '}
                                             {netQty} remaining
                                         </p>
@@ -811,7 +811,7 @@ export default function PosTransactions() {
                                                 {formatOrderStatus(row.status)}
                                             </span>
                                             {row.refunded_amount > 0.01 && (
-                                                <span className="text-xs font-medium text-amber-700 tabular-nums">
+                                                <span className="text-xs font-medium text-caramel-deep tabular-nums">
                                                     −₱{formatMoney(row.refunded_amount)}
                                                 </span>
                                             )}
@@ -849,7 +849,7 @@ export default function PosTransactions() {
                                                         <p className="text-muted-foreground">
                                                             Refunded
                                                         </p>
-                                                        <p className="font-semibold tabular-nums text-amber-700">
+                                                        <p className="font-semibold tabular-nums text-caramel-deep">
                                                             ₱
                                                             {formatMoney(
                                                                 row.refunded_amount,
@@ -904,7 +904,7 @@ export default function PosTransactions() {
                                                 </div>
                                                 {row.items_count <= 0 &&
                                                     row.total > 0.01 && (
-                                                        <p className="text-xs text-amber-700">
+                                                        <p className="text-xs text-caramel-deep">
                                                             Remaining ₱
                                                             {formatMoney(row.total)}{' '}
                                                             is VAT from the original
@@ -1001,7 +1001,7 @@ export default function PosTransactions() {
                                                   >
                                                       {formatReportMoney(row.total, row.status)}
                                                   </td>
-                                                  <td className="px-4 py-3 text-right tabular-nums text-amber-700">
+                                                  <td className="px-4 py-3 text-right tabular-nums text-caramel-deep">
                                                       {formatRefundColumn(row.refunded_amount)}
                                                   </td>
                                                   <td className="px-4 py-3 text-right tabular-nums">
@@ -1045,7 +1045,7 @@ export default function PosTransactions() {
                                                   <td className="px-4 py-3 text-right tabular-nums">
                                                       ₱{formatMoney(row.gross_total)}
                                                   </td>
-                                                  <td className="px-4 py-3 text-right tabular-nums text-amber-700">
+                                                  <td className="px-4 py-3 text-right tabular-nums text-caramel-deep">
                                                       {formatRefundColumn(row.refunded_amount)}
                                                   </td>
                                                   <td
@@ -1060,7 +1060,7 @@ export default function PosTransactions() {
                                                   <td className="px-4 py-3 text-right tabular-nums">
                                                       {row.transactions}
                                                   </td>
-                                                  <td className="px-4 py-3 text-right tabular-nums text-amber-700">
+                                                  <td className="px-4 py-3 text-right tabular-nums text-caramel-deep">
                                                       {row.refunded_transactions > 0
                                                           ? row.refunded_transactions
                                                           : '—'}

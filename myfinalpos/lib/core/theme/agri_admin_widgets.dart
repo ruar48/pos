@@ -11,53 +11,55 @@ enum AgriStatTone { positive, warning, danger, neutral }
 class AgriAdminTheme {
   static const pagePadding = EdgeInsets.fromLTRB(20, 20, 20, 20);
   static const cardRadius = 16.0;
-  static const cardBorder = Color(0x99E1E7EC);
+  static const cardBorder = AppColors.border;
 
   static BoxDecoration cardDecoration({Color? color}) {
     return BoxDecoration(
       color: color ?? AppColors.surface,
       borderRadius: BorderRadius.circular(cardRadius),
       border: Border.all(color: cardBorder),
-      boxShadow: [
+      boxShadow: const [
         BoxShadow(
-          color: const Color(0x0A17202A),
+          color: AppColors.shadowSoft,
           blurRadius: 2,
-          offset: const Offset(0, 1),
+          offset: Offset(0, 1),
         ),
         BoxShadow(
-          color: const Color(0x0817202A),
+          color: AppColors.shadowAmbient,
           blurRadius: 16,
-          offset: const Offset(0, 4),
+          offset: Offset(0, 4),
         ),
       ],
     );
   }
 
+  /// KPI tiles. The tone names are historic; the colours are the café
+  /// palette — roasted espresso, caramel, sage and a warm clay.
   static LinearGradient kpiGradient(AgriKpiTone tone) {
     switch (tone) {
       case AgriKpiTone.orange:
         return const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFF5A962), Color(0xFFE8924A)],
+          colors: [Color(0xFFC9915F), Color(0xFFB0743F)],
         );
       case AgriKpiTone.teal:
         return const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF5EC4B8), Color(0xFF45B5A8)],
+          colors: [Color(0xFF5D4136), Color(0xFF42271F)],
         );
       case AgriKpiTone.green:
         return const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF6FCF97), Color(0xFF56C486)],
+          colors: [Color(0xFF8A9A78), Color(0xFF6B7C58)],
         );
       case AgriKpiTone.coral:
         return const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFF2847A), Color(0xFFE86A5E)],
+          colors: [Color(0xFFC4776B), Color(0xFFA85B4E)],
         );
     }
   }
@@ -65,26 +67,26 @@ class AgriAdminTheme {
   static Color statIconBackground(AgriStatTone tone) {
     switch (tone) {
       case AgriStatTone.warning:
-        return AppColors.amber.withValues(alpha: 0.12);
+        return AppColors.caramelSoft;
       case AgriStatTone.danger:
-        return AppColors.danger.withValues(alpha: 0.12);
+        return AppColors.dangerSoft;
       case AgriStatTone.neutral:
         return AppColors.softSurface;
       case AgriStatTone.positive:
-        return AppColors.green.withValues(alpha: 0.12);
+        return AppColors.successSoft;
     }
   }
 
   static Color statIconColor(AgriStatTone tone) {
     switch (tone) {
       case AgriStatTone.warning:
-        return AppColors.amber;
+        return AppColors.caramelDeep;
       case AgriStatTone.danger:
         return AppColors.danger;
       case AgriStatTone.neutral:
         return AppColors.muted;
       case AgriStatTone.positive:
-        return AppColors.green;
+        return AppColors.success;
     }
   }
 }
@@ -140,8 +142,9 @@ class AgriPageHeader extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.green.withValues(alpha: 0.1),
+                  color: AppColors.caramelSoft,
                   borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: AppColors.greenBorder),
                 ),
                 child: Text(
                   badge!.toUpperCase(),
@@ -149,7 +152,7 @@ class AgriPageHeader extends StatelessWidget {
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
-                    color: AppColors.green,
+                    color: AppColors.caramelDeep,
                   ),
                 ),
               ),
@@ -352,11 +355,11 @@ class DashboardKpiCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: AgriAdminTheme.kpiGradient(tone),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+            color: AppColors.shadowSoft,
+            blurRadius: 10,
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -400,12 +403,13 @@ class AgriStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = ok ? AppColors.green : AppColors.danger;
+    final color = ok ? AppColors.success : AppColors.danger;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: ok ? AppColors.successSoft : AppColors.dangerSoft,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -485,11 +489,12 @@ class _AgriTabButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? AppColors.lightGreen : Colors.transparent,
+      color: selected ? AppColors.espresso : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
+        hoverColor: AppColors.lightGreen,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
           child: Row(
@@ -498,7 +503,7 @@ class _AgriTabButton extends StatelessWidget {
               Icon(
                 item.icon,
                 size: 18,
-                color: selected ? AppColors.green : AppColors.muted,
+                color: selected ? Colors.white : AppColors.muted,
               ),
               const SizedBox(width: 8),
               Text(
@@ -506,7 +511,7 @@ class _AgriTabButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
-                  color: selected ? AppColors.green : AppColors.muted,
+                  color: selected ? Colors.white : AppColors.muted,
                 ),
               ),
             ],
