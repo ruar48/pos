@@ -126,6 +126,43 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   ReceiptData? completedReceipt;
   double manualDiscount = 0;
   String appliedCouponCode = '';
+
+  // Statutory (BIR) discount applied to this sale: '', 'sc', 'pwd', 'naac'
+  // or 'solo_parent'. The cardholder's name and ID must be recorded with it —
+  // BIR requires them against the sale, and the Z reading reports the discount
+  // on its own line.
+  String statutoryDiscountType = '';
+  String statutoryIdNumber = '';
+  String statutoryCustomerName = '';
+
+  bool get hasStatutoryDiscount => statutoryDiscountType.isNotEmpty;
+
+  /// 20% off, applied to the VAT-exempt base. Mirrors BirSalesBreakdown on the
+  /// server, which is authoritative — this is the cashier-facing preview.
+  double get statutoryDiscountAmount {
+    if (!hasStatutoryDiscount) return 0;
+    return double.parse((grossSubtotal * 0.20).toStringAsFixed(2));
+  }
+
+  void applyStatutoryDiscount({
+    required String type,
+    required String idNumber,
+    required String customerName,
+  }) {
+    setState(() {
+      statutoryDiscountType = type;
+      statutoryIdNumber = idNumber.trim();
+      statutoryCustomerName = customerName.trim();
+    });
+  }
+
+  void clearStatutoryDiscount() {
+    setState(() {
+      statutoryDiscountType = '';
+      statutoryIdNumber = '';
+      statutoryCustomerName = '';
+    });
+  }
   double appliedCouponDiscount = 0;
   int loyaltyPointsRedeemed = 0;
   int _nextHoldId = 1;
@@ -1417,6 +1454,9 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       receiptNote: receiptNote,
       soldAt: soldAt,
       terminalId: registerTerminalId,
+      statutoryDiscountType: statutoryDiscountType,
+      statutoryIdNumber: statutoryIdNumber,
+      statutoryCustomerName: statutoryCustomerName,
     );
 
     await PosConnectivity.instance.refresh(force: true);
@@ -1902,6 +1942,11 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     appliedCouponCode = '';
     appliedCouponDiscount = 0;
     loyaltyPointsRedeemed = 0;
+    // The statutory discount belongs to one customer's sale, so it must never
+    // carry over to the next.
+    statutoryDiscountType = '';
+    statutoryIdNumber = '';
+    statutoryCustomerName = '';
   }
 
   Coupon? _findCouponByCode(String code) {

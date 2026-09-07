@@ -3,6 +3,7 @@ import {
     ArrowLeftRight,
     BarChart3,
     Banknote,
+    FileText,
     Gift,
     Home,
     LayoutGrid,
@@ -93,6 +94,11 @@ const managementNavItems: NavItem[] = [
         title: 'Cash Drawer',
         href: '/pos/cash-drawer',
         icon: Wallet,
+    },
+    {
+        title: 'X / Z Reading',
+        href: '/pos/readings',
+        icon: FileText,
     },
 ];
 

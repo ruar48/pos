@@ -28,6 +28,12 @@ class AppSettingsService
             'atp_no' => 'ATP-987654321',
             'atp_date_issued' => '01/15/2026',
             'series_range' => '0000001 - 9999999',
+            // BIR machine identity, printed on every X/Z reading. Blank by
+            // default: these come from the machine's registration and must not
+            // be invented — a placeholder MIN on a filed reading is worse than
+            // a visibly empty one.
+            'min_no' => '',
+            'machine_serial_no' => '',
         ];
     }
 
@@ -62,6 +68,12 @@ class AppSettingsService
             'atp_no' => trim((string) ($data['atp_no'] ?? $defaults['atp_no'])) ?: $defaults['atp_no'],
             'atp_date_issued' => trim((string) ($data['atp_date_issued'] ?? $defaults['atp_date_issued'])) ?: $defaults['atp_date_issued'],
             'series_range' => trim((string) ($data['series_range'] ?? $defaults['series_range'])) ?: $defaults['series_range'],
+            // Blank is allowed and meaningful here — an unset MIN prints as
+            // "not set" on a reading rather than falling back to a default.
+            'min_no' => trim((string) ($data['min_no'] ?? $defaults['min_no'])),
+            'machine_serial_no' => trim(
+                (string) ($data['machine_serial_no'] ?? $defaults['machine_serial_no']),
+            ),
         ];
     }
 

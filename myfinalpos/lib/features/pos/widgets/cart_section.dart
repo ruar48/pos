@@ -12,6 +12,7 @@ import '../../../models/loyalty_card.dart';
 import '../pages/pos_home_page.dart';
 import 'order_total_panel.dart';
 import 'quantity_entry_dialog.dart';
+import 'statutory_discount_dialog.dart';
 import 'rfid_customer_scan_dialog.dart';
 
 class CartSection extends StatelessWidget {
@@ -842,10 +843,28 @@ class _CartActionButtons extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          _ActionChip(
-            label: 'Clear',
-            icon: Icons.delete_sweep_outlined,
-            onTap: hasItems ? () => _confirmClearCart(context) : null,
+          Row(
+            children: [
+              Expanded(
+                child: _ActionChip(
+                  label: pageState.hasStatutoryDiscount
+                      ? 'SC/PWD ✓'
+                      : 'SC / PWD',
+                  icon: Icons.badge_outlined,
+                  onTap: hasItems
+                      ? () => showStatutoryDiscountDialog(context, pageState)
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ActionChip(
+                  label: 'Clear',
+                  icon: Icons.delete_sweep_outlined,
+                  onTap: hasItems ? () => _confirmClearCart(context) : null,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           FilledButton.icon(

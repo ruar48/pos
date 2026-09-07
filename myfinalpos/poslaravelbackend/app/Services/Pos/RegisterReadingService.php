@@ -3,6 +3,7 @@
 namespace App\Services\Pos;
 
 use App\Support\BusinessDay;
+use App\Support\PosHelpers;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -19,35 +20,55 @@ use RuntimeException;
  * ---------------------------------------------------------------------------
  * COMPLIANCE NOTE
  *
- * A BIR-accredited Z reading must break out senior-citizen, PWD, NAAC and
- * solo-parent discounts, and split sales into VATable / VAT-exempt /
- * zero-rated. The point of sale does not capture any of those today: orders
- * carry one flat `vat` column and generic discount columns with no statutory
- * classification, and no customer ID is recorded against a discount.
+ * The statutory figures BIR requires — senior-citizen, PWD, NAAC and
+ * solo-parent discounts, and the VATable / VAT-exempt / zero-rated split — are
+ * captured per order at checkout by BirSalesBreakdown and merely summed here.
+ * They are never recomputed from current product flags, so reclassifying a
+ * product cannot rewrite an already-filed reading.
  *
- * Those figures are therefore NOT computed here. They are listed in
- * [UNCAPTURED_BIR_FIELDS] and stored on the reading so a printed copy can
- * state that they are unavailable. Reporting them as 0.00 would assert "no
- * senior citizen sales occurred", which is a different and possibly false
- * claim. This reading is not BIR-valid until that capture exists.
+ * [uncapturedBirFields] reports any of those columns that are missing (i.e.
+ * the capture migration has not run). Anything listed there is printed as
+ * "not captured" rather than 0.00, because a zero would assert that no such
+ * sales occurred.
+ *
+ * Correct figures are necessary but not sufficient for accreditation: BIR also
+ * requires a registered machine (MIN/serial on file), a permanent electronic
+ * journal, and inspection. See docs/BIR-READINGS.md.
  * ---------------------------------------------------------------------------
  */
 class RegisterReadingService
 {
     /**
-     * BIR figures that cannot be sourced from captured data yet. Stored on
-     * every reading so the printed copy can mark them rather than imply zero.
+     * BIR figures that depend on point-of-sale capture. Each is reported only
+     * when the column backing it exists; anything missing is listed on the
+     * reading so a printed copy says "not captured" instead of implying a
+     * truthful 0.00.
      *
-     * @var list<string>
+     * Once the BIR capture migration has run this comes back empty and the
+     * reading reports real figures.
+     *
+     * @return list<string>
      */
-    public const UNCAPTURED_BIR_FIELDS = [
-        'sc_discount',
-        'pwd_discount',
-        'naac_discount',
-        'solo_parent_discount',
-        'vat_exempt_sales',
-        'zero_rated_sales',
-    ];
+    public static function uncapturedBirFields(): array
+    {
+        $required = [
+            'sc_discount' => 'sc_discount',
+            'pwd_discount' => 'pwd_discount',
+            'naac_discount' => 'naac_discount',
+            'solo_parent_discount' => 'solo_parent_discount',
+            'vat_exempt_sales' => 'vat_exempt_sales',
+            'zero_rated_sales' => 'zero_rated_sales',
+        ];
+
+        $missing = [];
+        foreach ($required as $field => $column) {
+            if (! PosHelpers::columnExists('orders', $column)) {
+                $missing[] = $field;
+            }
+        }
+
+        return $missing;
+    }
 
     public function __construct(
         private readonly RegisterSessionService $sessions,
@@ -166,6 +187,15 @@ class RegisterReadingService
         $refunded = 0.0;
         $payments = [];
 
+        // BIR classifications, captured on the order at checkout.
+        $vatable = 0.0;
+        $vatExempt = 0.0;
+        $zeroRated = 0.0;
+        $sc = 0.0;
+        $pwd = 0.0;
+        $naac = 0.0;
+        $soloParent = 0.0;
+
         foreach ($completed as $order) {
             $gross += (float) $order->subtotal;
             $vat += (float) $order->vat;
@@ -174,10 +204,23 @@ class RegisterReadingService
                 + (float) $order->loyalty_discount;
             $refunded += (float) $order->refunded_amount;
 
+            $vatable += (float) ($order->vatable_sales ?? 0);
+            $vatExempt += (float) ($order->vat_exempt_sales ?? 0);
+            $zeroRated += (float) ($order->zero_rated_sales ?? 0);
+            $sc += (float) ($order->sc_discount ?? 0);
+            $pwd += (float) ($order->pwd_discount ?? 0);
+            $naac += (float) ($order->naac_discount ?? 0);
+            $soloParent += (float) ($order->solo_parent_discount ?? 0);
+
             $method = trim((string) $order->payment_method) ?: 'Cash';
             $payments[$method] = ($payments[$method] ?? 0.0)
                 + (float) $order->total_amount;
         }
+
+        // Statutory discounts are reported on their own lines, so they must
+        // not also be counted under "other".
+        $statutory = $sc + $pwd + $naac + $soloParent;
+        $otherDiscounts = max(0.0, $discounts - $statutory);
 
         $voidAmount = 0.0;
         foreach ($voided as $order) {
@@ -203,11 +246,15 @@ class RegisterReadingService
             'gross_sales' => round($gross, 2),
             'net_sales' => round($net, 2),
             'vat_amount' => round($vat, 2),
-            // VATable is everything we can classify; without exempt/zero-rated
-            // capture this is the whole of net sales rather than a real split.
-            'vatable_sales' => round($net, 2),
+            'vatable_sales' => round($vatable, 2),
+            'vat_exempt_sales' => round($vatExempt, 2),
+            'zero_rated_sales' => round($zeroRated, 2),
+            'sc_discount' => round($sc, 2),
+            'pwd_discount' => round($pwd, 2),
+            'naac_discount' => round($naac, 2),
+            'solo_parent_discount' => round($soloParent, 2),
             'discount_total' => round($discounts, 2),
-            'other_discount' => round($discounts, 2),
+            'other_discount' => round($otherDiscounts, 2),
             'refund_amount' => round($refunded, 2),
             'refund_count' => $refundCount,
             'void_amount' => round($voidAmount, 2),
@@ -230,6 +277,54 @@ class RegisterReadingService
     public static function invoiceNumber(int $orderId): string
     {
         return 'INV-' . str_pad((string) $orderId, 6, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Machine and taxpayer identity for the reading header.
+     *
+     * BIR requires the registered name, address, TIN, MIN, machine serial and
+     * permit number on every reading. Missing values are returned empty so the
+     * printed copy can show "not set" — inventing a placeholder MIN on a filed
+     * document would be worse than an obvious blank.
+     *
+     * @return array<string, string>
+     */
+    public function machineIdentity(): array
+    {
+        $store = (array) (
+            app(AppSettingsService::class)->read()['receipt_store'] ?? []
+        );
+
+        $get = static fn (string $key) => trim((string) ($store[$key] ?? ''));
+
+        return [
+            'store_name' => $get('store_name'),
+            'address_line1' => $get('address_line1'),
+            'address_line2' => $get('address_line2'),
+            'tin' => $get('tin'),
+            'tax_status' => $get('tax_status'),
+            'min_no' => $get('min_no'),
+            'machine_serial_no' => $get('machine_serial_no'),
+            'ptu_no' => $get('ptu_no'),
+            'atp_no' => $get('atp_no'),
+            'series_range' => $get('series_range'),
+        ];
+    }
+
+    /**
+     * Identity fields BIR requires that have not been filled in yet.
+     *
+     * @return list<string>
+     */
+    public function missingIdentityFields(): array
+    {
+        $identity = $this->machineIdentity();
+        $required = ['store_name', 'tin', 'min_no', 'machine_serial_no', 'ptu_no'];
+
+        return array_values(array_filter(
+            $required,
+            static fn ($key) => ($identity[$key] ?? '') === '',
+        ));
     }
 
     /**
@@ -264,12 +359,12 @@ class RegisterReadingService
             'net_sales' => $totals['net_sales'],
             'vatable_sales' => $totals['vatable_sales'],
             'vat_amount' => $totals['vat_amount'],
-            'vat_exempt_sales' => 0,
-            'zero_rated_sales' => 0,
-            'sc_discount' => 0,
-            'pwd_discount' => 0,
-            'naac_discount' => 0,
-            'solo_parent_discount' => 0,
+            'vat_exempt_sales' => $totals['vat_exempt_sales'],
+            'zero_rated_sales' => $totals['zero_rated_sales'],
+            'sc_discount' => $totals['sc_discount'],
+            'pwd_discount' => $totals['pwd_discount'],
+            'naac_discount' => $totals['naac_discount'],
+            'solo_parent_discount' => $totals['solo_parent_discount'],
             'other_discount' => $totals['other_discount'],
             'discount_total' => $totals['discount_total'],
             'refund_amount' => $totals['refund_amount'],
@@ -278,7 +373,7 @@ class RegisterReadingService
             'void_count' => $totals['void_count'],
             'transaction_count' => $totals['transaction_count'],
             'payment_breakdown' => $totals['payment_breakdown'],
-            'uncaptured_fields' => self::UNCAPTURED_BIR_FIELDS,
+            'uncaptured_fields' => self::uncapturedBirFields(),
         ];
     }
 

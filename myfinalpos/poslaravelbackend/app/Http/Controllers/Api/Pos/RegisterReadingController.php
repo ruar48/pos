@@ -82,7 +82,9 @@ class RegisterReadingController extends Controller
                 'terminal_id' => $terminalId,
                 'session' => $session === null ? null : (array) $session,
                 'counters' => (array) $counters,
-                'uncaptured_bir_fields' => RegisterReadingService::UNCAPTURED_BIR_FIELDS,
+                'uncaptured_bir_fields' => RegisterReadingService::uncapturedBirFields(),
+                'machine_identity' => $this->readings->machineIdentity(),
+                'missing_identity_fields' => $this->readings->missingIdentityFields(),
             ],
         ]);
     }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/format_utils.dart';
 import '../pages/pos_home_page.dart';
+import 'statutory_discount_dialog.dart';
 
 class OrderTotalPanel extends StatelessWidget {
   const OrderTotalPanel({
@@ -65,6 +66,14 @@ class OrderTotalPanel extends StatelessWidget {
             _TotalRow(
               label: 'Coupon (${pageState.appliedCouponCode})',
               value: '-${formatMoney(currency, pageState.couponDiscount)}',
+              valueColor: AppColors.danger,
+              compact: compact,
+            ),
+          if (pageState.hasStatutoryDiscount)
+            _TotalRow(
+              label:
+                  '${statutoryDiscountLabel(pageState.statutoryDiscountType)} (20%)',
+              value: '-${formatMoney(currency, pageState.statutoryDiscountAmount)}',
               valueColor: AppColors.danger,
               compact: compact,
             ),

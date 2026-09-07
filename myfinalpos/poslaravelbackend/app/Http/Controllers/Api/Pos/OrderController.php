@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\Pos;
 
 use App\Http\Controllers\Controller;
+use App\Services\Pos\AppSettingsService;
+use App\Services\Pos\BirSalesBreakdown;
 use App\Services\Pos\CashDrawerService;
 use App\Services\Pos\LowStockNotificationService;
 use App\Support\BusinessDay;
@@ -173,9 +175,15 @@ class OrderController extends Controller
                         throw new \RuntimeException('Invalid order item payload');
                     }
 
+                    $vatClassColumn = PosHelpers::columnExists(
+                        'products',
+                        'vat_classification',
+                    ) ? ', vat_classification' : '';
+
                     $product = DB::selectOne(
-                        'SELECT id, name, price, stock, cost_price, `option`
-                         FROM products
+                        'SELECT id, name, price, stock, cost_price, `option`'
+                            . $vatClassColumn .
+                        ' FROM products
                          WHERE id = ?
                          LIMIT 1
                          FOR UPDATE',
@@ -227,6 +235,9 @@ class OrderController extends Controller
                             'unit_cost' => $unitCost,
                             'discount' => $itemDiscount,
                             'total' => $lineTotal,
+                            'vat_classification' => (string) (
+                                $product->vat_classification ?? 'vatable'
+                            ),
                         ];
 
                         $productIdKey = (int) $product->id;
@@ -269,6 +280,9 @@ class OrderController extends Controller
                         'unit_cost' => $unitCost,
                         'discount' => $itemDiscount,
                         'total' => $lineTotal,
+                        'vat_classification' => (string) (
+                            $product->vat_classification ?? 'vatable'
+                        ),
                     ];
 
                     $productIdKey = (int) $product->id;
@@ -338,6 +352,50 @@ class OrderController extends Controller
                 }
                 if ($hasReceiptNote) {
                     $orderRow['receipt_note'] = $receiptNote;
+                }
+
+                // BIR breakdown, computed once at checkout and stored on the
+                // order. Recomputing it later from product flags would let a
+                // reclassified product rewrite an already-filed reading.
+                if (PosHelpers::columnExists('orders', 'vatable_sales')) {
+                    $receiptStore = (array) (
+                        app(AppSettingsService::class)->read()['receipt_store']
+                            ?? []
+                    );
+
+                    $breakdown = BirSalesBreakdown::compute(
+                        lines: array_map(
+                            static fn ($item) => [
+                                'total' => (float) $item['total'],
+                                'classification' => $item['vat_classification']
+                                    ?? 'vatable',
+                            ],
+                            $validatedItems,
+                        ),
+                        vatRegistered: BirSalesBreakdown::isVatRegistered(
+                            $receiptStore['tax_status'] ?? null,
+                        ),
+                        vatRate: PosHelpers::taxRate(),
+                        statutoryType: trim((string) $body['statutory_discount_type'] ?? ''),
+                        otherDiscounts: $totalDiscounts,
+                    );
+
+                    $orderRow['vatable_sales'] = $breakdown['vatable_sales'];
+                    $orderRow['vat_exempt_sales'] = $breakdown['vat_exempt_sales'];
+                    $orderRow['zero_rated_sales'] = $breakdown['zero_rated_sales'];
+                    $orderRow['sc_discount'] = $breakdown['sc_discount'];
+                    $orderRow['pwd_discount'] = $breakdown['pwd_discount'];
+                    $orderRow['naac_discount'] = $breakdown['naac_discount'];
+                    $orderRow['solo_parent_discount'] =
+                        $breakdown['solo_parent_discount'];
+                    $orderRow['statutory_discount_type'] =
+                        $breakdown['statutory_discount_type'];
+                    $orderRow['statutory_id_number'] = trim(
+                        (string) ($body['statutory_id_number'] ?? ''),
+                    ) ?: null;
+                    $orderRow['statutory_customer_name'] = trim(
+                        (string) ($body['statutory_customer_name'] ?? ''),
+                    ) ?: null;
                 }
 
                 // Stamp the sale with the register and its open shift so X/Z

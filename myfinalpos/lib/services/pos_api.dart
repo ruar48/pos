@@ -912,6 +912,9 @@ class PosApi {
     String receiptNote = '',
     DateTime? soldAt,
     String terminalId = '',
+    String statutoryDiscountType = '',
+    String statutoryIdNumber = '',
+    String statutoryCustomerName = '',
   }) {
     final orderItems = cartItems.map((item) => item.toJson()).toList();
     return {
@@ -937,6 +940,13 @@ class PosApi {
       // Lets the server attach the sale to the register's open shift so it
       // lands on that terminal's X/Z reading.
       if (terminalId.trim().isNotEmpty) 'terminal_id': terminalId.trim(),
+      // BIR statutory discount. The server recomputes the amount and the
+      // VAT-exempt split from these — it never trusts a client-side figure.
+      if (statutoryDiscountType.trim().isNotEmpty) ...{
+        'statutory_discount_type': statutoryDiscountType.trim(),
+        'statutory_id_number': statutoryIdNumber.trim(),
+        'statutory_customer_name': statutoryCustomerName.trim(),
+      },
     };
   }
 
