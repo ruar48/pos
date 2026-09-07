@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/category_icons.dart';
 import '../../../core/utils/format_utils.dart';
+import '../../../core/utils/top_toast.dart';
 import '../../../models/product.dart';
 import '../pages/pos_home_page.dart';
 
@@ -45,8 +46,15 @@ class ProductSection extends StatelessWidget {
                     child: TextField(
                       controller: pageState.searchController,
                       onChanged: (_) => pageState.refreshView(),
+                      // Handheld barcode scanners behave like keyboards: they
+                      // type the code then press Enter. Submitting an exact
+                      // barcode adds the item and clears the field, so scans
+                      // chain without the cashier touching anything.
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (value) =>
+                          _handleSearchSubmitted(context, pageState, value),
                       decoration: InputDecoration(
-                        hintText: 'Search products...',
+                        hintText: 'Search or scan barcode...',
                         prefixIcon: const Icon(Icons.search),
                         suffixIcon: pageState.searchController.text.isNotEmpty
                             ? IconButton(
@@ -208,6 +216,26 @@ class ProductSection extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// Enter in the search box: treat it as a scan when the text is an exact
+/// barcode, otherwise leave the typed filter alone. The cashier is only
+/// warned when the text matched no barcode *and* no products — a silent
+/// no-op on a real scan is the failure worth catching.
+Future<void> _handleSearchSubmitted(
+  BuildContext context,
+  PosHomePageState pageState,
+  String value,
+) async {
+  final query = value.trim();
+  if (query.isEmpty) return;
+
+  final consumed = await pageState.submitBarcodeScan(context, query);
+  if (consumed) return;
+
+  if (pageState.filteredProducts.isEmpty) {
+    showAppTopWarning('No product found for "$query"');
   }
 }
 

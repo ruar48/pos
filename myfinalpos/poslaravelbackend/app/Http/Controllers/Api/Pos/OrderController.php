@@ -340,6 +340,22 @@ class OrderController extends Controller
                     $orderRow['receipt_note'] = $receiptNote;
                 }
 
+                // Stamp the sale with the register and its open shift so X/Z
+                // readings can scope to it. A sale still goes through when no
+                // shift is open — it just won't appear on a reading.
+                if (PosHelpers::columnExists('orders', 'terminal_id')) {
+                    $terminalId = trim((string) $request->input('terminal_id', ''));
+                    if ($terminalId !== '') {
+                        $orderRow['terminal_id'] = $terminalId;
+
+                        if (PosHelpers::columnExists('orders', 'register_session_id')) {
+                            $orderRow['register_session_id'] = app(
+                                \App\Services\Pos\RegisterSessionService::class,
+                            )->currentSessionId($terminalId);
+                        }
+                    }
+                }
+
                 $orderId = PosHelpers::insertRow('orders', $orderRow);
 
                 $hasVarietyColumns = PosHelpers::columnExists('order_items', 'variety_id');

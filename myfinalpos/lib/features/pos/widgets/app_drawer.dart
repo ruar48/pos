@@ -12,6 +12,7 @@ import '../../management/pages/management_pages.dart';
 import '../../orders/orders.dart';
 import '../../transactions_report/transactions_report_page.dart';
 import '../pages/pos_home_page.dart';
+import '../pages/register_reading_page.dart';
 import '../pages/tablet_printer_page.dart';
 import 'app_drawer_section.dart';
 
@@ -230,6 +231,15 @@ class AppDrawer extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const _DrawerSectionLabel('System'),
+                  _DrawerTile(
+                    icon: Icons.summarize_outlined,
+                    label: 'X / Z Reading',
+                    selected: activeSection == AppDrawerSection.registerReading,
+                    onTap: () => _openPage(
+                      context,
+                      RegisterReadingPage(pageState: pageState),
+                    ),
+                  ),
                   _DrawerTile(
                     icon: Icons.print_outlined,
                     label: 'My Printer',

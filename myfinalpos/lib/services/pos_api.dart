@@ -8,6 +8,7 @@ import 'monitor_disconnect_transport.dart';
 import '../core/utils/format_utils.dart';
 import '../core/utils/top_toast.dart';
 import '../models/accounting_summary.dart';
+import '../models/register_reading.dart';
 import '../models/attendance_board.dart';
 import '../models/attendance_status.dart';
 import '../models/app_settings.dart';
@@ -910,6 +911,7 @@ class PosApi {
     List<Map<String, dynamic>>? payments,
     String receiptNote = '',
     DateTime? soldAt,
+    String terminalId = '',
   }) {
     final orderItems = cartItems.map((item) => item.toJson()).toList();
     return {
@@ -932,6 +934,9 @@ class PosApi {
       'actor_user_id': actorUserId,
       if (payments != null && payments.isNotEmpty) 'payments': payments,
       if (receiptNote.trim().isNotEmpty) 'receipt_note': receiptNote.trim(),
+      // Lets the server attach the sale to the register's open shift so it
+      // lands on that terminal's X/Z reading.
+      if (terminalId.trim().isNotEmpty) 'terminal_id': terminalId.trim(),
     };
   }
 
@@ -1781,6 +1786,113 @@ class PosApi {
     }
 
     return InventoryReport.fromJson(body);
+  }
+
+  // ---------------------------------------------------------------------
+  // Register readings (X / Z) — BIR
+  // ---------------------------------------------------------------------
+
+  /// Open shift and BIR counters for a terminal.
+  Future<RegisterSessionStatus> fetchRegisterStatus(String terminalId) async {
+    final uri = Uri.parse('$apiBaseUrl/register_readings.php').replace(
+      queryParameters: {'action': 'status', 'terminal_id': terminalId},
+    );
+    final response = await _get(uri);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw Exception(body['message'] ?? 'Failed to load register status');
+    }
+
+    return RegisterSessionStatus.fromJson(
+      body['data'] as Map<String, dynamic>,
+    );
+  }
+
+  /// Starts a shift. Fails if one is already open on this terminal.
+  Future<void> openRegisterSession({
+    required String terminalId,
+    int? cashierUserId,
+    double openingCash = 0,
+    int? branchId,
+  }) async {
+    await _postRegisterAction({
+      'action': 'open',
+      'terminal_id': terminalId,
+      if (cashierUserId != null) 'cashier_user_id': '$cashierUserId',
+      'opening_cash': '$openingCash',
+      if (branchId != null) 'branch_id': '$branchId',
+    }, 'Failed to open register shift');
+  }
+
+  /// Interim reading. Safe to run any number of times.
+  Future<RegisterReading> takeXReading({
+    required String terminalId,
+    int? takenByUserId,
+  }) async {
+    final data = await _postRegisterAction({
+      'action': 'x',
+      'terminal_id': terminalId,
+      if (takenByUserId != null) 'taken_by_user_id': '$takenByUserId',
+    }, 'Failed to take X reading');
+
+    return RegisterReading.fromJson(data);
+  }
+
+  /// Closing reading. Irreversible, so the server requires the cash drawer PIN.
+  Future<RegisterReading> takeZReading({
+    required String terminalId,
+    required String cashDrawerPin,
+    int? takenByUserId,
+  }) async {
+    final data = await _postRegisterAction({
+      'action': 'z',
+      'terminal_id': terminalId,
+      'cash_drawer_pin': cashDrawerPin,
+      if (takenByUserId != null) 'taken_by_user_id': '$takenByUserId',
+    }, 'Failed to take Z reading');
+
+    return RegisterReading.fromJson(data);
+  }
+
+  Future<List<RegisterReading>> fetchRegisterReadingHistory(
+    String terminalId, {
+    int limit = 50,
+  }) async {
+    final uri = Uri.parse('$apiBaseUrl/register_readings.php').replace(
+      queryParameters: {
+        'action': 'history',
+        'terminal_id': terminalId,
+        'limit': '$limit',
+      },
+    );
+    final response = await _get(uri);
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw Exception(body['message'] ?? 'Failed to load reading history');
+    }
+
+    return (body['data'] as List<dynamic>)
+        .map((row) => RegisterReading.fromJson(row as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> _postRegisterAction(
+    Map<String, String> fields,
+    String fallbackError,
+  ) async {
+    final response = await http
+        .post(Uri.parse('$apiBaseUrl/register_readings.php'), body: fields)
+        .timeout(const Duration(seconds: 20));
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw Exception(body['message'] ?? fallbackError);
+    }
+
+    final data = body['data'];
+    return data is Map<String, dynamic> ? data : <String, dynamic>{};
   }
 
   String _isoDate(DateTime date) {

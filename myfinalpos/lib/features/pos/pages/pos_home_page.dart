@@ -41,6 +41,52 @@ import '../widgets/product_section.dart';
 import '../widgets/receipt_panel.dart';
 import '../widgets/variety_picker_sheet.dart';
 
+/// A barcode resolved to something sellable. [variety] is null when the code
+/// belongs to the parent product rather than one of its varieties.
+class BarcodeHit {
+  const BarcodeHit({required this.product, this.variety});
+
+  final Product product;
+  final ProductVariety? variety;
+}
+
+/// Exact (not partial) barcode lookup over a catalog.
+///
+/// Variety barcodes win over the parent product's: they identify a single
+/// sellable line, so matching one lets a scan skip the variety picker.
+/// Comparison is trimmed and case-insensitive because codes arrive from
+/// scanners, CSV imports and hand typing alike; blank codes never match.
+BarcodeHit? findBarcodeHit(List<Product> catalog, String rawCode) {
+  final code = rawCode.trim().toLowerCase();
+  if (code.isEmpty) return null;
+
+  bool isExact(String? candidate) {
+    final value = candidate?.trim().toLowerCase();
+    return value != null && value.isNotEmpty && value == code;
+  }
+
+  for (final product in catalog) {
+    for (final variety in product.varieties) {
+      if (isExact(variety.barcode)) {
+        return BarcodeHit(product: product, variety: variety);
+      }
+    }
+  }
+  for (final product in catalog) {
+    if (isExact(product.barcode)) {
+      return BarcodeHit(product: product);
+    }
+  }
+  return null;
+}
+
+/// True when [code] is a non-empty partial match for [query]. Used to make
+/// barcodes and SKUs searchable from the same box the cashier types into.
+bool barcodeContains(String? code, String query) {
+  final value = code?.trim().toLowerCase();
+  return value != null && value.isNotEmpty && value.contains(query);
+}
+
 class PosHomePage extends StatefulWidget {
   const PosHomePage({
     super.key,
@@ -143,11 +189,48 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     return products.where((product) {
       final matchesCategory =
           selectedCategory == 'All' || product.category == selectedCategory;
+      // Barcodes are searchable too, so a handheld scanner (which types the
+      // code like a keyboard) narrows the grid the moment it fires.
       final matchesSearch = query.isEmpty ||
           product.name.toLowerCase().contains(query) ||
-          product.category.toLowerCase().contains(query);
+          product.category.toLowerCase().contains(query) ||
+          barcodeContains(product.barcode, query) ||
+          barcodeContains(product.sku, query) ||
+          product.varieties.any(
+            (variety) => barcodeContains(variety.barcode, query),
+          );
       return matchesCategory && matchesSearch;
     }).toList();
+  }
+
+  /// Exact barcode lookup against the loaded catalog.
+  BarcodeHit? findByBarcode(String rawCode) =>
+      findBarcodeHit(products, rawCode);
+
+  /// Handles a submitted search/scan. Returns true when it resolved to a
+  /// barcode and was consumed as a scan, false when it was ordinary text.
+  Future<bool> submitBarcodeScan(BuildContext context, String rawCode) async {
+    final hit = findByBarcode(rawCode);
+    if (hit == null) return false;
+
+    final live = productById(hit.product.id) ?? hit.product;
+
+    if (hit.variety != null) {
+      // addToCart -> setCartQuantity already dismisses a finished receipt,
+      // leaves payment mode and enforces the stock limit.
+      addToCart(live, variety: hit.variety);
+    } else if (live.hasVarieties) {
+      // A parent barcode can't say which variety was picked up.
+      if (!context.mounted) return true;
+      await promptAddProductToCart(context, live);
+    } else {
+      addToCart(live);
+    }
+
+    // Clear so the next scan starts from an empty field.
+    searchController.clear();
+    refreshView();
+    return true;
   }
 
   double get subtotal => cart.fold(0, (sum, item) => sum + item.total);
@@ -306,6 +389,14 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     final code = receiptStore.posTerminalId.trim();
     return code.isEmpty ? 'POS' : code;
   }
+
+  /// The physical register, used for X/Z readings and stamped on every sale.
+  ///
+  /// Deliberately the machine code and not [_monitorRegisterId] (which appends
+  /// the cashier): BIR's accumulated grand total and Z counter belong to the
+  /// machine. Which cashier worked the shift is recorded on the session row
+  /// instead, so one register still gets one shift at a time.
+  String get registerTerminalId => _monitorRegisterCode;
 
   List<Map<String, dynamic>> _monitorItemsFromCart() {
     return cart
@@ -1325,6 +1416,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       payments: payments,
       receiptNote: receiptNote,
       soldAt: soldAt,
+      terminalId: registerTerminalId,
     );
 
     await PosConnectivity.instance.refresh(force: true);

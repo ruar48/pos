@@ -14,6 +14,7 @@ enum AppDrawerSection {
   promotions,
   superAdmin,
   tabletPrinter,
+  registerReading,
   settings,
   attendance,
   livePosMonitor,

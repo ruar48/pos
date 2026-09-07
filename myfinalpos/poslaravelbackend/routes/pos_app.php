@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\Pos\ProductImageServeController;
 use App\Http\Controllers\Api\Pos\ProductImageUploadController;
 use App\Http\Controllers\Api\Pos\RefundController;
 use App\Http\Controllers\Api\Pos\RefundQueryController;
+use App\Http\Controllers\Api\Pos\RegisterReadingController;
 use App\Http\Controllers\Api\Pos\SettingsController;
 use Illuminate\Support\Facades\Route;
 
@@ -60,6 +61,7 @@ Route::match(['GET', 'OPTIONS'], 'transaction_reports.php', [TransactionReportCo
 Route::match(['GET', 'OPTIONS'], 'get_refunds.php', [RefundQueryController::class, 'handle']);
 Route::match(['POST', 'OPTIONS'], 'orders.php', [OrderController::class, 'handle']);
 Route::match(['POST', 'OPTIONS'], 'process_refund.php', [RefundController::class, 'handle']);
+Route::match(['GET', 'POST', 'OPTIONS'], 'register_readings.php', [RegisterReadingController::class, 'handle']);
 
 Route::match(['GET', 'POST', 'OPTIONS'], 'users.php', [UserController::class, 'handle']);
 Route::match(['GET', 'POST', 'OPTIONS'], 'staff_payments.php', [StaffPaymentController::class, 'handle']);
