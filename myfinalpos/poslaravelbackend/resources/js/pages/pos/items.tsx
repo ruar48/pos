@@ -3,6 +3,7 @@ import {
     AlertTriangle,
     ArrowLeft,
     Boxes,
+    Columns3,
     Download,
     ExternalLink,
     Layers,
@@ -461,10 +462,224 @@ const DEAL_MAX_LENGTH = 500;
 
 const SPREADSHEET_CELL = 'border border-gray-300 p-0 align-middle bg-white';
 const SPREADSHEET_HEADER =
-    'border border-gray-300 bg-gray-50 px-1.5 py-1 text-left text-xs font-semibold text-gray-600';
+    'relative overflow-hidden border border-gray-300 bg-gray-50 px-1.5 py-1 text-left text-xs font-semibold whitespace-nowrap text-gray-600';
 const SPREADSHEET_ROW_NUM =
     'border border-gray-300 bg-gray-100 px-1 py-1 text-center text-xs tabular-nums text-gray-500 select-none';
 const SPREADSHEET_NEW_ROW = 'bg-emerald-50/50';
+
+type ItemsColumnKey =
+    | 'row'
+    | 'category'
+    | 'name'
+    | 'option'
+    | 'price'
+    | 'cost'
+    | 'barcode'
+    | 'deal'
+    | 'stock'
+    | 'actions';
+
+type ItemsColumn = {
+    key: ItemsColumnKey;
+    width: number;
+    min: number;
+    resizable: boolean;
+};
+
+/** Column order must match the header/body cells of the spreadsheet table. */
+const ITEMS_COLUMNS: ItemsColumn[] = [
+    { key: 'row', width: 40, min: 32, resizable: false },
+    { key: 'category', width: 150, min: 80, resizable: true },
+    { key: 'name', width: 340, min: 120, resizable: true },
+    { key: 'option', width: 120, min: 70, resizable: true },
+    { key: 'price', width: 92, min: 64, resizable: true },
+    { key: 'cost', width: 92, min: 64, resizable: true },
+    { key: 'barcode', width: 140, min: 80, resizable: true },
+    { key: 'deal', width: 160, min: 80, resizable: true },
+    { key: 'stock', width: 84, min: 64, resizable: true },
+    { key: 'actions', width: 48, min: 48, resizable: false },
+];
+
+const ITEMS_COLUMN_LABEL: Record<ItemsColumnKey, string> = {
+    row: '#',
+    category: 'Category',
+    name: 'Item',
+    option: 'Option',
+    price: 'Price',
+    cost: 'Cost',
+    barcode: 'Barcode',
+    deal: 'Deal',
+    stock: 'Stock',
+    actions: 'Delete',
+};
+
+const ITEMS_COLUMN_ALIGN: Partial<Record<ItemsColumnKey, string>> = {
+    row: 'text-center',
+    price: 'text-right',
+    cost: 'text-right',
+    stock: 'text-right',
+    actions: 'text-center',
+};
+
+const ITEMS_COLUMN_MAX_WIDTH = 900;
+
+const DEFAULT_COLUMN_WIDTHS = Object.fromEntries(
+    ITEMS_COLUMNS.map((col) => [col.key, col.width]),
+) as Record<ItemsColumnKey, number>;
+
+const COLUMN_WIDTH_STORAGE_KEY = 'pos.items.column-widths.v1';
+
+function clampColumnWidth(key: ItemsColumnKey, width: number) {
+    const column = ITEMS_COLUMNS.find((col) => col.key === key);
+    const min = column?.min ?? 64;
+    return Math.max(min, Math.min(ITEMS_COLUMN_MAX_WIDTH, Math.round(width)));
+}
+
+function readStoredColumnWidths(): Record<ItemsColumnKey, number> {
+    if (typeof window === 'undefined') {
+        return DEFAULT_COLUMN_WIDTHS;
+    }
+    try {
+        const raw = window.localStorage.getItem(COLUMN_WIDTH_STORAGE_KEY);
+        if (!raw) {
+            return DEFAULT_COLUMN_WIDTHS;
+        }
+        const parsed = JSON.parse(raw) as Partial<Record<string, unknown>>;
+        const next = { ...DEFAULT_COLUMN_WIDTHS };
+        for (const column of ITEMS_COLUMNS) {
+            const value = parsed?.[column.key];
+            if (typeof value === 'number' && Number.isFinite(value)) {
+                next[column.key] = clampColumnWidth(column.key, value);
+            }
+        }
+        return next;
+    } catch {
+        return DEFAULT_COLUMN_WIDTHS;
+    }
+}
+
+/** Per-user column widths for the items sheet, remembered across visits. */
+function useItemsColumnWidths() {
+    const [widths, setWidths] =
+        useState<Record<ItemsColumnKey, number>>(readStoredColumnWidths);
+
+    const persist = useCallback((next: Record<ItemsColumnKey, number>) => {
+        try {
+            window.localStorage.setItem(
+                COLUMN_WIDTH_STORAGE_KEY,
+                JSON.stringify(next),
+            );
+        } catch {
+            // Storage unavailable — widths still apply for this session.
+        }
+    }, []);
+
+    const setColumnWidth = useCallback(
+        (key: ItemsColumnKey, width: number) => {
+            setWidths((prev) => {
+                const clamped = clampColumnWidth(key, width);
+                if (prev[key] === clamped) {
+                    return prev;
+                }
+                const next = { ...prev, [key]: clamped };
+                persist(next);
+                return next;
+            });
+        },
+        [persist],
+    );
+
+    const resetColumnWidth = useCallback(
+        (key: ItemsColumnKey) => {
+            setColumnWidth(key, DEFAULT_COLUMN_WIDTHS[key]);
+        },
+        [setColumnWidth],
+    );
+
+    const resetColumnWidths = useCallback(() => {
+        setWidths(DEFAULT_COLUMN_WIDTHS);
+        persist(DEFAULT_COLUMN_WIDTHS);
+    }, [persist]);
+
+    const totalWidth = useMemo(
+        () =>
+            ITEMS_COLUMNS.reduce((sum, column) => sum + widths[column.key], 0),
+        [widths],
+    );
+
+    const isCustomised = useMemo(
+        () =>
+            ITEMS_COLUMNS.some(
+                (column) => widths[column.key] !== DEFAULT_COLUMN_WIDTHS[column.key],
+            ),
+        [widths],
+    );
+
+    return {
+        widths,
+        totalWidth,
+        isCustomised,
+        setColumnWidth,
+        resetColumnWidth,
+        resetColumnWidths,
+    };
+}
+
+function ColumnResizeHandle({
+    columnKey,
+    width,
+    onResize,
+    onReset,
+}: {
+    columnKey: ItemsColumnKey;
+    width: number;
+    onResize: (key: ItemsColumnKey, width: number) => void;
+    onReset: (key: ItemsColumnKey) => void;
+}) {
+    const drag = useRef<{ startX: number; startWidth: number } | null>(null);
+
+    return (
+        <span
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize column"
+            tabIndex={0}
+            title="Drag to resize — double-click to reset"
+            className="absolute top-0 right-0 z-10 h-full w-1.5 cursor-col-resize touch-none select-none hover:bg-blue-500/60 focus:bg-blue-500/60 focus:outline-none"
+            onPointerDown={(event) => {
+                event.preventDefault();
+                drag.current = { startX: event.clientX, startWidth: width };
+                event.currentTarget.setPointerCapture(event.pointerId);
+            }}
+            onPointerMove={(event) => {
+                if (!drag.current) {
+                    return;
+                }
+                onResize(
+                    columnKey,
+                    drag.current.startWidth + (event.clientX - drag.current.startX),
+                );
+            }}
+            onPointerUp={(event) => {
+                drag.current = null;
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            }}
+            onPointerCancel={() => {
+                drag.current = null;
+            }}
+            onDoubleClick={() => onReset(columnKey)}
+            onKeyDown={(event) => {
+                if (event.key === 'ArrowLeft') {
+                    event.preventDefault();
+                    onResize(columnKey, width - 16);
+                } else if (event.key === 'ArrowRight') {
+                    event.preventDefault();
+                    onResize(columnKey, width + 16);
+                }
+            }}
+        />
+    );
+}
 const SPREADSHEET_TOOLBAR =
     'flex flex-col gap-3 border border-gray-300 bg-gray-50 p-2 lg:flex-row lg:items-center lg:justify-between';
 
@@ -635,6 +850,15 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
 
     const [search, setSearch] = useState('');
     const [activeCategory, setActiveCategory] = useState<string>(ALL);
+
+    const {
+        widths: columnWidths,
+        totalWidth: tableWidth,
+        isCustomised: columnsResized,
+        setColumnWidth,
+        resetColumnWidth,
+        resetColumnWidths,
+    } = useItemsColumnWidths();
 
     const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
     const [categoryManageDialogOpen, setCategoryManageDialogOpen] =
@@ -1782,6 +2006,18 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             <Plus className="size-3.5" />
                             New row
                         </Button>
+                        {columnsResized ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 rounded-sm border border-gray-300 bg-white px-3 text-xs text-gray-700 shadow-none hover:bg-gray-100"
+                                variant="outline"
+                                onClick={resetColumnWidths}
+                            >
+                                <Columns3 className="size-3.5" />
+                                Reset columns
+                            </Button>
+                        ) : null}
                         {!standalone ? (
                             <>
                                 <Button
@@ -1922,62 +2158,52 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 below to add products.
                             </p>
                         ) : null}
-                        <table className="w-full min-w-[52rem] border-collapse font-sans text-sm">
+                        <table
+                            className="table-fixed border-collapse font-sans text-sm"
+                            style={{ width: tableWidth, minWidth: tableWidth }}
+                        >
+                            <colgroup>
+                                {ITEMS_COLUMNS.map((column) => (
+                                    <col
+                                        key={column.key}
+                                        style={{ width: columnWidths[column.key] }}
+                                    />
+                                ))}
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th
-                                        className={cn(
-                                            SPREADSHEET_HEADER,
-                                            'w-10 text-center',
-                                        )}
-                                    >
-                                        #
-                                    </th>
-                                    <th className={SPREADSHEET_HEADER}>
-                                        Category
-                                    </th>
-                                    <th className={SPREADSHEET_HEADER}>Item</th>
-                                    <th className={SPREADSHEET_HEADER}>
-                                        Option
-                                    </th>
-                                    <th
-                                        className={cn(
-                                            SPREADSHEET_HEADER,
-                                            'text-right',
-                                        )}
-                                    >
-                                        Price
-                                    </th>
-                                    <th
-                                        className={cn(
-                                            SPREADSHEET_HEADER,
-                                            'text-right',
-                                        )}
-                                    >
-                                        Cost
-                                    </th>
-                                    <th className={SPREADSHEET_HEADER}>
-                                        Barcode
-                                    </th>
-                                    <th className={SPREADSHEET_HEADER}>
-                                        Deal
-                                    </th>
-                                    <th
-                                        className={cn(
-                                            SPREADSHEET_HEADER,
-                                            'text-right',
-                                        )}
-                                    >
-                                        Stock
-                                    </th>
-                                    <th
-                                        className={cn(
-                                            SPREADSHEET_HEADER,
-                                            'w-12 text-center',
-                                        )}
-                                    >
-                                        <span className="sr-only">Delete</span>
-                                    </th>
+                                    {ITEMS_COLUMNS.map((column) => (
+                                        <th
+                                            key={column.key}
+                                            className={cn(
+                                                SPREADSHEET_HEADER,
+                                                ITEMS_COLUMN_ALIGN[column.key],
+                                            )}
+                                            title={
+                                                column.resizable
+                                                    ? `${ITEMS_COLUMN_LABEL[column.key]} — drag the right edge to resize`
+                                                    : undefined
+                                            }
+                                        >
+                                            {column.key === 'actions' ? (
+                                                <span className="sr-only">
+                                                    Delete
+                                                </span>
+                                            ) : (
+                                                ITEMS_COLUMN_LABEL[column.key]
+                                            )}
+                                            {column.resizable ? (
+                                                <ColumnResizeHandle
+                                                    columnKey={column.key}
+                                                    width={
+                                                        columnWidths[column.key]
+                                                    }
+                                                    onResize={setColumnWidth}
+                                                    onReset={resetColumnWidth}
+                                                />
+                                            ) : null}
+                                        </th>
+                                    ))}
                                 </tr>
                             </thead>
                             <tbody>
@@ -3178,6 +3404,7 @@ function SpreadsheetTextCell({
             data-row={dataRow}
             data-col={dataCol}
             maxLength={DEAL_MAX_LENGTH}
+            title={draft || undefined}
             className={cn(
                 SPREADSHEET_INPUT,
                 'text-left',
