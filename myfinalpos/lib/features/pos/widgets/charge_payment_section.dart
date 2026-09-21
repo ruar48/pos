@@ -63,9 +63,13 @@ class _ChargePaymentSectionState extends State<ChargePaymentSection> {
 
   String get _referenceHint => PosPaymentMethods.referenceHint(paymentMethod);
 
-  String get _referenceValidationMessage => paymentMethod == 'Cheque'
-      ? 'Enter a cheque number to continue'
-      : 'Enter a $paymentMethod reference to continue';
+  String get _referenceValidationMessage {
+    if (paymentMethod == 'Cheque') return 'Enter a cheque number to continue';
+    if (paymentMethod == PosPaymentMethods.chargeInvoice) {
+      return 'Enter a charge invoice number to continue';
+    }
+    return 'Enter a $paymentMethod reference to continue';
+  }
 
   bool get _canCompletePayment {
     if (widget.pageState.cart.isEmpty) return false;

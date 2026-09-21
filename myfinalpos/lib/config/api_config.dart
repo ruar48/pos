@@ -2,7 +2,7 @@
 ///
 /// Site: https://posmunoz.store/
 /// API:  https://posmunoz.store/pos_app
-const String kProductionApiBaseUrl = 'https://posmunoz.store/pos_app';
+const String kProductionApiBaseUrl = '';
 
 /// Local Laravel override:
 /// `flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/pos_app`

@@ -2,27 +2,40 @@
     // Use IntelliSense to learn about possible attributes.
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    //
+    // API_BASE_URL points the register at the local Laravel backend
+    // (php artisan serve on port 8000). Inside the Android emulator the host
+    // PC is 10.0.2.2 -- 127.0.0.1 would be the emulator itself.
     "version": "0.2.0",
     "configurations": [
         {
             "name": "myfinalpos",
             "cwd": "myfinalpos",
             "request": "launch",
-            "type": "dart"
+            "type": "dart",
+            "toolArgs": [
+                "--dart-define=API_BASE_URL=http://10.0.2.2:8000/pos_app"
+            ]
         },
         {
             "name": "myfinalpos (profile mode)",
             "cwd": "myfinalpos",
             "request": "launch",
             "type": "dart",
-            "flutterMode": "profile"
+            "flutterMode": "profile",
+            "toolArgs": [
+                "--dart-define=API_BASE_URL=http://10.0.2.2:8000/pos_app"
+            ]
         },
         {
             "name": "myfinalpos (release mode)",
             "cwd": "myfinalpos",
             "request": "launch",
             "type": "dart",
-            "flutterMode": "release"
+            "flutterMode": "release",
+            "toolArgs": [
+                "--dart-define=API_BASE_URL=http://10.0.2.2:8000/pos_app"
+            ]
         }
     ]
 }
