@@ -59,6 +59,7 @@ import {
     updateCategory,
     type PosCategory,
     type PosProduct,
+    type ProductImportStockMode,
     type ProductInput,
 } from '@/lib/items-api';
 import { cn } from '@/lib/utils';
@@ -895,6 +896,8 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
     const [importDialogOpen, setImportDialogOpen] = useState(false);
     const [exportingProducts, setExportingProducts] = useState(false);
     const [importingProducts, setImportingProducts] = useState(false);
+    const [importStockMode, setImportStockMode] =
+        useState<ProductImportStockMode>('delta');
     const importFileRef = useRef<HTMLInputElement>(null);
     const [deleteTarget, setDeleteTarget] = useState<PosProduct | null>(null);
     const [deletingProduct, setDeletingProduct] = useState(false);
@@ -1507,6 +1510,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
 
     const openImportDialog = useCallback(() => {
         requestLeave(() => {
+            setImportStockMode('delta');
             setImportDialogOpen(true);
         });
     }, [requestLeave]);
@@ -1583,10 +1587,12 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
     async function handleImportFile(file: File) {
         setImportingProducts(true);
         const loadingToast = toast.loading(
-            'Importing products… large files may take up to a minute.',
+            importStockMode === 'recount'
+                ? 'Applying physical recount… large files may take up to a minute.'
+                : 'Importing products… large files may take up to a minute.',
         );
         try {
-            const result = await importProducts(file);
+            const result = await importProducts(file, importStockMode);
             toast.success(result.message ?? 'Import complete', {
                 id: loadingToast,
             });
@@ -2908,6 +2914,50 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                             )}
                             Download backup (CSV)
                         </Button>
+                        <div className="grid gap-2">
+                            <Label>What does the stock column mean?</Label>
+                            <Select
+                                value={importStockMode}
+                                onValueChange={(value) =>
+                                    setImportStockMode(
+                                        value as ProductImportStockMode,
+                                    )
+                                }
+                            >
+                                <SelectTrigger className="w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="delta">
+                                        Restock / price update
+                                    </SelectItem>
+                                    <SelectItem value="recount">
+                                        Full physical recount
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                {importStockMode === 'recount' ? (
+                                    <>
+                                        Every stock number in the file is
+                                        treated as the exact counted total and
+                                        replaces the current stock. Leave a
+                                        row&apos;s stock cell blank to skip
+                                        recounting that item. Use this only
+                                        right after a full physical count.
+                                    </>
+                                ) : (
+                                    <>
+                                        A changed stock number is treated as
+                                        the change you made (e.g. +50 for a
+                                        new delivery) and is added on top of
+                                        the current stock — sales that
+                                        happened since you exported the file
+                                        are kept. Use this for everyday edits.
+                                    </>
+                                )}
+                            </p>
+                        </div>
                         <input
                             ref={importFileRef}
                             type="file"

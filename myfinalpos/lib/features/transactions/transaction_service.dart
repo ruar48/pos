@@ -9,6 +9,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../core/constants/pos_payment_methods.dart';
 import '../../models/printer_settings.dart';
 import '../../models/refund_item_request.dart';
 import '../receipt/receipt_printer.dart';
@@ -232,6 +233,11 @@ class TransactionService {
               pw.Text('Date: ${transaction.displayDate} ${transaction.displayTime}'),
               pw.Text('Cashier: ${transaction.cashierName}'),
               pw.Text('Payment: ${transaction.paymentMethod}'),
+              if (transaction.reference.trim().isNotEmpty)
+                pw.Text(
+                  '${PosPaymentMethods.referenceLabel(transaction.paymentMethod)}: '
+                  '${transaction.reference.trim()}',
+                ),
               pw.Divider(),
               for (final item in transaction.items) ...[
                 pw.Text('${item.productName} x${item.quantity}'),

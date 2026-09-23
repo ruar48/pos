@@ -9,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/constants/pos_payment_methods.dart';
 import '../../core/utils/format_utils.dart';
 import '../../models/printer_settings.dart';
 import 'printer_transport.dart';
@@ -348,6 +349,16 @@ class ReceiptData {
     }
     return paymentMethod.toLowerCase() == 'cash';
   }
+
+  /// Non-cash sales carry a reference the customer needs on paper - a charge
+  /// invoice number, cheque number or transfer reference. Split payments
+  /// print their own per-line references instead, so they're excluded here.
+  bool get showsReferenceLine =>
+      !hasSplitPayments && reference.trim().isNotEmpty;
+
+  /// Method-specific label for that line, e.g. "Charge Invoice Number"
+  /// rather than a bare "Ref".
+  String get referenceLabel => PosPaymentMethods.referenceLabel(paymentMethod);
 }
 
 class ReceiptPaymentLine {
@@ -516,6 +527,12 @@ class ThermalReceiptLayout {
       }
     }
     add(_amountRow('Payment Type', data.paymentMethod));
+    if (data.showsReferenceLine) {
+      for (final line
+          in _labelValueLines(data.referenceLabel, data.reference)) {
+        add(line);
+      }
+    }
     add(_amountRow('Total Qty', formatQuantity(data.itemCount)));
     _addReceiptFooter(add, receiptNote: data.receiptNote);
 
@@ -628,6 +645,9 @@ class ThermalReceiptLayout {
       }
     }
     add(previewLabelValue('Payment Type', data.paymentMethod));
+    if (data.showsReferenceLine) {
+      add(previewLabelValue(data.referenceLabel, data.reference.trim()));
+    }
     add(previewLabelValue('Total Qty', formatQuantity(data.itemCount)));
     _addReceiptFooter(add, receiptNote: data.receiptNote);
 

@@ -217,9 +217,15 @@ export async function exportProducts() {
     }>(exportProductsRoute.url());
 }
 
-export async function importProducts(file: File) {
+export type ProductImportStockMode = 'delta' | 'recount';
+
+export async function importProducts(
+    file: File,
+    stockMode: ProductImportStockMode = 'delta',
+) {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('stock_mode', stockMode);
     const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
     const xsrf = match ? decodeURIComponent(match[1]) : '';
 

@@ -176,6 +176,7 @@ class ItemsPageController extends Controller
 
         $request->validate([
             'file' => ['required', 'file', 'mimes:csv,txt,xlsx,xls', 'max:20480'],
+            'stock_mode' => ['nullable', 'string', 'in:delta,recount'],
         ]);
 
         $file = $request->file('file');
@@ -188,12 +189,14 @@ class ItemsPageController extends Controller
         }
 
         $extension = strtolower((string) $file->getClientOriginalExtension());
+        $stockMode = (string) $request->input('stock_mode', 'delta');
 
         try {
             $result = app(ProductImportExportService::class)->importFromFile(
                 $path,
                 $extension !== '' ? $extension : 'csv',
                 PosHelpers::currentActorId($request) ?? Auth::id(),
+                $stockMode,
             );
         } catch (\Throwable $e) {
             return response()->json([

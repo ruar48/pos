@@ -340,4 +340,91 @@ void main() {
     expect(lines.any((line) => line.contains('TAGCHEM')), isTrue);
     expect(lines.any((line) => line.trim() == '- 5 X 100 GRAMS'), isTrue);
   });
+
+  test('charge invoice sale prints the invoice number under payment type', () {
+    final receipt = ReceiptData(
+      orderId: 5,
+      invoiceNumber: 'INV-000055',
+      customerName: 'Juan Farmer',
+      paymentMethod: 'Charge Invoice',
+      items: const [
+        ReceiptLineItem(
+          name: 'ACC Feeds 40kg',
+          quantity: 1,
+          unitPrice: 950,
+          total: 950,
+        ),
+      ],
+      subtotal: 950,
+      vat: 0,
+      discount: 0,
+      manualDiscount: 0,
+      couponDiscount: 0,
+      loyaltyDiscount: 0,
+      total: 950,
+      amountTendered: 950,
+      change: 0,
+      currencySymbol: 'PHP',
+      cashierName: 'Cashier',
+      itemCount: 1,
+      reference: 'CI-2026-0417',
+    );
+
+    final lines = ThermalReceiptLayout(receipt).buildLines();
+    final paymentTypeIndex =
+        lines.indexWhere((line) => line.startsWith('Payment Type'));
+    final referenceIndex =
+        lines.indexWhere((line) => line.startsWith('Charge Invoice Number'));
+
+    expect(paymentTypeIndex, isNonNegative);
+    expect(referenceIndex, paymentTypeIndex + 1);
+    // A long number won't fit beside a 21-character label on 32-column
+    // paper, so it wraps onto the next line - same as CUSTOMER/TIN/ADDRESS.
+    expect(
+      lines.skip(referenceIndex).take(2).join(' '),
+      contains('CI-2026-0417'),
+    );
+
+    final preview = ThermalReceiptLayout(receipt).buildPreviewLines();
+    expect(
+      preview.any((line) =>
+          line.startsWith('Charge Invoice Number') &&
+          line.contains('CI-2026-0417')),
+      isTrue,
+    );
+  });
+
+  test('cash sale prints no reference line', () {
+    final receipt = ReceiptData(
+      orderId: 6,
+      invoiceNumber: 'INV-000056',
+      customerName: 'Walk In Farmer',
+      paymentMethod: 'Cash',
+      items: const [
+        ReceiptLineItem(
+          name: 'ACC Rice 25kg',
+          quantity: 1,
+          unitPrice: 100,
+          total: 100,
+        ),
+      ],
+      subtotal: 100,
+      vat: 0,
+      discount: 0,
+      manualDiscount: 0,
+      couponDiscount: 0,
+      loyaltyDiscount: 0,
+      total: 100,
+      amountTendered: 100,
+      change: 0,
+      currencySymbol: 'PHP',
+      cashierName: 'Cashier',
+      itemCount: 1,
+    );
+
+    final lines = ThermalReceiptLayout(receipt).buildLines();
+
+    expect(lines.any((line) => line.contains('Reference')), isFalse);
+    expect(lines.any((line) => line.contains('Number:')), isFalse);
+  });
 }

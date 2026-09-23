@@ -57,19 +57,31 @@ class ProductImportExportService
     }
 
     /**
+     * @param  'delta'|'recount'  $stockMode  'delta' (default) treats an edited stock cell as
+     *     the change the editor intended (e.g. "+50" for a new delivery), applied on top of
+     *     whatever live stock is now — safe against sales/receiving that happened after the
+     *     file was exported. 'recount' is for a full physical stock count: the typed number
+     *     IS the true count and is written as-is, ignoring live stock and any snapshot; a
+     *     blank stock cell in this mode means "not recounted" and leaves that item's stock
+     *     untouched rather than zeroing it.
      * @return array{created: int, updated: int, skipped: int, errors: list<string>}
      */
-    public function importFromFile(string $filePath, string $extension, ?int $actorUserId = null): array
-    {
+    public function importFromFile(
+        string $filePath,
+        string $extension,
+        ?int $actorUserId = null,
+        string $stockMode = 'delta',
+    ): array {
         $rows = $this->readImportRows($filePath, strtolower($extension));
 
-        return $this->importRows($rows, $actorUserId);
+        return $this->importRows($rows, $actorUserId, $stockMode);
     }
 
     /**
+     * @param  'delta'|'recount'  $stockMode  See importFromFile().
      * @return array{created: int, updated: int, skipped: int, errors: list<string>, warnings: list<string>}
      */
-    public function importFromCsv(string $csvContent, ?int $actorUserId = null): array
+    public function importFromCsv(string $csvContent, ?int $actorUserId = null, string $stockMode = 'delta'): array
     {
         $tmp = tempnam(sys_get_temp_dir(), 'pos-import-');
         if ($tmp === false) {
@@ -85,7 +97,7 @@ class ProductImportExportService
         file_put_contents($tmp, $csvContent);
 
         try {
-            return $this->importFromFile($tmp, 'csv', $actorUserId);
+            return $this->importFromFile($tmp, 'csv', $actorUserId, $stockMode);
         } finally {
             @unlink($tmp);
         }
@@ -248,10 +260,15 @@ class ProductImportExportService
 
     /**
      * @param  list<array<string, string>>  $rows
+     * @param  'delta'|'recount'  $stockMode  See importFromFile().
      * @return array{created: int, updated: int, skipped: int, errors: list<string>, warnings: list<string>}
      */
-    private function importRows(array $rows, ?int $actorUserId = null): array
+    private function importRows(array $rows, ?int $actorUserId = null, string $stockMode = 'delta'): array
     {
+        if ($stockMode !== 'recount') {
+            $stockMode = 'delta';
+        }
+
         if ($rows === []) {
             return [
                 'created' => 0,
@@ -333,6 +350,7 @@ class ProductImportExportService
                     continue;
                 }
 
+                $stockCellBlank = trim((string) ($row['stock'] ?? '')) === '';
                 $stock = $this->parseQuantity($row['stock'] ?? 0, 0.0);
                 $hasSnapshot = array_key_exists('stock_snapshot', $row) && trim((string) $row['stock_snapshot']) !== '';
                 $reorder = max(0, $this->parseInt($row['reorder_level'] ?? 5, 5));
@@ -401,26 +419,42 @@ class ProductImportExportService
                     $productId = (int) $existing->id;
                     $currentStock = (float) $existing->stock;
 
-                    // The snapshot column records what stock was when the file was exported. It
-                    // tells us whether the editor actually touched the stock cell:
-                    //   - untouched (file stock == snapshot): leave live stock alone, so sales or
-                    //     receiving that happened after the export are not rolled back.
-                    //   - edited: the typed number is the new count, applied as-is.
-                    if ($hasSnapshot) {
+                    if ($stockMode === 'recount') {
+                        // A full physical count: the typed number IS the true stock, written
+                        // as-is regardless of live stock or any snapshot. A blank cell means
+                        // "not recounted" — leave that item's stock untouched rather than
+                        // zeroing it (parseQuantity's blank-cell default).
+                        $resolvedStock = $stockCellBlank ? $currentStock : $stock;
+                    } elseif ($hasSnapshot) {
+                        // The snapshot column records what stock was when the file was exported.
+                        // It tells us whether the editor actually touched the stock cell:
+                        //   - untouched (file stock == snapshot): leave live stock alone, so
+                        //     sales or receiving that happened after the export are not rolled
+                        //     back.
+                        //   - edited: the editor's intent is the CHANGE they typed (e.g. "+50"
+                        //     for a new delivery, based on the number they saw at export time),
+                        //     not the absolute figure. Applying the typed number as-is would
+                        //     silently erase any sales or other adjustments that happened
+                        //     between export and import (e.g. export shows 100, a sale drops
+                        //     live stock to 80, staff adds a delivery of 50 and types 150 based
+                        //     on the stale export — writing 150 verbatim would undo the sale;
+                        //     applying the +50 delta to the live 80 correctly yields 130).
                         $snapshotStock = $this->parseQuantity($row['stock_snapshot'], $currentStock);
-                        $stockEdited = round($stock - $snapshotStock, 3) !== 0.0;
+                        $editDelta = round($stock - $snapshotStock, 3);
+                        $stockEdited = $editDelta !== 0.0;
                         $drift = round($currentStock - $snapshotStock, 3);
 
-                        $resolvedStock = $stockEdited ? $stock : $currentStock;
+                        $resolvedStock = $stockEdited ? $currentStock + $editDelta : $currentStock;
 
                         if ($drift !== 0.0 && $stockEdited && count($stockDriftWarnings) < $maxErrors) {
                             $stockDriftWarnings[] = sprintf(
-                                "Row %d: '%s' stock already moved by %s since the file was exported; your typed count (%s) replaced the live value of %s.",
+                                "Row %d: '%s' stock already moved by %s since the file was exported; your edit (%s) was applied on top of the live value of %s, giving %s.",
                                 $displayLine,
                                 $name,
                                 $this->formatQuantity($drift, true),
-                                $this->formatQuantity($stock),
+                                $this->formatQuantity($editDelta, true),
                                 $this->formatQuantity($currentStock),
+                                $this->formatQuantity($resolvedStock),
                             );
                         }
                     } else {
@@ -444,7 +478,9 @@ class ProductImportExportService
                             balanceAfter: (float) $resolvedStock,
                             referenceType: 'import',
                             referenceId: null,
-                            note: 'Stock updated via bulk import',
+                            note: $stockMode === 'recount'
+                                ? 'Stock updated via physical recount import'
+                                : 'Stock updated via bulk import',
                             userId: $actorUserId,
                         );
                     }
@@ -491,8 +527,9 @@ class ProductImportExportService
                 'inventory',
                 'product',
                 null,
-                'Bulk product import',
+                $stockMode === 'recount' ? 'Bulk product import (physical recount)' : 'Bulk product import',
                 [
+                    'stock_mode' => $stockMode,
                     'created' => $created,
                     'updated' => $updated,
                     'skipped' => $skipped,
