@@ -248,6 +248,7 @@ export async function importProducts(
             updated: number;
             skipped: number;
             errors: string[];
+            warnings?: string[];
         };
     };
 

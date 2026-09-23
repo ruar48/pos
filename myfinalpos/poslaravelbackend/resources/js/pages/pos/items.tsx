@@ -898,6 +898,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
     const [importingProducts, setImportingProducts] = useState(false);
     const [importStockMode, setImportStockMode] =
         useState<ProductImportStockMode>('delta');
+    const [importReview, setImportReview] = useState<string[] | null>(null);
     const importFileRef = useRef<HTMLInputElement>(null);
     const [deleteTarget, setDeleteTarget] = useState<PosProduct | null>(null);
     const [deletingProduct, setDeletingProduct] = useState(false);
@@ -1596,11 +1597,20 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             toast.success(result.message ?? 'Import complete', {
                 id: loadingToast,
             });
-            if (result.data?.errors?.length) {
-                toast.warning(
-                    `${result.data.errors.length} row issue(s) — check server response`,
-                );
+
+            const rowErrors = result.data?.errors ?? [];
+            const rowWarnings = result.data?.warnings ?? [];
+            if (rowErrors.length || rowWarnings.length) {
+                // Row errors/warnings can name exactly what happened per item
+                // (e.g. "stock already moved by 5 since the file was
+                // exported... giving 45") — worth a reviewable list, not just
+                // a toast that disappears before anyone can read it.
+                setImportReview([
+                    ...rowErrors.map((line) => `⚠ ${line}`),
+                    ...rowWarnings,
+                ]);
             }
+
             setImportDialogOpen(false);
             await loadData();
         } catch (error) {
@@ -2986,6 +2996,40 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                                 <Loader2 className="size-4 animate-spin" />
                             )}
                             Choose Excel or CSV file
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={importReview !== null}
+                onOpenChange={(open) => {
+                    if (!open) setImportReview(null);
+                }}
+            >
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Import review</DialogTitle>
+                        <DialogDescription>
+                            These rows had something worth double-checking —
+                            e.g. stock that had already changed (from a sale)
+                            between when the file was exported and when it
+                            was imported, and how that was resolved.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <ul className="flex max-h-80 flex-col gap-2 overflow-y-auto py-2 text-sm">
+                        {(importReview ?? []).map((line, index) => (
+                            <li
+                                key={index}
+                                className="rounded-md border bg-muted/40 px-3 py-2"
+                            >
+                                {line}
+                            </li>
+                        ))}
+                    </ul>
+                    <DialogFooter>
+                        <Button onClick={() => setImportReview(null)}>
+                            Got it
                         </Button>
                     </DialogFooter>
                 </DialogContent>
