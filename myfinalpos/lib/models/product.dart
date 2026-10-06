@@ -62,14 +62,6 @@ class Product {
 
   String get primaryUnit => primaryProductUnit(unit);
 
-  String? get displayDeal {
-    final trimmed = deal?.trim();
-    if (trimmed == null || trimmed.isEmpty) {
-      return null;
-    }
-    return trimmed;
-  }
-
   String? get displayOption {
     final trimmed = option?.trim();
     if (trimmed == null || trimmed.isEmpty) {
@@ -93,22 +85,6 @@ class Product {
     }
 
     return varietyStocks.fold<double>(0, (total, value) => total + value);
-  }
-
-  /// Promo/deal line for POS cards (first available deal on variety products).
-  String? get catalogDeal {
-    if (!hasVarieties) {
-      return displayDeal;
-    }
-
-    for (final variety in varieties) {
-      final trimmed = variety.deal?.trim();
-      if (trimmed != null && trimmed.isNotEmpty) {
-        return trimmed;
-      }
-    }
-
-    return null;
   }
 
   String get catalogMetaLabel {

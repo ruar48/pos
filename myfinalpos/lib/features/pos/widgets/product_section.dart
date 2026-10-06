@@ -379,7 +379,6 @@ class ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final deal = product.catalogDeal;
     final option = product.displayOption;
     final stock = product.catalogStock;
 
@@ -462,33 +461,6 @@ class ProductCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (deal != null) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.amber.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: AppColors.amber.withValues(alpha: 0.45),
-                            ),
-                          ),
-                          child: Text(
-                            deal,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: AppColors.amber.withValues(alpha: 0.98),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              height: 1.15,
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),

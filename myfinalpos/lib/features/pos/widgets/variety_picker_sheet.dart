@@ -64,14 +64,6 @@ Future<void> showProductVarietyPicker(
                           : isOut
                               ? 'Out of stock'
                               : '${formatQuantity(stock)} in stock';
-                      final deal = variety.deal?.trim();
-                      final subtitleParts = <String>[];
-                      if (stockLabel.isNotEmpty) {
-                        subtitleParts.add(stockLabel);
-                      }
-                      if (deal != null && deal.isNotEmpty) {
-                        subtitleParts.add(deal);
-                      }
                       return Material(
                         color: AppColors.lightGreen.withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(12),
@@ -87,10 +79,10 @@ Future<void> showProductVarietyPicker(
                               color: AppColors.text,
                             ),
                           ),
-                          subtitle: subtitleParts.isEmpty
+                          subtitle: stockLabel.isEmpty
                               ? null
                               : Text(
-                                  subtitleParts.join(' • '),
+                                  stockLabel,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
