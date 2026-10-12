@@ -837,7 +837,7 @@ class ThermalReceiptLayout {
         ? amount
         : amount.padLeft(_amountColWidth);
     final space = rowWidth - label.length - amountCol.length;
-    if (space >= 0) {
+    if (space >= 1) {
       return '$label${' ' * space}$amountCol';
     }
     final maxLabel = (rowWidth - amountCol.length - 1).clamp(0, label.length);
@@ -901,7 +901,8 @@ class ThermalReceiptLayout {
     final combined = '$baseName $meta';
     final amountCol =
         amount.length > _amountColWidth ? amount.length : _amountColWidth;
-    if (combined.length + amountCol <= _safeTextWidth) {
+    // Keep at least one space between "@price x qty" and the amount.
+    if (combined.length + 1 + amountCol <= _safeTextWidth) {
       result.add(_amountRow(combined, amount));
     } else {
       result.addAll(_wordWrapLines(baseName, _safeTextWidth));

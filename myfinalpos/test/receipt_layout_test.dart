@@ -427,4 +427,39 @@ void main() {
     expect(lines.any((line) => line.contains('Reference')), isFalse);
     expect(lines.any((line) => line.contains('Number:')), isFalse);
   });
+
+  test('large line total keeps a space after the price and quantity', () {
+    final receipt = ReceiptData(
+      orderId: 9,
+      invoiceNumber: 'RCP-010009',
+      customerName: 'Walk In Farmer',
+      paymentMethod: 'Charge Invoice',
+      items: const [
+        ReceiptLineItem(
+          name: 'SUPER PINOY - 400 GRAMS',
+          quantity: 192,
+          unitPrice: 2800,
+          total: 537600,
+        ),
+      ],
+      subtotal: 537600,
+      vat: 0,
+      discount: 0,
+      manualDiscount: 0,
+      couponDiscount: 0,
+      loyaltyDiscount: 0,
+      total: 537600,
+      amountTendered: 537600,
+      change: 0,
+      currencySymbol: 'PHP',
+      cashierName: 'Cashier',
+      itemCount: 192,
+    );
+
+    final lines = ThermalReceiptLayout(receipt).buildLines();
+    final amountLine = lines.firstWhere((line) => line.contains('537,600.00') &&
+        line.contains('x192'));
+
+    expect(amountLine, matches(RegExp(r'x192 +537,600\.00')));
+  });
 }
