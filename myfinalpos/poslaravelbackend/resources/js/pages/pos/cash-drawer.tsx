@@ -903,7 +903,7 @@ export default function CashDrawerPage() {
             toast.error('Expense name is required');
             return;
         }
-        if (!Number.isFinite(amount) || amount <= 0) {
+        if (editExpenseAmount.trim() === '' || !Number.isFinite(amount) || amount < 0) {
             toast.error('Enter a valid expense amount');
             return;
         }

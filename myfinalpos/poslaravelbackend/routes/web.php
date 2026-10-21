@@ -67,6 +67,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/pos/inventory', [InventoryPageController::class, 'index'])->name('pos.inventory');
     Route::get('/pos/inventory/report', [InventoryPageController::class, 'report'])->name('pos.inventory.report');
     Route::post('/pos/inventory/stock', [InventoryPageController::class, 'adjustStock'])->name('pos.inventory.stock');
+    // Throttled so the 4-6 digit cash drawer PIN cannot be guessed by retrying.
+    Route::post('/pos/inventory/stock/update', [InventoryPageController::class, 'updateStockWithPin'])
+        ->middleware('throttle:10,1')
+        ->name('pos.inventory.stock.update');
     Route::get('/pos/reports', [ReportsPageController::class, 'index'])->name('pos.reports');
     Route::get('/pos/reports/summary', [ReportsPageController::class, 'summary'])->name('pos.reports.summary');
     Route::get('/pos/reports/sales-visuals', [ReportsPageController::class, 'salesVisuals'])->name('pos.reports.sales-visuals');
@@ -110,6 +114,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/pos/loyalty', [LoyaltyPageController::class, 'loyalty'])->name('pos.loyalty');
     Route::get('/pos/loyalty/overview', [LoyaltyPageController::class, 'overview'])->name('pos.loyalty.overview');
     Route::get('/pos/loyalty/cards', [LoyaltyPageController::class, 'cards'])->name('pos.loyalty.cards');
+    Route::get('/pos/loyalty/activity', [LoyaltyPageController::class, 'activity'])->name('pos.loyalty.activity');
+    Route::get('/pos/loyalty/activity/export', [LoyaltyPageController::class, 'exportActivity'])->name('pos.loyalty.activity.export');
     Route::post('/pos/loyalty/settings', [LoyaltyPageController::class, 'updateSettings'])->name('pos.loyalty.settings');
     Route::get('/pos/promotions', [PromotionsPageController::class, 'index'])->name('pos.promotions');
     Route::get('/pos/promotions/coupons', [PromotionsPageController::class, 'coupons'])->name('pos.promotions.coupons');

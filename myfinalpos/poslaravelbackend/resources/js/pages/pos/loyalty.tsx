@@ -3,6 +3,7 @@ import {
     Award,
     Check,
     Gift,
+    History,
     Loader2,
     Pencil,
     RefreshCw,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { LoyaltyActivityPanel } from '@/components/pos/loyalty-activity-panel';
 import { LoyaltyNfcOverlay } from '@/components/pos/loyalty-nfc-overlay';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -43,7 +45,7 @@ import {
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 
-type TabKey = 'customers' | 'program';
+type TabKey = 'customers' | 'activity' | 'program';
 type CustomerFilter = 'All' | 'With card' | 'No card' | 'Active';
 
 function formatInt(value: number): string {
@@ -401,6 +403,7 @@ export default function PosLoyalty() {
 
     const tabs: { key: TabKey; label: string; icon: LucideIcon }[] = [
         { key: 'customers', label: 'Customers & Points', icon: Users },
+        { key: 'activity', label: 'Points Activity', icon: History },
         { key: 'program', label: 'Program Settings', icon: Award },
     ];
 
@@ -479,7 +482,9 @@ export default function PosLoyalty() {
                     })}
                 </div>
 
-                {loading ? (
+                {tab === 'activity' ? (
+                    <LoyaltyActivityPanel />
+                ) : loading ? (
                     <div className="agri-card flex items-center justify-center gap-2 py-20 text-muted-foreground">
                         <Loader2 className="size-5 animate-spin" />
                         Loading...

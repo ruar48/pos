@@ -371,9 +371,10 @@ class CashDrawerService
             throw new \InvalidArgumentException('Expense name is required');
         }
 
+        // Zero is allowed here so staff can zero out an existing expense.
         $amount = round((float) $request->input('amount', $expense->amount), 2);
-        if ($amount <= 0) {
-            throw new \InvalidArgumentException('Expense amount must be greater than zero');
+        if ($amount < 0) {
+            throw new \InvalidArgumentException('Expense amount cannot be negative');
         }
 
         $paymentType = strtolower(trim((string) $request->input('payment_type', $expense->payment_type)));

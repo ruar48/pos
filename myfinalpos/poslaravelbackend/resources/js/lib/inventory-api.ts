@@ -213,6 +213,22 @@ export async function loadInventoryReport(
     }
 }
 
+/** Set an exact count; requires a reason and the cash drawer PIN. */
+export async function updateInventoryStockWithPin(input: {
+    product_id: number;
+    variety_id?: number;
+    stock: number;
+    reason: string;
+    pin: string;
+}) {
+    clearInventoryReportCache();
+
+    return laravelFetch('/pos/inventory/stock/update', {
+        method: 'POST',
+        body: JSON.stringify(input),
+    });
+}
+
 export async function adjustInventoryStock(input: {
     product_id: number;
     variety_id?: number;

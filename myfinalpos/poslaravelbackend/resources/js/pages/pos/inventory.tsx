@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/select';
 import {
     adjustInventoryStock,
+    updateInventoryStockWithPin,
     fetchInventoryReport,
     fetchInventoryReportPage,
     type InventoryFilteredTotals,
@@ -1264,34 +1265,45 @@ function StockAdjustDialog({
     onClose: () => void;
     onSaved: () => void;
 }) {
-    const [mode, setMode] = useState<'set' | 'add' | 'remove'>('add');
+    const [mode, setMode] = useState<'update' | 'add' | 'remove'>('add');
     const [amount, setAmount] = useState('');
+    const [reason, setReason] = useState('');
+    const [pin, setPin] = useState('');
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (target) {
             setMode('add');
             setAmount('');
+            setReason('');
+            setPin('');
         }
     }, [target]);
 
     if (!target) return null;
 
     const parsed = parseFloat(amount);
-    const valid = Number.isFinite(parsed) && parsed >= 0 && amount.trim() !== '';
+    const amountValid = Number.isFinite(parsed) && parsed >= 0 && amount.trim() !== '';
+    const valid =
+        amountValid &&
+        (mode !== 'update' || (reason.trim() !== '' && pin.trim() !== ''));
     const projected =
-        mode === 'set'
+        mode === 'update'
             ? parsed
             : mode === 'add'
               ? target.live_stock + parsed
               : target.live_stock - parsed;
 
     const save = async () => {
-        if (!valid) {
+        if (!amountValid) {
             toast.error('Enter a valid quantity');
             return;
         }
-        if (mode !== 'set' && projected < 0) {
+        if (mode === 'update' && (reason.trim() === '' || pin.trim() === '')) {
+            toast.error('Enter a reason and the cash drawer PIN');
+            return;
+        }
+        if (mode !== 'update' && projected < 0) {
             toast.error('Stock cannot go below zero');
             return;
         }
@@ -1303,14 +1315,19 @@ function StockAdjustDialog({
                     ? { variety_id: target.variety_id }
                     : {}),
             };
-            const payload =
-                mode === 'set'
-                    ? { ...base, stock: parsed }
-                    : {
-                          ...base,
-                          delta: mode === 'add' ? parsed : -parsed,
-                      };
-            await adjustInventoryStock(payload);
+            if (mode === 'update') {
+                await updateInventoryStockWithPin({
+                    ...base,
+                    stock: parsed,
+                    reason: reason.trim(),
+                    pin: pin.trim(),
+                });
+            } else {
+                await adjustInventoryStock({
+                    ...base,
+                    delta: mode === 'add' ? parsed : -parsed,
+                });
+            }
             const label = target.variety_name
                 ? `${target.product_name} · ${target.variety_name}`
                 : target.product_name;
@@ -1344,7 +1361,7 @@ function StockAdjustDialog({
                             [
                                 { key: 'add', label: 'Add' },
                                 { key: 'remove', label: 'Remove' },
-                                { key: 'set', label: 'Set to' },
+                                { key: 'update', label: 'Update' },
                             ] as const
                         ).map((m) => (
                             <button
@@ -1364,7 +1381,9 @@ function StockAdjustDialog({
                     </div>
 
                     <div className="space-y-1.5">
-                        <Label htmlFor="adjust-amount">Quantity</Label>
+                        <Label htmlFor="adjust-amount">
+                            {mode === 'update' ? 'New quantity' : 'Quantity'}
+                        </Label>
                         <Input
                             id="adjust-amount"
                             type="number"
@@ -1378,7 +1397,37 @@ function StockAdjustDialog({
                         />
                     </div>
 
-                    {valid && (
+                    {mode === 'update' && (
+                        <>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="adjust-reason">Reason</Label>
+                                <Input
+                                    id="adjust-reason"
+                                    maxLength={200}
+                                    value={reason}
+                                    onChange={(e) => setReason(e.target.value)}
+                                    placeholder="e.g. Physical count, damaged bags"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="adjust-pin">Cash drawer PIN</Label>
+                                <Input
+                                    id="adjust-pin"
+                                    type="password"
+                                    inputMode="numeric"
+                                    autoComplete="off"
+                                    maxLength={6}
+                                    value={pin}
+                                    onChange={(e) =>
+                                        setPin(e.target.value.replace(/\D/g, ''))
+                                    }
+                                    placeholder="••••"
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {amountValid && (
                         <div className="rounded-lg bg-secondary/40 px-3 py-2 text-sm">
                             New stock level:{' '}
                             <span
