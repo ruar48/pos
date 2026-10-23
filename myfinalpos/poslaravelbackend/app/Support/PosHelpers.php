@@ -439,6 +439,29 @@ class PosHelpers
      *
      * @param  float  $lineTotalsSum  SUM(order_items.total) for the whole order
      */
+    /**
+     * Per-item discounts live only on order_items, so a report that sums the
+     * order-level discount columns alone under-reports what customers saved.
+     * Join this (aliased idisc, one row per order) and add
+     * orderItemDiscountExpr() so every screen shows the same discount total.
+     * Early sales stored discount_amount as 0 even though the line total was
+     * discounted, so the larger of it and price x qty - total is used (as
+     * the tablet's sales history does).
+     */
+    public static function orderItemDiscountJoin(): string
+    {
+        return self::columnExists('order_items', 'discount_amount')
+            ? 'LEFT JOIN (SELECT order_id, SUM(GREATEST(COALESCE(discount_amount, 0), ROUND(price * quantity, 2) - total)) AS item_discount FROM order_items GROUP BY order_id) idisc ON idisc.order_id = o.id'
+            : '';
+    }
+
+    public static function orderItemDiscountExpr(): string
+    {
+        return self::columnExists('order_items', 'discount_amount')
+            ? 'COALESCE(idisc.item_discount, 0)'
+            : '0';
+    }
+
     public static function refundMerchandiseRatio(object $order, float $lineTotalsSum): float
     {
         $subtotal = round((float) ($order->subtotal ?? 0), 2);

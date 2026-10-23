@@ -77,6 +77,9 @@ class ReportService
         $refundJoin = $this->refundJoin();
         $refundAmount = $this->refundAmountExpr();
         $netExpr = "(o.total_amount - {$refundAmount})";
+        // Item discounts included, matching the Transactions report.
+        $itemDiscountJoin = PosHelpers::orderItemDiscountJoin();
+        $itemDiscountExpr = PosHelpers::orderItemDiscountExpr();
 
         $row = DB::selectOne(
             "SELECT
@@ -84,9 +87,10 @@ class ReportService
                 COALESCE(SUM(o.total_amount), 0) AS gross_sales,
                 COALESCE(SUM({$netExpr}), 0) AS net_sales,
                 COALESCE(SUM(o.vat), 0) AS vat_collected,
-                COALESCE(SUM(COALESCE(o.discount_amount, 0) + COALESCE(o.coupon_discount, 0) + COALESCE(o.loyalty_discount, 0)), 0) AS total_discounts
+                COALESCE(SUM(COALESCE(o.discount_amount, 0) + COALESCE(o.coupon_discount, 0) + COALESCE(o.loyalty_discount, 0) + {$itemDiscountExpr}), 0) AS total_discounts
              FROM orders o
              {$refundJoin}
+             {$itemDiscountJoin}
              WHERE o.created_at BETWEEN :start AND :end",
             ['start' => $startDt, 'end' => $endDt],
         );

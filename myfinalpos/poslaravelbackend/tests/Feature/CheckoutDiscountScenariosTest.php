@@ -674,3 +674,56 @@ test('refund cannot take back earned points the customer already spent', functio
         ->and(DB::table('loyalty_point_logs')->where('order_id', $orderId)->where('action', 'refund')->value('description'))
         ->toContain(($earned - 100).' already spent');
 })->group('scenarios');
+
+test('dashboard, accounting and transaction report show the same discount total when every discount is stacked', function () {
+    $fx = seedScenarioFixtures(0.12);
+    $s = [
+        'vat' => 0.12,
+        'customer' => true,
+        'lines' => [
+            ['key' => 'A', 'qty' => 120, 'dpu' => 31],
+            ['key' => 'C', 'qty' => 30, 'dpu' => 0.5],
+            ['key' => 'D', 'qty' => 2.5, 'dpu' => 3.25],
+        ],
+        'manual' => 3720,
+        'coupon' => 'ZZPCT10',
+        'points' => 15000,
+    ];
+    $client = tabletPayload($fx, $s, 0.12);
+    $exp = expectedOrder($fx, $s, $client, 0.12, SCENARIO_LOYALTY_START_POINTS);
+    $itemDisc = round(array_sum(array_column($exp['lines'], 'discount')), 2);
+    $want = round($itemDisc + $exp['manual'] + $exp['coupon'] + $exp['loyalty'], 2);
+    expect($itemDisc)->toBeGreaterThan(0.0);
+
+    $reports = app(\App\Services\Pos\ReportService::class);
+    $start = now()->startOfDay()->toDateTimeString();
+    $end = now()->endOfDay()->toDateTimeString();
+    $dashboard = fn () => (float) $reports->summary($start, $end)['total_discounts'];
+    $accounting = fn () => $this->getJson('/pos_app/accounting_summary.php?period=all')->json('data');
+
+    $dashBefore = $dashboard();
+    $accBefore = $accounting();
+
+    $res = $this->postJson('/pos_app/orders.php', $client['payload']);
+    $res->assertStatus(201);
+    $orderId = (int) $res->json('order_id');
+
+    $accAfter = $accounting();
+    $delta = fn (string $key) => round((float) $accAfter[$key] - (float) $accBefore[$key], 2);
+
+    expect(round($dashboard() - $dashBefore, 2))->toBe($want);
+    expect($delta('total_discounts'))->toBe($want);
+    expect($delta('manual_discounts'))->toBe(round($itemDisc + $exp['manual'], 2));
+    expect($delta('coupon_discounts'))->toBe($exp['coupon']);
+    expect($delta('loyalty_discounts'))->toBe($exp['loyalty']);
+    // The breakdown adds up to the total, to the centavo.
+    expect(round((float) $accAfter['manual_discounts'] + (float) $accAfter['coupon_discounts'] + (float) $accAfter['loyalty_discounts'], 2))
+        ->toBe(round((float) $accAfter['total_discounts'], 2));
+
+    $recent = collect($accAfter['recent_orders'])->firstWhere('order_id', $orderId);
+    expect(round((float) $recent['discount_total'], 2))->toBe($want);
+
+    $row = collect($this->getJson('/pos_app/transaction_reports.php?view=details&per_page=100&search='.$orderId
+        .'&start='.now()->toDateString().'&end='.now()->toDateString())->json('data.rows'))->firstWhere('id', $orderId);
+    expect(round((float) $row['discount'], 2))->toBe($want);
+});

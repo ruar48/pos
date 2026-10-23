@@ -35,6 +35,11 @@ class AccountingSummaryController extends Controller
                 : '';
             $refundSelect = $useRefunds ? 'COALESCE(rf.refunded_amount, 0)' : '0';
             $periodSql = $this->periodSql($period);
+            // Per-item discounts count as manual (as in sales history and
+            // Reports Overview) so the breakdown adds up to the total and the
+            // total matches the Transactions report.
+            $itemDiscountJoin = PosHelpers::orderItemDiscountJoin();
+            $itemDiscountExpr = PosHelpers::orderItemDiscountExpr();
 
             $summary = DB::selectOne(
                 "SELECT
@@ -42,17 +47,19 @@ class AccountingSummaryController extends Controller
                     COALESCE(SUM(o.total_amount), 0) AS gross_sales,
                     COALESCE(SUM(o.total_amount - {$refundSelect}), 0) AS net_sales,
                     COALESCE(SUM(o.vat), 0) AS vat_collected,
-                    COALESCE(SUM(COALESCE(o.discount_amount, 0)), 0) AS manual_discounts,
+                    COALESCE(SUM(COALESCE(o.discount_amount, 0) + {$itemDiscountExpr}), 0) AS manual_discounts,
                     COALESCE(SUM(COALESCE(o.coupon_discount, 0)), 0) AS coupon_discounts,
                     COALESCE(SUM(COALESCE(o.loyalty_discount, 0)), 0) AS loyalty_discounts,
                     COALESCE(SUM(
                         COALESCE(o.discount_amount, 0) +
+                        {$itemDiscountExpr} +
                         COALESCE(o.coupon_discount, 0) +
                         COALESCE(o.loyalty_discount, 0)
                     ), 0) AS total_discounts,
                     COALESCE(SUM({$refundSelect}), 0) AS refunded_amount
                  FROM orders o
                  {$refundJoin}
+                 {$itemDiscountJoin}
                  WHERE 1 = 1 {$periodSql}",
             );
 
@@ -94,7 +101,7 @@ class AccountingSummaryController extends Controller
                     COALESCE(c.customer_name, 'Walk In Farmer') AS customer_name,
                     o.subtotal,
                     o.vat,
-                    COALESCE(o.discount_amount, 0) AS discount_amount,
+                    COALESCE(o.discount_amount, 0) + {$itemDiscountExpr} AS discount_amount,
                     COALESCE(o.coupon_discount, 0) AS coupon_discount,
                     COALESCE(o.loyalty_discount, 0) AS loyalty_discount,
                     o.total_amount,
@@ -104,6 +111,7 @@ class AccountingSummaryController extends Controller
                  FROM orders o
                  LEFT JOIN customers c ON c.id = o.customer_id
                  {$refundJoin}
+                 {$itemDiscountJoin}
                  WHERE 1 = 1 {$periodSql}
                  ORDER BY o.created_at DESC, o.id DESC
                  LIMIT 10",
