@@ -282,10 +282,6 @@ class OrderController extends Controller
                 }
 
                 $calculatedSubtotal = round($calculatedSubtotal, 2);
-                $totalDiscounts = round($discountAmount + $couponDiscount + $loyaltyDiscount, 2);
-                $netMerchandise = max(0, round($calculatedSubtotal - $totalDiscounts, 2));
-                [$vat, $totalAmount] = PosHelpers::saleVatAndTotal($netMerchandise);
-                $subtotal = $netMerchandise;
 
                 if ($couponCode !== '' && $couponDiscount > 0) {
                     if (! PosHelpers::tableExists('coupons')) {
@@ -305,6 +301,43 @@ class OrderController extends Controller
                         throw new \RuntimeException($validationError);
                     }
 
+                    // Never more than the coupon itself is worth on this order.
+                    $couponDiscount = min(
+                        $couponDiscount,
+                        PosHelpers::calculateCouponDiscount($coupon, $calculatedSubtotal),
+                    );
+                }
+
+                // The tablet checks redeemed points against its cached card,
+                // which can be stale (another tablet, an offline sale) - the
+                // server used to floor the card at 0 and still give the full
+                // peso discount. Redeem at most what the card holds, and never
+                // more pesos than those points are worth.
+                [$loyaltyDiscount, $loyaltyPointsRedeemed] = PosHelpers::capLoyaltyRedemption(
+                    $isWalkIn ? 0 : $customerId,
+                    $loyaltyDiscount,
+                    $loyaltyPointsRedeemed,
+                );
+
+                // Cap rather than reject: an offline-queued sale is retried
+                // until it saves, so a rejection here would jam the queue.
+                $capped = PosHelpers::capOrderDiscounts(
+                    $calculatedSubtotal,
+                    $discountAmount,
+                    $couponDiscount,
+                    $loyaltyDiscount,
+                    $loyaltyPointsRedeemed,
+                );
+                $discountAmount = $capped['manual'];
+                $couponDiscount = $capped['coupon'];
+                $loyaltyDiscount = $capped['loyalty'];
+                $loyaltyPointsRedeemed = $capped['points'];
+                $totalDiscounts = round($discountAmount + $couponDiscount + $loyaltyDiscount, 2);
+                $netMerchandise = max(0, round($calculatedSubtotal - $totalDiscounts, 2));
+                [$vat, $totalAmount] = PosHelpers::saleVatAndTotal($netMerchandise);
+                $subtotal = $netMerchandise;
+
+                if ($couponCode !== '' && $couponDiscount > 0) {
                     PosHelpers::incrementCouponUsage($couponCode);
                 }
 

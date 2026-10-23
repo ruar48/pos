@@ -906,6 +906,7 @@ class _ManualDiscountDialog extends StatefulWidget {
 
 class _ManualDiscountDialogState extends State<_ManualDiscountDialog> {
   late final TextEditingController controller;
+  String? errorMessage;
 
   @override
   void initState() {
@@ -924,7 +925,11 @@ class _ManualDiscountDialogState extends State<_ManualDiscountDialog> {
   }
 
   void _apply() {
-    widget.pageState.applyManualDiscount(toDouble(controller.text));
+    final error = widget.pageState.applyManualDiscount(toDouble(controller.text));
+    if (error != null) {
+      setState(() => errorMessage = error);
+      return;
+    }
     Navigator.pop(context);
     showAppTopSuccess('Discount applied');
   }
@@ -949,10 +954,15 @@ class _ManualDiscountDialogState extends State<_ManualDiscountDialog> {
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
           ],
+          onChanged: (_) {
+            if (errorMessage != null) setState(() => errorMessage = null);
+          },
           decoration: InputDecoration(
             prefixText: widget.pageState.settings.currencySymbol,
             labelText: 'Discount Amount',
             helperText: 'Taken off the order subtotal, not a single item.',
+            errorText: errorMessage,
+            errorMaxLines: 3,
           ),
         ),
       ),

@@ -1,6 +1,6 @@
 import '../core/utils/format_utils.dart';
 
-enum LoyaltyPointAction { earn, redeem, openCard, adjust, other }
+enum LoyaltyPointAction { earn, redeem, openCard, adjust, refund, other }
 
 class LoyaltyPointLog {
   const LoyaltyPointLog({
@@ -38,6 +38,7 @@ class LoyaltyPointLog {
       'redeem' => LoyaltyPointAction.redeem,
       'open_card' => LoyaltyPointAction.openCard,
       'adjust' => LoyaltyPointAction.adjust,
+      'refund' => LoyaltyPointAction.refund,
       _ => LoyaltyPointAction.other,
     };
 
@@ -76,6 +77,8 @@ class LoyaltyPointLog {
         return 'Card Opened';
       case LoyaltyPointAction.adjust:
         return 'Adjusted';
+      case LoyaltyPointAction.refund:
+        return isCredit ? 'Refund - Points Returned' : 'Refund - Points Removed';
       case LoyaltyPointAction.other:
         return 'Activity';
     }

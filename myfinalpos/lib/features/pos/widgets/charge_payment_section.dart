@@ -98,6 +98,12 @@ class _ChargePaymentSectionState extends State<ChargePaymentSection> {
     final splitLines = splitPayments;
     final isSplit = splitLines != null && splitLines.length >= 2;
 
+    final discountOverflow = widget.pageState.discountOverflowMessage;
+    if (discountOverflow != null) {
+      showTopWarning(context, discountOverflow);
+      return;
+    }
+
     if (!isSplit) {
       if (paymentMethod == 'Cash' && amountTendered < widget.pageState.grandTotal) {
         showTopWarning(context, 'Amount tendered is less than total');

@@ -33,12 +33,14 @@ const actionFilters: { key: LoyaltyActivityAction | ''; label: string }[] = [
     { key: 'earn', label: 'Earned' },
     { key: 'redeem', label: 'Redeemed' },
     { key: 'open_card', label: 'Card opened' },
+    { key: 'refund', label: 'Refund' },
 ];
 
 const actionStyles: Record<string, { label: string; className: string }> = {
     earn: { label: 'Earned', className: 'bg-primary/10 text-primary' },
     redeem: { label: 'Redeemed', className: 'bg-amber-500/10 text-amber-600' },
     open_card: { label: 'Card opened', className: 'bg-secondary text-muted-foreground' },
+    refund: { label: 'Refund', className: 'bg-destructive/10 text-destructive' },
 };
 
 function formatInt(value: number): string {

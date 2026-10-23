@@ -55,6 +55,13 @@ class OrderQueryController extends Controller
             $branchJoin = ($hasBranchId && $hasBranchesTable) ? 'LEFT JOIN branches b ON b.id = o.branch_id' : '';
             $cashierJoin = $hasCashierUserId ? 'LEFT JOIN users cashier ON cashier.id = o.cashier_user_id' : '';
 
+            // Optional filters - the tablet used to download every order ever
+            // made (with one items query per order) on startup and after each
+            // sale. from/to are business dates (created_at is stored as local
+            // wall-clock time); with no filter the full list is still
+            // returned so older tablet builds keep working.
+            [$whereSql, $bindings] = $this->filters($request);
+
             $orders = DB::select(
                 "SELECT
                     o.id,
@@ -84,7 +91,9 @@ class OrderQueryController extends Controller
                  {$cashierJoin}
                  {$refundJoin}
                  {$itemDiscountJoin}
+                 {$whereSql}
                  ORDER BY o.created_at DESC, o.id DESC",
+                $bindings,
             );
 
             $hasRefundedQty = PosHelpers::columnExists('order_items', 'refunded_quantity');
@@ -99,10 +108,14 @@ class OrderQueryController extends Controller
                 ? 'COALESCE(oi.discount_amount, 0) AS discount_amount,'
                 : '0 AS discount_amount,';
 
-            $data = [];
-            foreach ($orders as $order) {
-                $orderRow = (array) $order;
-
+            // Items and split payments for all returned orders in a handful
+            // of queries instead of two per order.
+            $orderIds = array_map(static fn ($order) => (int) $order->id, $orders);
+            $itemsByOrder = [];
+            $paymentsByOrder = [];
+            $hasPayments = PosHelpers::tableExists('order_payments');
+            foreach (array_chunk($orderIds, 1000) as $chunk) {
+                $placeholders = implode(',', array_fill(0, count($chunk), '?'));
                 $items = DB::select(
                     "SELECT
                         oi.id,
@@ -117,10 +130,36 @@ class OrderQueryController extends Controller
                         {$itemDiscountColSelect}
                         oi.total
                      FROM order_items oi
-                     WHERE oi.order_id = ?
-                     ORDER BY oi.id ASC",
-                    [(int) $orderRow['id']],
+                     WHERE oi.order_id IN ({$placeholders})
+                     ORDER BY oi.order_id ASC, oi.id ASC",
+                    $chunk,
                 );
+                foreach ($items as $item) {
+                    $itemsByOrder[(int) $item->order_id][] = (array) $item;
+                }
+
+                if ($hasPayments) {
+                    $payments = DB::select(
+                        "SELECT order_id, payment_method, amount, reference
+                         FROM order_payments
+                         WHERE order_id IN ({$placeholders})
+                         ORDER BY id ASC",
+                        $chunk,
+                    );
+                    foreach ($payments as $payment) {
+                        $paymentsByOrder[(int) $payment->order_id][] = [
+                            'payment_method' => (string) ($payment->payment_method ?? 'Cash'),
+                            'amount' => round((float) ($payment->amount ?? 0), 2),
+                            'reference' => ! empty($payment->reference) ? (string) $payment->reference : null,
+                        ];
+                    }
+                }
+            }
+
+            $data = [];
+            foreach ($orders as $order) {
+                $orderRow = (array) $order;
+                $orderId = (int) $orderRow['id'];
 
                 $orderRow['customer_email'] = null;
                 $orderRow['customer_phone'] = $orderRow['table_name']
@@ -129,8 +168,8 @@ class OrderQueryController extends Controller
                 $orderRow['created_at'] = PosDateTime::formatIso(
                     (string) ($orderRow['created_at'] ?? ''),
                 );
-                $orderRow['payments'] = PosHelpers::loadOrderPayments((int) $orderRow['id']);
-                $orderRow['items'] = array_map(fn ($item) => (array) $item, $items);
+                $orderRow['payments'] = $paymentsByOrder[$orderId] ?? [];
+                $orderRow['items'] = $itemsByOrder[$orderId] ?? [];
 
                 $data[] = $orderRow;
             }
@@ -139,5 +178,44 @@ class OrderQueryController extends Controller
         } catch (\Throwable $e) {
             return $this->posServerError($e);
         }
+    }
+
+    /**
+     * WHERE clause for ?order_id=, ?from=YYYY-MM-DD and ?to=YYYY-MM-DD.
+     *
+     * @return array{0: string, 1: array<int, mixed>}
+     */
+    private function filters(Request $request): array
+    {
+        $where = [];
+        $bindings = [];
+
+        $orderId = (int) $request->query('order_id', 0);
+        if ($orderId > 0) {
+            $where[] = 'o.id = ?';
+            $bindings[] = $orderId;
+        }
+
+        $from = $this->validDate($request->query('from'));
+        if ($from !== null) {
+            $where[] = 'o.created_at >= ?';
+            $bindings[] = $from.' 00:00:00';
+        }
+
+        $to = $this->validDate($request->query('to'));
+        if ($to !== null) {
+            // Half-open upper bound keeps an index on created_at usable.
+            $where[] = 'o.created_at < ?';
+            $bindings[] = date('Y-m-d', strtotime($to.' +1 day')).' 00:00:00';
+        }
+
+        return [$where === [] ? '' : 'WHERE '.implode(' AND ', $where), $bindings];
+    }
+
+    private function validDate(mixed $value): ?string
+    {
+        $value = trim((string) ($value ?? ''));
+
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1 ? $value : null;
     }
 }

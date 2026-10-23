@@ -62,7 +62,7 @@ test('admin sees every customer\'s point movements with totals', function () {
 
     expect($response->json('data'))->toHaveCount(3)
         ->and($response->json('data.0.customer_name'))->toBe('Maria Grower')
-        ->and($response->json('data.1.receipt_number'))->toBe('RCP-000015')
+        ->and($response->json('data.1.receipt_number'))->toBe('INV-000015')
         ->and($response->json('totals'))->toBe([
             'earned' => 50, 'redeemed' => 30, 'earn_count' => 1, 'redeem_count' => 1,
         ]);
@@ -102,7 +102,7 @@ test('excel download lists the filtered activity with Sep 5, 2026 style dates', 
 
     expect($sheet->getCell('A2')->getValue())->toBe('Period: Oct 1, 2026 to Oct 31, 2026')
         ->and($sheet->rangeToArray('A6:H6')[0])->toBe([
-            'Oct 5, 2026', '10:00 AM', 'Juan Farmer', 'Redeemed', '-30', '20', 'RCP-000015', null,
+            'Oct 5, 2026', '10:00 AM', 'Juan Farmer', 'Redeemed', '-30', '20', 'INV-000015', null,
         ])
         ->and($sheet->getCell('E6')->getValue())->toBe(-30)
         ->and($sheet->getCell('A7')->getValue())->toBeNull();

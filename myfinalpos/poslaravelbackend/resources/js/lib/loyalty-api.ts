@@ -61,7 +61,7 @@ export async function fetchLoyaltyCards() {
     return laravelFetch<{ data: LoyaltyCard[] }>('/pos/loyalty/cards');
 }
 
-export type LoyaltyActivityAction = 'earn' | 'redeem' | 'open_card';
+export type LoyaltyActivityAction = 'earn' | 'redeem' | 'open_card' | 'refund';
 
 export type LoyaltyActivityRow = {
     id: number;

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -311,9 +310,19 @@ class ReceiptData {
   final String cashierName;
   final List<ReceiptLineItem> items;
   final double itemCount;
+
+  /// Merchandise total net of EVERY discount (item, manual, coupon,
+  /// loyalty) and before VAT - what both checkout and the backend store as
+  /// the order subtotal.
   final double subtotal;
   final double vat;
   final double discount;
+
+  /// Order-level manual discount only - never includes the per-item
+  /// discounts, which are recovered from [items] instead. The orders API
+  /// returns discount_amount with item discounts folded in, so callers
+  /// building a receipt from it must subtract those first (see
+  /// TransactionService.buildReceiptData).
   final double manualDiscount;
   final double couponDiscount;
   final double loyaltyDiscount;
@@ -475,22 +484,11 @@ class ThermalReceiptLayout {
     // DISCOUNT as everything taken off - per-item discounts included, not
     // just the order-level manual/coupon/loyalty ones - so the boss can
     // see the total discount broken out instead of it being silently
-    // baked into a lower SUBTOTAL. TOTAL is unaffected: subtotal (net of
-    // item discounts) already had order-level discounts subtracted from
-    // it, and grossSubtotal - combinedDiscount reduces to that same value.
-    //
-    // data.manualDiscount can arrive already covering the item-level
-    // portion depending on which endpoint produced it (see the same
-    // max()-not-sum guard in SalesHistoryRecord.totalDiscount and
-    // OrdersPage's totalDiscount) - summing it with a freshly recomputed
-    // itemLevelDiscount would then double-count the same peso amount, so
-    // take whichever of the two is larger instead of adding them.
-    final orderLevelDiscount = data.manualDiscount;
-    final itemLevelDiscount = _itemLevelDiscountTotal;
-    final combinedDiscount = max(orderLevelDiscount, itemLevelDiscount) +
-        data.couponDiscount +
-        data.loyaltyDiscount;
-    final grossSubtotal = data.subtotal + itemLevelDiscount;
+    // baked into a lower SUBTOTAL. data.subtotal is net of every discount,
+    // so adding them all back gives the gross and SUBTOTAL - DISCOUNT
+    // always reconciles to TOTAL (less VAT).
+    final combinedDiscount = _combinedDiscount;
+    final grossSubtotal = data.subtotal + combinedDiscount;
     if (!data.hasRefunds) {
       // ORIGINAL TOTAL below already covers this for a refund reprint —
       // showing SUBTOTAL too was redundant per the boss's request.
@@ -603,15 +601,9 @@ class ThermalReceiptLayout {
       }
     }
     add(_divider());
-    // See the matching comment in the real print layout above -
-    // data.manualDiscount can already cover the item-level portion, so
-    // max() (not +) avoids double-counting the same discount.
-    final orderLevelDiscount = data.manualDiscount;
-    final itemLevelDiscount = _itemLevelDiscountTotal;
-    final combinedDiscount = max(orderLevelDiscount, itemLevelDiscount) +
-        data.couponDiscount +
-        data.loyaltyDiscount;
-    final grossSubtotal = data.subtotal + itemLevelDiscount;
+    // See the matching comment in the real print layout above.
+    final combinedDiscount = _combinedDiscount;
+    final grossSubtotal = data.subtotal + combinedDiscount;
     if (!data.hasRefunds) {
       add(previewLabelValue('SUBTOTAL', previewMoney(grossSubtotal)));
       if (combinedDiscount > 0) {
@@ -724,6 +716,18 @@ class ThermalReceiptLayout {
         final lineDiscount = gross - item.total;
         return sum + (lineDiscount > 0.009 ? lineDiscount : 0);
       });
+
+  /// Everything taken off the gross: per-item discounts plus the
+  /// order-level manual/coupon/loyalty ones. These never overlap because
+  /// [ReceiptData.manualDiscount] is order-level only - an earlier max()
+  /// of manual vs item discounts silently dropped a real manual discount
+  /// whenever the order also had item discounts (INV-013507: a 3,720
+  /// manual discount vanished, printing SUBTOTAL 25,680 instead of 29,400).
+  double get _combinedDiscount =>
+      _itemLevelDiscountTotal +
+      data.manualDiscount +
+      data.couponDiscount +
+      data.loyaltyDiscount;
 
   /// Printable columns for the real printed receipt, driven by the
   /// selected printer's configured paper width (e.g. 48 for a 72 mm

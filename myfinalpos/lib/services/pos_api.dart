@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import 'monitor_disconnect_transport.dart';
 import '../core/utils/format_utils.dart';
+import '../core/utils/sales_history_window.dart';
 import '../core/utils/top_toast.dart';
 import '../models/accounting_summary.dart';
 import '../models/attendance_board.dart';
@@ -717,8 +718,16 @@ class PosApi {
     return StaffPayment.fromJson(body['data'] as Map<String, dynamic>);
   }
 
-  Future<List<SalesHistoryRecord>> fetchSalesHistory() async {
-    final uri = Uri.parse('$apiBaseUrl/get_orders.php');
+  /// Orders created on or after [from] and on or before [to] (business
+  /// dates, inclusive). Leaving both null downloads every order ever made -
+  /// only do that when a report really needs all time.
+  Future<List<SalesHistoryRecord>> fetchSalesHistory({
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final uri = Uri.parse('$apiBaseUrl/get_orders.php').replace(
+      queryParameters: ordersDateQuery(from: from, to: to),
+    );
     final response = await _get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 

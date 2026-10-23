@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/layout_utils.dart';
 import '../../../core/utils/format_utils.dart';
+import '../../../core/utils/sales_history_window.dart';
 import '../../../core/utils/top_toast.dart';
 import '../../../models/checkout_completion.dart';
 import '../../../models/app_settings.dart';
@@ -178,6 +179,35 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
           .clamp(0, subtotal)
           .toDouble();
   double get netSubtotal => (subtotal - totalDiscount).clamp(0, subtotal);
+
+  /// What is left of [subtotal] for one more order-level discount once the
+  /// others are taken off. Each of manual / coupon / loyalty used to be
+  /// checked only against the whole subtotal, so stacking all three could
+  /// take more than the order is worth - [totalDiscount] quietly clamped it,
+  /// but the full points were still redeemed and the receipt overstated
+  /// the discount.
+  double discountRoom({
+    bool excludeManual = false,
+    bool excludeCoupon = false,
+    bool excludeLoyalty = false,
+  }) {
+    final used = (excludeManual ? 0 : manualDiscount) +
+        (excludeCoupon ? 0 : couponDiscount) +
+        (excludeLoyalty ? 0 : loyaltyDiscountAmount);
+    return (subtotal - used).clamp(0, subtotal).toDouble();
+  }
+
+  /// Non-null when the order-level discounts no longer fit the subtotal -
+  /// e.g. an item was removed or an item discount added after they were
+  /// applied. Payment is blocked until the cashier fixes it.
+  String? get discountOverflowMessage {
+    final stacked = manualDiscount + couponDiscount + loyaltyDiscountAmount;
+    if (stacked <= subtotal + 0.009) return null;
+    final currency = settings.currencySymbol;
+    return 'Discounts (${formatMoney(currency, stacked)}) are more than the '
+        'order subtotal (${formatMoney(currency, subtotal)}). Reduce the '
+        'manual discount, coupon, or loyalty points before payment.';
+  }
   double get vatAmount => netSubtotal * settings.taxRate;
   double get grandTotal => netSubtotal + vatAmount;
   double get loyaltyDiscountAmount => settings
@@ -722,7 +752,8 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       loadedLoyaltyCards = await api.fetchLoyaltyCards();
     } catch (_) {}
     try {
-      loadedSalesHistory = await api.fetchSalesHistory();
+      loadedSalesHistory =
+          await api.fetchSalesHistory(from: defaultSalesHistoryStart());
     } catch (_) {}
     try {
       loadedSettings = await api.fetchSettings();
@@ -767,9 +798,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       loyaltyCards
         ..clear()
         ..addAll(loadedLoyaltyCards);
-      salesHistory
-        ..clear()
-        ..addAll(loadedSalesHistory);
+      _mergeRecentSales(loadedSalesHistory);
       settings = loadedSettings;
       branches
         ..clear()
@@ -1225,6 +1254,11 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
 
   void enterPaymentMode() {
     if (!_validateCartStock()) return;
+    final overflow = discountOverflowMessage;
+    if (overflow != null) {
+      showAppTopWarning(overflow);
+      return;
+    }
     setState(() => isPaymentMode = true);
     _publishMonitorNow(status: 'payment');
     unawaited(_syncProductStock());
@@ -1403,7 +1437,8 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
               : '$synced offline sales synced to the server.',
         );
         await Future.wait([
-          _reloadServerLists(),
+          // Synced sales keep the date they were rung up offline.
+          _reloadServerLists(salesSince: defaultSalesHistoryStart()),
           refreshProductCatalog(),
           _syncProductStock(),
         ]);
@@ -1450,11 +1485,19 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     setState(() => receiptStore = value);
   }
 
-  void applyManualDiscount(double value) {
+  /// Returns an error message instead of applying when [value] does not fit
+  /// in what coupon/loyalty discounts have left of the subtotal.
+  String? applyManualDiscount(double value) {
+    final room = discountRoom(excludeManual: true);
+    if (value > room + 0.009) {
+      return 'Discount cannot exceed ${formatMoney(settings.currencySymbol, room)}'
+          '${room < subtotal ? ' (what is left after the coupon / loyalty discount)' : ''}.';
+    }
     setState(() {
-      manualDiscount = value.clamp(0, subtotal).toDouble();
+      manualDiscount = value.clamp(0, room).toDouble();
     });
     _scheduleMonitorPublish();
+    return null;
   }
 
   void applyItemDiscount(CartItem item, double value) {
@@ -1478,6 +1521,8 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
         subtotal: subtotal,
       );
       if (!mounted) return 'Could not apply coupon';
+      final overflow = _couponOverflowMessage(result.discountAmount);
+      if (overflow != null) return overflow;
       setState(() {
         appliedCouponCode = result.coupon.code;
         appliedCouponDiscount = result.discountAmount;
@@ -1505,12 +1550,25 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       return _couponMinimumOrderMessage(localCoupon);
     }
     if (!mounted) return 'Could not apply coupon';
+    final overflow =
+        _couponOverflowMessage(localCoupon.discountForSubtotal(subtotal));
+    if (overflow != null) return overflow;
     setState(() {
       appliedCouponCode = localCoupon.code;
       appliedCouponDiscount = localCoupon.discountForSubtotal(subtotal);
     });
     _scheduleMonitorPublish();
     return null;
+  }
+
+  String? _couponOverflowMessage(double couponAmount) {
+    final room = discountRoom(excludeCoupon: true);
+    if (couponAmount <= room + 0.009) return null;
+    final currency = settings.currencySymbol;
+    return 'Coupon discount (${formatMoney(currency, couponAmount)}) is more '
+        'than what is left after the other discounts '
+        '(${formatMoney(currency, room)}). Reduce the manual discount or '
+        'loyalty points first.';
   }
 
   String _couponMinimumOrderMessage(Coupon coupon) {
@@ -1568,13 +1626,20 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       return 'Enter a valid number of points';
     }
 
-    if (usableDiscount > subtotal) {
+    // Measured against what the manual discount and coupon leave, not the
+    // whole subtotal - otherwise stacked discounts redeem points for pesos
+    // that never come off the order.
+    final room = discountRoom(excludeLoyalty: true);
+    if (usableDiscount > room + 0.009) {
       final currency = settings.currencySymbol;
-      final maxDiscount = settings.pesoValueForPoints(card.points).clamp(0, subtotal);
+      final maxDiscount = settings.pesoValueForPoints(card.points).clamp(0, room);
       final maxPoints = settings.loyaltyRedeemPointsPerPeso <= 0
           ? 0
           : (maxDiscount * settings.loyaltyRedeemPointsPerPeso).floor();
-      return 'Discount cannot exceed order subtotal (${formatMoney(currency, subtotal)}). '
+      final label = room < subtotal
+          ? 'what is left after other discounts'
+          : 'order subtotal';
+      return 'Discount cannot exceed $label (${formatMoney(currency, room)}). '
           'Try up to $maxPoints points.';
     }
 
@@ -1606,7 +1671,14 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
           orderType: orderType,
           items: cart
               .map((item) =>
-                  CartItem(product: item.product, quantity: item.quantity))
+                  // Keep the variety and item discount - dropping them made a
+                  // resumed sale ring up at the base product's full price.
+                  CartItem(
+                    product: item.product,
+                    variety: item.variety,
+                    quantity: item.quantity,
+                    discountPerUnit: item.discountPerUnit,
+                  ))
               .toList(),
           discountAmount: manualDiscount,
           couponCode: appliedCouponCode,
@@ -1629,7 +1701,14 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
         ..addAll(
           transaction.items
               .map((item) =>
-                  CartItem(product: item.product, quantity: item.quantity))
+                  // Keep the variety and item discount - dropping them made a
+                  // resumed sale ring up at the base product's full price.
+                  CartItem(
+                    product: item.product,
+                    variety: item.variety,
+                    quantity: item.quantity,
+                    discountPerUnit: item.discountPerUnit,
+                  ))
               .toList(),
         );
       selectedCustomer = transaction.customer;
@@ -2300,11 +2379,75 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   }
 
   Future<void> reloadSalesHistory() async {
-    final records = await api.fetchSalesHistory();
-    salesHistory
-      ..clear()
-      ..addAll(records);
+    final records =
+        await api.fetchSalesHistory(from: defaultSalesHistoryStart());
+    _mergeRecentSales(records);
     if (mounted) setState(() {});
+  }
+
+  /// Earliest order date currently in [salesHistory]; null before the
+  /// first load. Only recent orders are loaded by default - see
+  /// [ensureSalesHistoryCovers] for reports that reach further back.
+  DateTime? _salesHistoryLoadedFrom;
+  bool _salesHistoryAllLoaded = false;
+  bool salesHistoryLoadingOlder = false;
+
+  /// Whether [salesHistory] already holds every order from [start] onwards
+  /// (null = all time).
+  bool salesHistoryCovers(DateTime? start) {
+    if (_salesHistoryAllLoaded) return true;
+    final loadedFrom = _salesHistoryLoadedFrom;
+    if (start == null || loadedFrom == null) return false;
+    return !DateTime(start.year, start.month, start.day).isBefore(loadedFrom);
+  }
+
+  /// Replaces every order from [since] (default [defaultSalesHistoryStart])
+  /// onwards with [recent], keeping older orders already loaded.
+  void _mergeRecentSales(List<SalesHistoryRecord> recent, {DateTime? since}) {
+    final start = since ?? defaultSalesHistoryStart();
+    final ids = {for (final record in recent) record.orderId};
+    salesHistory
+      ..removeWhere(
+        (record) => ids.contains(record.orderId) || !record.createdAt.isBefore(start),
+      )
+      ..addAll(recent)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final loadedFrom = _salesHistoryLoadedFrom;
+    if (loadedFrom == null || start.isBefore(loadedFrom)) {
+      _salesHistoryLoadedFrom = start;
+    }
+  }
+
+  /// Loads the orders a report needs that are older than what is already in
+  /// [salesHistory] - [start] null means all time.
+  Future<void> ensureSalesHistoryCovers(DateTime? start) async {
+    if (salesHistoryCovers(start) || salesHistoryLoadingOlder || isOfflineMode) {
+      return;
+    }
+    final loadedFrom = _salesHistoryLoadedFrom ?? defaultSalesHistoryStart();
+    final from = start == null ? null : DateTime(start.year, start.month, start.day);
+    setState(() => salesHistoryLoadingOlder = true);
+    try {
+      final older = await api.fetchSalesHistory(
+        from: from,
+        to: loadedFrom.subtract(const Duration(days: 1)),
+      );
+      final ids = {for (final record in salesHistory) record.orderId};
+      salesHistory
+        ..addAll(older.where((record) => !ids.contains(record.orderId)))
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (from == null) {
+        _salesHistoryAllLoaded = true;
+      } else {
+        _salesHistoryLoadedFrom = from;
+      }
+    } catch (error) {
+      showAppTopWarning(
+        'Could not load older sales: ${error.toString().replaceFirst('Exception: ', '')}',
+      );
+    } finally {
+      if (mounted) setState(() => salesHistoryLoadingOlder = false);
+    }
   }
 
   Future<void> setActiveBranch(int branchId) async {
@@ -2448,12 +2591,10 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
 
   Future<void> reloadAnalyticsData() async {
     final results = await Future.wait<dynamic>([
-      api.fetchSalesHistory(),
+      api.fetchSalesHistory(from: defaultSalesHistoryStart()),
       api.fetchBranches(),
     ]);
-    salesHistory
-      ..clear()
-      ..addAll(results[0] as List<SalesHistoryRecord>);
+    _mergeRecentSales(results[0] as List<SalesHistoryRecord>);
     final fetchedBranches = results[1] as List<Branch>;
     branches
       ..clear()
@@ -2463,16 +2604,14 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
 
   Future<void> reloadDashboardData() async {
     final results = await Future.wait<dynamic>([
-      api.fetchSalesHistory(),
+      api.fetchSalesHistory(from: defaultSalesHistoryStart()),
       api.fetchItems(),
       widget.currentUser.canMonitorAllBranches
           ? api.fetchBranches()
           : Future<List<Branch>>.value(const []),
     ]);
 
-    salesHistory
-      ..clear()
-      ..addAll(results[0] as List<SalesHistoryRecord>);
+    _mergeRecentSales(results[0] as List<SalesHistoryRecord>);
     final fetchedProducts = results[1] as List<Product>;
     if (fetchedProducts.isNotEmpty) {
       products
@@ -2494,13 +2633,18 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
-  Future<void> _reloadServerLists() async {
+  /// Runs after every sale, so sales history is refreshed only from
+  /// [salesSince] (default today) - re-downloading the whole recent window
+  /// after each checkout was megabytes per sale.
+  Future<void> _reloadServerLists({DateTime? salesSince}) async {
     if (isOfflineMode) return;
+    final now = DateTime.now();
+    final since = salesSince ?? DateTime(now.year, now.month, now.day);
     try {
       final results = await Future.wait<dynamic>([
         api.fetchCustomers(),
         api.fetchLoyaltyCards(),
-        api.fetchSalesHistory(),
+        api.fetchSalesHistory(from: since),
       ]);
 
       customers
@@ -2511,9 +2655,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       loyaltyCards
         ..clear()
         ..addAll(results[1] as List<LoyaltyCard>);
-      salesHistory
-        ..clear()
-        ..addAll(results[2] as List<SalesHistoryRecord>);
+      _mergeRecentSales(results[2] as List<SalesHistoryRecord>, since: since);
       if (mounted) setState(() {});
     } catch (_) {
       // Keep cached lists when the server is unreachable.

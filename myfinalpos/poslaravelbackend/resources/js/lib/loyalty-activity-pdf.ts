@@ -8,6 +8,7 @@ export const loyaltyActionLabels: Record<string, string> = {
     earn: 'Earned',
     redeem: 'Redeemed',
     open_card: 'Card opened',
+    refund: 'Refund',
 };
 
 function parseDate(value: string): Date | null {

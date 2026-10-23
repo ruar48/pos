@@ -171,11 +171,53 @@ class _AnalyticsReportsContentState extends State<AnalyticsReportsContent> {
     });
   }
 
+  DateTime? _requestedHistoryStart;
+  bool _loadingOlderHistory = false;
+
+  /// Only recent orders are loaded by default - pull in older ones when the
+  /// chosen period (custom dates, comparisons) reaches further back.
+  void _requestHistoryCoverage() {
+    final ranges = reportType == AnalyticsReportType.periodComparison
+        ? [
+            AnalyticsEngine.rangeForPreset(
+              comparePresetA,
+              customStart: compareCustomStartA,
+              customEnd: compareCustomEndA,
+            ),
+            AnalyticsEngine.rangeForPreset(
+              comparePresetB,
+              customStart: compareCustomStartB,
+              customEnd: compareCustomEndB,
+            ),
+          ]
+        : [primaryRange];
+    final start = ranges
+        .map((range) => range.start)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    if (widget.pageState.salesHistoryCovers(start) ||
+        _requestedHistoryStart == start) {
+      return;
+    }
+    _requestedHistoryStart = start;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      setState(() => _loadingOlderHistory = true);
+      await widget.pageState.ensureSalesHistoryCovers(start);
+      if (mounted) setState(() => _loadingOlderHistory = false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _requestHistoryCoverage();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (_loadingOlderHistory)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: LinearProgressIndicator(),
+          ),
         _ReportBuilderPanel(
           reportType: reportType,
           periodPreset: periodPreset,

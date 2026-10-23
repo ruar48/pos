@@ -183,7 +183,7 @@ class TransactionRecord {
     );
   }
 
-  String get receiptNumber => 'RCP-${id.toString().padLeft(6, '0')}';
+  String get receiptNumber => 'INV-${id.toString().padLeft(6, '0')}';
 
   double get grandTotal => totalAmount;
 
@@ -310,7 +310,7 @@ class RefundRecord {
     );
   }
 
-  String get receiptNumber => 'RCP-${orderId.toString().padLeft(6, '0')}';
+  String get receiptNumber => 'INV-${orderId.toString().padLeft(6, '0')}';
 
   String get displayTime {
     final hour = createdAt.hour;

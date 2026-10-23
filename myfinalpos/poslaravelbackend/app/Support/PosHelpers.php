@@ -425,6 +425,113 @@ class PosHelpers
     }
 
     /**
+     * Share (0–1) of each order line's own total the customer actually paid
+     * once order-level discounts (manual + coupon + loyalty) are spread
+     * across the lines. order_items.total is already net of the per-item
+     * discount, so only the order-level discounts belong in the ratio.
+     *
+     * Current orders store subtotal already net of order-level discounts
+     * (subtotal + vat == total_amount); legacy rows stored it before them -
+     * same detection as ReportService::merchandiseAtSaleExpr(). Subtracting
+     * the discounts from a current row's subtotal again under-refunded every
+     * partial refund, and stacked discounts could drive the ratio to 0.
+     *
+     * @param  float  $lineTotalsSum  SUM(order_items.total) for the whole order
+     */
+    public static function refundMerchandiseRatio(object $order, float $lineTotalsSum): float
+    {
+        $subtotal = round((float) ($order->subtotal ?? 0), 2);
+        $vat = round((float) ($order->vat ?? 0), 2);
+        $total = round((float) ($order->total_amount ?? 0), 2);
+        $orderDiscounts = round(
+            (float) ($order->discount_amount ?? 0)
+            + (float) ($order->coupon_discount ?? 0)
+            + (float) ($order->loyalty_discount ?? 0),
+            2,
+        );
+
+        $merchandiseAtSale = abs($subtotal + $vat - $total) < 0.05
+            ? $subtotal
+            : $subtotal - $orderDiscounts;
+
+        if ($lineTotalsSum <= 0) {
+            return 1.0;
+        }
+
+        return max(0.0, min(1.0, $merchandiseAtSale / $lineTotalsSum));
+    }
+
+    /**
+     * Limits a checkout's loyalty redemption to the points the customer's
+     * card actually holds (locked FOR UPDATE until the order commits) and
+     * the peso discount to what those points are worth at the redeem rate.
+     *
+     * @return array{0: float, 1: int} [loyalty peso discount, points redeemed]
+     */
+    public static function capLoyaltyRedemption(int $customerId, float $loyaltyDiscount, int $pointsRedeemed): array
+    {
+        $points = max(0, $pointsRedeemed);
+        $loyalty = round(max(0.0, $loyaltyDiscount), 2);
+        if ($customerId <= 0 || $points <= 0 || ! self::tableExists('loyalty_cards')) {
+            return [0.0, 0];
+        }
+
+        $card = DB::selectOne(
+            'SELECT points FROM loyalty_cards WHERE customer_id = ? LIMIT 1 FOR UPDATE',
+            [$customerId],
+        );
+        $available = max(0, (int) ($card->points ?? 0));
+        if ($points > $available) {
+            $loyalty = $points > 0 ? round($loyalty * $available / $points, 2) : 0.0;
+            $points = $available;
+        }
+
+        $rate = (float) self::loyaltySettings()['loyalty_redeem_points_per_peso'];
+        if ($rate > 0) {
+            $loyalty = round(min($loyalty, $points / $rate), 2);
+        }
+
+        return [$loyalty, $points];
+    }
+
+    /**
+     * Caps manual, coupon and loyalty discounts so together they never take
+     * more than the merchandise (already net of item discounts) - each was
+     * only ever validated against the full subtotal on its own, so stacking
+     * them could exceed it. Applied in that order so loyalty is trimmed
+     * first, and redeemed points shrink in proportion so the customer is
+     * not charged points for pesos that were never taken off.
+     *
+     * @return array{manual: float, coupon: float, loyalty: float, points: int}
+     */
+    public static function capOrderDiscounts(
+        float $merchandise,
+        float $manual,
+        float $coupon,
+        float $loyalty,
+        int $pointsRedeemed,
+    ): array {
+        $room = round(max(0.0, $merchandise), 2);
+        $cappedManual = round(min(max(0.0, $manual), $room), 2);
+        $room = round($room - $cappedManual, 2);
+        $cappedCoupon = round(min(max(0.0, $coupon), $room), 2);
+        $room = round($room - $cappedCoupon, 2);
+        $cappedLoyalty = round(min(max(0.0, $loyalty), $room), 2);
+
+        $points = max(0, $pointsRedeemed);
+        if ($loyalty > 0 && $cappedLoyalty < $loyalty) {
+            $points = (int) ceil(round($points * $cappedLoyalty / $loyalty, 4));
+        }
+
+        return [
+            'manual' => $cappedManual,
+            'coupon' => $cappedCoupon,
+            'loyalty' => $cappedLoyalty,
+            'points' => $points,
+        ];
+    }
+
+    /**
      * Compute VAT and total from net merchandise using the store tax setting.
      *
      * @return array{0: float, 1: float} [vat, total]
@@ -592,6 +699,130 @@ class PosHelpers
             orderId: $orderId,
             actorUserId: $actorUserId,
         );
+    }
+
+    /**
+     * Undoes the loyalty effect of a sale in proportion to how much of it
+     * has been refunded so far: points earned on it are taken back and
+     * points redeemed on it are returned. Cumulative, so a sale refunded in
+     * several steps ends up fully reversed once nothing is left, and safe to
+     * call again (it only applies what earlier refunds have not).
+     *
+     * Logged as action "refund": a negative change takes earned points back,
+     * a positive one returns redeemed points. The card never goes below 0.
+     *
+     * @return array{earned_reversed: int, redeemed_returned: int, balance: ?int}
+     */
+    public static function reverseLoyaltyForRefund(int $orderId, ?int $actorUserId = null): array
+    {
+        $none = ['earned_reversed' => 0, 'redeemed_returned' => 0, 'balance' => null];
+        if (! self::tableExists('loyalty_point_logs') || ! self::tableExists('loyalty_cards')) {
+            return $none;
+        }
+
+        $order = DB::selectOne('SELECT customer_id FROM orders WHERE id = ? LIMIT 1', [$orderId]);
+        $customerId = (int) ($order->customer_id ?? 0);
+        if ($customerId <= 0) {
+            return $none;
+        }
+
+        $logs = DB::selectOne(
+            "SELECT
+                COALESCE(SUM(CASE WHEN action = 'earn' THEN points_change ELSE 0 END), 0) AS earned,
+                COALESCE(SUM(CASE WHEN action = 'redeem' THEN -points_change ELSE 0 END), 0) AS redeemed,
+                COALESCE(SUM(CASE WHEN action = 'refund' AND points_change < 0 THEN -points_change ELSE 0 END), 0) AS reversed,
+                COALESCE(SUM(CASE WHEN action = 'refund' AND points_change > 0 THEN points_change ELSE 0 END), 0) AS returned
+             FROM loyalty_point_logs
+             WHERE order_id = ? AND customer_id = ?",
+            [$orderId, $customerId],
+        );
+        $earned = max(0, (int) $logs->earned);
+        $redeemed = max(0, (int) $logs->redeemed);
+        if ($earned === 0 && $redeemed === 0) {
+            return $none;
+        }
+
+        // Share of the sale refunded so far, by line value (net of item
+        // discounts) - exactly 1 once every unit is back, and still
+        // meaningful when the order total was 0.
+        $share = DB::selectOne(
+            'SELECT
+                COALESCE(SUM(total), 0) AS line_value,
+                COALESCE(SUM(CASE WHEN quantity > 0 THEN total * refunded_quantity / quantity ELSE 0 END), 0) AS refunded_value,
+                COALESCE(SUM(quantity), 0) AS qty,
+                COALESCE(SUM(refunded_quantity), 0) AS refunded_qty
+             FROM order_items
+             WHERE order_id = ?',
+            [$orderId],
+        );
+        $remainingQty = (float) $share->qty - (float) $share->refunded_qty;
+        if ($remainingQty <= 0.0001) {
+            $fraction = 1.0;
+        } elseif ((float) $share->line_value > 0) {
+            $fraction = min(1.0, (float) $share->refunded_value / (float) $share->line_value);
+        } else {
+            $fraction = (float) $share->qty > 0 ? min(1.0, (float) $share->refunded_qty / (float) $share->qty) : 0.0;
+        }
+
+        // Round down until fully refunded so a partial refund never takes
+        // back more than its share.
+        $targetReversed = $fraction >= 1.0 ? $earned : (int) floor($earned * $fraction);
+        $targetReturned = $fraction >= 1.0 ? $redeemed : (int) floor($redeemed * $fraction);
+        $toReturn = max(0, $targetReturned - (int) $logs->returned);
+        $toReverse = max(0, $targetReversed - (int) $logs->reversed);
+        if ($toReturn === 0 && $toReverse === 0) {
+            return $none;
+        }
+
+        $card = DB::selectOne(
+            'SELECT id, points FROM loyalty_cards WHERE customer_id = ? LIMIT 1 FOR UPDATE',
+            [$customerId],
+        );
+        if (! $card) {
+            return $none;
+        }
+
+        $balance = (int) $card->points;
+        $label = 'order #'.$orderId;
+
+        if ($toReturn > 0) {
+            $balance += $toReturn;
+            self::insertLoyaltyPointLog(
+                customerId: $customerId,
+                loyaltyCardId: (int) $card->id,
+                action: 'refund',
+                pointsChange: $toReturn,
+                pointsBalanceAfter: $balance,
+                description: 'Returned '.$toReturn.' redeemed points - refund of '.$label,
+                orderId: $orderId,
+                actorUserId: $actorUserId,
+            );
+        }
+
+        // Earned points the customer already spent cannot be clawed back
+        // below zero - take back what is there.
+        $reversed = min($toReverse, $balance);
+        if ($reversed > 0) {
+            $balance -= $reversed;
+            self::insertLoyaltyPointLog(
+                customerId: $customerId,
+                loyaltyCardId: (int) $card->id,
+                action: 'refund',
+                pointsChange: -$reversed,
+                pointsBalanceAfter: $balance,
+                description: 'Removed '.$reversed.' earned points - refund of '.$label
+                    .($reversed < $toReverse ? ' ('.($toReverse - $reversed).' already spent)' : ''),
+                orderId: $orderId,
+                actorUserId: $actorUserId,
+            );
+        }
+
+        DB::update(
+            'UPDATE loyalty_cards SET points = ?, tier = ? WHERE id = ?',
+            [$balance, self::loyaltyTierForPoints($balance), (int) $card->id],
+        );
+
+        return ['earned_reversed' => $reversed, 'redeemed_returned' => $toReturn, 'balance' => $balance];
     }
 
     public static function loyaltyTierForPoints(int $points): string

@@ -23,6 +23,7 @@ class LoyaltyActivityService
         'earn' => 'Earned',
         'redeem' => 'Redeemed',
         'open_card' => 'Card opened',
+        'refund' => 'Refund',
     ];
 
     /**
@@ -66,10 +67,18 @@ class LoyaltyActivityService
              LEFT JOIN users u ON u.id = lpl.actor_user_id';
 
         $totalsWhere = $where === [] ? '' : 'WHERE '.implode(' AND ', $where);
+        // Net of refunds: a refund log with a negative change took earned
+        // points back, a positive one returned redeemed points.
         $totals = (array) DB::selectOne(
             "SELECT
-                COALESCE(SUM(CASE WHEN lpl.action = 'earn' THEN lpl.points_change ELSE 0 END), 0) AS earned,
-                COALESCE(SUM(CASE WHEN lpl.action = 'redeem' THEN -lpl.points_change ELSE 0 END), 0) AS redeemed,
+                COALESCE(SUM(CASE
+                    WHEN lpl.action = 'earn' THEN lpl.points_change
+                    WHEN lpl.action = 'refund' AND lpl.points_change < 0 THEN lpl.points_change
+                    ELSE 0 END), 0) AS earned,
+                COALESCE(SUM(CASE
+                    WHEN lpl.action = 'redeem' THEN -lpl.points_change
+                    WHEN lpl.action = 'refund' AND lpl.points_change > 0 THEN -lpl.points_change
+                    ELSE 0 END), 0) AS redeemed,
                 COALESCE(SUM(lpl.action = 'earn'), 0) AS earn_count,
                 COALESCE(SUM(lpl.action = 'redeem'), 0) AS redeem_count
              {$baseFrom}
@@ -106,7 +115,7 @@ class LoyaltyActivityService
             return PosHelpers::loyaltyPointLogRowToArray($data) + [
                 'customer_name' => $data['customer_name'] ?? null,
                 'receipt_number' => $orderId > 0
-                    ? 'RCP-'.str_pad((string) $orderId, 6, '0', STR_PAD_LEFT)
+                    ? 'INV-'.str_pad((string) $orderId, 6, '0', STR_PAD_LEFT)
                     : null,
             ];
         }, $rows);

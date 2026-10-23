@@ -82,8 +82,21 @@ class _ReportsOverviewContentState extends State<ReportsOverviewContent> {
         ReportsOverviewPeriod.all => null,
       };
 
+  bool _requestedAllHistory = false;
+
   @override
   Widget build(BuildContext context) {
+    // "All" needs every order; only recent ones are loaded by default.
+    if (period == ReportsOverviewPeriod.all &&
+        !_requestedAllHistory &&
+        !widget.pageState.salesHistoryCovers(null)) {
+      _requestedAllHistory = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await widget.pageState.ensureSalesHistoryCovers(null);
+        if (mounted) setState(() {});
+      });
+    }
     final records = widget.pageState.salesHistory;
     final range = _rangeForPeriod(records);
     final filtered = period == ReportsOverviewPeriod.all

@@ -120,6 +120,46 @@ class TransactionState extends ChangeNotifier {
     query = value;
     _syncSelectionWithFilter();
     notifyListeners();
+    _receiptLookupDebounce?.cancel();
+    _receiptLookupDebounce = Timer(const Duration(milliseconds: 600), () {
+      if (query == value && filteredTransactions.isEmpty) {
+        unawaited(_lookUpOlderReceipt(value));
+      }
+    });
+  }
+
+  Timer? _receiptLookupDebounce;
+  int? _pendingReceiptLookup;
+
+  @override
+  void dispose() {
+    _receiptLookupDebounce?.cancel();
+    super.dispose();
+  }
+
+  /// Only recent orders are loaded, so a receipt number from before that
+  /// window (e.g. "INV-004512" or "4512") is fetched on its own.
+  Future<void> _lookUpOlderReceipt(String value) async {
+    final match = RegExp(r'^(?:INV|RCP)?[\s#-]*0*(\d+)$', caseSensitive: false)
+        .firstMatch(value.trim());
+    final orderId = match == null ? null : int.tryParse(match.group(1)!);
+    if (orderId == null || orderId <= 0) return;
+    if (transactions.any((t) => t.id == orderId)) return;
+    if (_pendingReceiptLookup == orderId) return;
+
+    _pendingReceiptLookup = orderId;
+    try {
+      final found = await service.fetchTransactionDetail(orderId);
+      if (found == null || query != value) return;
+      if (transactions.any((t) => t.id == found.id)) return;
+      transactions = [...transactions, found];
+      _syncSelectionWithFilter();
+      notifyListeners();
+    } catch (_) {
+      // Lookup is best-effort; the normal "no match" state still shows.
+    } finally {
+      if (_pendingReceiptLookup == orderId) _pendingReceiptLookup = null;
+    }
   }
 
   void setFilter(TransactionFilterType value) {

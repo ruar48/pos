@@ -10,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../core/constants/pos_payment_methods.dart';
+import '../../core/utils/sales_history_window.dart';
 import '../../models/printer_settings.dart';
 import '../../models/refund_item_request.dart';
 import '../receipt/receipt_printer.dart';
@@ -24,8 +25,20 @@ class TransactionService {
     return Uri.parse('$baseUrl/$path').replace(queryParameters: query);
   }
 
-  Future<List<TransactionRecord>> fetchTransactions() async {
-    final uri = _buildUri('get_orders.php');
+  /// Orders from [from] onwards - defaults to the 1st of last month, which
+  /// covers the 3-day exchange window with room to spare. Older receipts
+  /// are looked up one at a time with [fetchTransactionDetail].
+  Future<List<TransactionRecord>> fetchTransactions({
+    DateTime? from,
+    int? orderId,
+  }) async {
+    final uri = _buildUri(
+      'get_orders.php',
+      ordersDateQuery(
+        from: orderId == null ? (from ?? defaultSalesHistoryStart()) : null,
+        orderId: orderId,
+      ),
+    );
     final response = await http.get(uri).timeout(const Duration(seconds: 12));
 
     if (response.statusCode != 200) {
@@ -73,7 +86,7 @@ class TransactionService {
   }
 
   Future<TransactionRecord?> fetchTransactionDetail(int orderId) async {
-    final transactions = await fetchTransactions();
+    final transactions = await fetchTransactions(orderId: orderId);
     for (final transaction in transactions) {
       if (transaction.id == orderId) {
         return transaction;
@@ -160,6 +173,25 @@ class TransactionService {
     final totalDiscount = transaction.discountAmount +
         transaction.couponDiscount +
         transaction.loyaltyDiscount;
+    // The orders API folds per-item discounts into discount_amount, but
+    // ReceiptData.manualDiscount must be order-level only - the receipt
+    // recovers item discounts from the line items itself, so passing the
+    // combined amount through would count them twice.
+    final itemDiscountSum = transaction.items
+        .fold<double>(0, (sum, item) => sum + item.discount);
+    final orderLevelDiscount = (transaction.discountAmount - itemDiscountSum)
+        .clamp(0, double.infinity)
+        .toDouble();
+    // Each refunded line's own amount is its share of the line total, which
+    // is still before order-level (manual/coupon/loyalty) discounts - the
+    // server refunded less than that. Scale the lines so they add up to the
+    // REFUNDED amount actually paid back.
+    final refundedLines = transaction.refundedItems;
+    final refundedLineSum =
+        refundedLines.fold<double>(0, (sum, item) => sum + item.refundedAmount);
+    final refundLineScale = refundedLineSum > 0.009
+        ? transaction.refundedAmount / refundedLineSum
+        : 1.0;
     final amountTendered =
         transaction.grandTotal + transaction.changeAmount;
 
@@ -183,7 +215,7 @@ class TransactionService {
       subtotal: transaction.subtotal,
       vat: transaction.vat,
       discount: totalDiscount,
-      manualDiscount: transaction.discountAmount,
+      manualDiscount: orderLevelDiscount,
       couponDiscount: transaction.couponDiscount,
       loyaltyDiscount: transaction.loyaltyDiscount,
       total: transaction.grandTotal,
@@ -198,14 +230,14 @@ class TransactionService {
       dateTime: transaction.createdAt,
       store: store ?? const ReceiptStoreConfig(),
       refundedAmount: transaction.refundedAmount,
-      refundItems: transaction.refundedItems
+      refundItems: refundedLines
           .map(
             (item) => ReceiptRefundLineItem(
               name: (item.varietyName == null || item.varietyName!.isEmpty)
                   ? item.productName
                   : '${item.productName} - ${item.varietyName}',
               quantity: item.refundedQuantity,
-              amount: item.refundedAmount,
+              amount: item.refundedAmount * refundLineScale,
             ),
           )
           .toList(),

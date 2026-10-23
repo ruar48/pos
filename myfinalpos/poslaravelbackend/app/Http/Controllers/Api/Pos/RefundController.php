@@ -158,22 +158,16 @@ class RefundController extends Controller
                 $totalRefundAmount = 0.0;
                 $processedLines = [];
 
-                // order_items.total is the pre-discount line amount (price x qty) -
-                // any manual/coupon/loyalty discount is only ever stored at the
-                // order level. Without prorating it back into each line, refunding
-                // items from a discounted order would refund the pre-discount
-                // amount, overpaying the customer by the discount and leaving the
-                // cash drawer short by exactly that much.
-                $orderSubtotal = round((float) ($order->subtotal ?? 0), 2);
-                $totalOrderDiscount = round(
-                    (float) ($order->discount_amount ?? 0)
-                    + (float) ($order->coupon_discount ?? 0)
-                    + (float) ($order->loyalty_discount ?? 0),
-                    2,
-                );
-                $discountRatio = $orderSubtotal > 0
-                    ? max(0.0, min(1.0, ($orderSubtotal - $totalOrderDiscount) / $orderSubtotal))
-                    : 1.0;
+                // order_items.total is net of the line's own item discount, but
+                // manual/coupon/loyalty discounts are only stored at the order
+                // level. Without prorating them back into each line, refunding
+                // items from a discounted order would overpay the customer by
+                // the discount and leave the cash drawer short by that much.
+                $lineTotalsSum = 0.0;
+                foreach ($orderItems as $row) {
+                    $lineTotalsSum += (float) $row->total;
+                }
+                $discountRatio = PosHelpers::refundMerchandiseRatio($order, $lineTotalsSum);
 
                 if (count($refundLines) === 0) {
                     $balance = round($orderTotal - $priorRefunded, 2);
@@ -235,7 +229,10 @@ class RefundController extends Controller
                     }
                 }
 
-                if ($totalRefundAmount <= 0) {
+                // A line discounted to 0 still has to go back into stock -
+                // returning it refunds nothing, which is not an error.
+                $returnsGoods = count($processedLines) > 0;
+                if ($totalRefundAmount < 0 || ($totalRefundAmount == 0 && ! $returnsGoods)) {
                     throw new \RuntimeException('Refund amount must be greater than zero');
                 }
 
@@ -335,6 +332,10 @@ class RefundController extends Controller
                     $stockRestored,
                 ));
 
+                // Take back points earned on the refunded share of the sale
+                // and give back points redeemed on it.
+                $loyalty = PosHelpers::reverseLoyaltyForRefund($orderId, $actorUserId);
+
                 return [
                     'refund_id' => $refundId,
                     'refund_amount' => $totalRefundAmount,
@@ -343,6 +344,7 @@ class RefundController extends Controller
                     'items' => $processedLines,
                     'stock_restored' => $stockRestored,
                     'units_restored' => $unitsRestored,
+                    'loyalty' => $loyalty,
                     'action' => $action,
                     'message' => $unitsRestored > 0
                         ? "$actionLabel processed successfully. {$unitsRestored} unit(s) returned to inventory."

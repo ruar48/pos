@@ -120,11 +120,21 @@ class TransactionReportService
         }
 
         if ($search !== '') {
+            // A receipt number as printed ("INV-013507", "013507", or the
+            // older "RCP-" prefix) is the zero-padded order id - the LIKE on
+            // o.id alone misses it because of the leading zeros.
+            $receiptOrderIdSql = '';
+            if (preg_match('/^(?:INV|RCP)?[\s#-]*0*(\d+)$/i', $search, $receiptMatch)) {
+                $receiptOrderIdSql = 'OR o.id = :search_receipt_id';
+                $params['search_receipt_id'] = (int) $receiptMatch[1];
+            }
+
             // Each LIKE clause needs its own named placeholder — MySQL's native
             // (non-emulated) prepared statements reject the same named
             // parameter bound more than once in one query.
             $searchSql .= 'AND (
                 CAST(o.id AS CHAR) LIKE :search_id
+                '.$receiptOrderIdSql.'
                 OR COALESCE(c.customer_name, "") LIKE :search_customer
                 OR COALESCE(cashier.full_name, "") LIKE :search_cashier
                 OR COALESCE(o.payment_method, "") LIKE :search_payment
@@ -259,7 +269,7 @@ class TransactionReportService
 
             $row = [
                 'id' => $orderId,
-                'receipt_number' => 'RCP-'.str_pad((string) $orderId, 6, '0', STR_PAD_LEFT),
+                'receipt_number' => 'INV-'.str_pad((string) $orderId, 6, '0', STR_PAD_LEFT),
                 'date' => $created->format('d M Y'),
                 'time' => strtolower($created->format('g:ia')),
                 'created_at' => $created->toIso8601String(),

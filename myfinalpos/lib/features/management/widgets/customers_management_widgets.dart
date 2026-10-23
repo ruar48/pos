@@ -1025,6 +1025,8 @@ class _PointsHistoryTile extends StatelessWidget {
         return Icons.card_membership_outlined;
       case LoyaltyPointAction.adjust:
         return Icons.tune;
+      case LoyaltyPointAction.refund:
+        return Icons.undo;
       case LoyaltyPointAction.other:
         return Icons.history;
     }
