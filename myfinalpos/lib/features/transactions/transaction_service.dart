@@ -12,6 +12,7 @@ import 'package:printing/printing.dart';
 import '../../core/constants/pos_payment_methods.dart';
 import '../../core/utils/sales_history_window.dart';
 import '../../services/api_session.dart';
+import '../../services/orders_api_compat.dart';
 import '../../models/printer_settings.dart';
 import '../../models/refund_item_request.dart';
 import '../receipt/receipt_printer.dart';
@@ -26,6 +27,17 @@ class TransactionService {
     return Uri.parse('$baseUrl/$path').replace(queryParameters: query);
   }
 
+  /// Every order from an older backend, kept briefly so looking up single
+  /// receipts right after loading the list doesn't download 14 MB again
+  /// (that backend ignores `order_id` and always sends everything).
+  static List<TransactionRecord>? _fullListCache;
+  static DateTime? _fullListCachedAt;
+
+  static void _clearFullListCache() {
+    _fullListCache = null;
+    _fullListCachedAt = null;
+  }
+
   /// Orders from [from] onwards - defaults to the 1st of last month, which
   /// covers the 3-day exchange window with room to spare. Older receipts
   /// are looked up one at a time with [fetchTransactionDetail].
@@ -33,14 +45,12 @@ class TransactionService {
     DateTime? from,
     int? orderId,
   }) async {
+    final windowStart = orderId == null ? (from ?? defaultSalesHistoryStart()) : null;
     final uri = _buildUri(
       'get_orders.php',
-      ordersDateQuery(
-        from: orderId == null ? (from ?? defaultSalesHistoryStart()) : null,
-        orderId: orderId,
-      ),
+      ordersDateQuery(from: windowStart, orderId: orderId),
     );
-    final response = await apiHttp.get(uri).timeout(const Duration(seconds: 12));
+    final response = await apiHttp.get(uri).timeout(OrdersApiCompat.timeout);
 
     if (response.statusCode != 200) {
       throw HttpException(
@@ -48,7 +58,7 @@ class TransactionService {
       );
     }
 
-    final payload = jsonDecode(response.body);
+    final payload = await decodeJsonOffUiThread(response.body);
     if (payload is! Map || payload['success'] != true) {
       throw FormatException('Invalid response from transaction API');
     }
@@ -56,12 +66,25 @@ class TransactionService {
     final data = payload['data'] as List?;
     if (data == null) return [];
 
-    return data
+    final all = data
         .whereType<Map>()
         .map(
           (raw) => TransactionRecord.fromJson(Map<String, dynamic>.from(raw)),
         )
         .toList();
+
+    final kept = applyOrderFilters<TransactionRecord>(
+      all,
+      idOf: (t) => t.id,
+      createdAtOf: (t) => t.createdAt,
+      from: windowStart,
+      orderId: orderId,
+    );
+    if (kept.length != all.length) {
+      _fullListCache = all;
+      _fullListCachedAt = DateTime.now();
+    }
+    return kept;
   }
 
   Future<List<RefundRecord>> fetchRefunds() async {
@@ -87,6 +110,20 @@ class TransactionService {
   }
 
   Future<TransactionRecord?> fetchTransactionDetail(int orderId) async {
+    // Older backend: answer from the full list just downloaded rather than
+    // fetching every order again for each receipt. Kept only briefly, and
+    // cleared by any refund so a refunded order is never served stale.
+    final cache = _fullListCache;
+    final cachedAt = _fullListCachedAt;
+    if (OrdersApiCompat.serverIgnoresFilters &&
+        cache != null &&
+        cachedAt != null &&
+        DateTime.now().difference(cachedAt) < const Duration(seconds: 45)) {
+      for (final transaction in cache) {
+        if (transaction.id == orderId) return transaction;
+      }
+    }
+
     final transactions = await fetchTransactions(orderId: orderId);
     for (final transaction in transactions) {
       if (transaction.id == orderId) {
@@ -110,6 +147,8 @@ class TransactionService {
     int? actorUserId,
     String? refundPin,
   }) async {
+    // Whatever happens, the cached copy of the orders is now out of date.
+    _clearFullListCache();
     final uri = _buildUri('process_refund.php');
     try {
       final response = await apiHttp
@@ -176,8 +215,10 @@ class TransactionService {
     if (apiMessage.isNotEmpty) {
       message = apiMessage;
     } else if (success) {
-      message = 'Refund processed. Give back '
-          '₱${(refundAmount ?? 0).toStringAsFixed(2)} to the customer.';
+      message = refundAmount != null
+          ? 'Refund processed. Give back '
+              '₱${refundAmount.toStringAsFixed(2)} to the customer.'
+          : 'Refund processed. Check the order for the refunded amount.';
     } else if (payload == null) {
       // A proxy/server error page: the refund may or may not have run.
       message = 'The server returned an error (HTTP $statusCode). The '

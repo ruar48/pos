@@ -41,7 +41,9 @@ Future<void> showRefundSuccessDialog(
   BuildContext context,
   TransactionApiResult result,
 ) {
-  final amount = result.refundAmount ?? 0;
+  // Older servers don't report the amount - never show "₱0.00" as the
+  // amount to hand back; show just the server's message instead.
+  final amount = result.refundAmount;
   return showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -57,24 +59,26 @@ Future<void> showRefundSuccessDialog(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Give back to the customer',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.muted,
+            if (amount != null) ...[
+              const Text(
+                'Give back to the customer',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.muted,
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              formatMoney('₱', amount),
-              style: const TextStyle(
-                fontSize: 40,
-                fontWeight: FontWeight.w900,
-                color: AppColors.danger,
-                height: 1.1,
+              const SizedBox(height: 6),
+              Text(
+                formatMoney('₱', amount),
+                style: const TextStyle(
+                  fontSize: 40,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.danger,
+                  height: 1.1,
+                ),
               ),
-            ),
+            ],
             if (result.message.trim().isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(

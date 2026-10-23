@@ -26,6 +26,10 @@ import 'package:myfinalpos/services/pos_api.dart';
 const _label = String.fromEnvironment('APP_LABEL', defaultValue: 'app');
 const _fixturePath = String.fromEnvironment('E2E_FIXTURE');
 
+/// Running against the backend from before the bug-fix rework (e42179f):
+/// the checks for server features it doesn't have only record what happened.
+const _oldBackend = bool.fromEnvironment('OLD_BACKEND');
+
 void _log(String message) =>
     // ignore: avoid_print
     print('[$_label] $message');
@@ -239,7 +243,11 @@ void main() {
       refundPin: fx['refund_pin'] as String,
     );
     expect(result.success, isTrue, reason: result.message);
-    expect(result.message, contains('Give back'));
+    if (_oldBackend) {
+      _log('OLD BACKEND: no give-back amount in the message');
+    } else {
+      expect(result.message, contains('Give back'));
+    }
 
     final after = await order(loyaltyOrderId);
     expect(after.refundedAmount, greaterThan(0));
@@ -265,7 +273,11 @@ void main() {
     final points = (await api.fetchLoyaltyCards())
         .firstWhere((c) => c.customerId == fx['customer_id'])
         .points;
-    expect(points, pointsBefore, reason: 'redeemed points returned, earned points taken back');
+    if (_oldBackend) {
+      _log('OLD BACKEND: loyalty points not reversed by the refund ($points, was $pointsBefore)');
+    } else {
+      expect(points, pointsBefore, reason: 'redeemed points returned, earned points taken back');
+    }
     _log('full refund: refunded ${after.refundedAmount} = total ${after.totalAmount}; points back to $points');
   });
 
@@ -308,6 +320,11 @@ void main() {
     final settings = await api.fetchSettings();
     final saved = await api.saveSettings(settings: settings, actorUserId: adminId);
     expect(saved.taxRate, settings.taxRate);
+    if (_oldBackend) {
+      await api.saveSettings(settings: settings, actorUserId: cashierId);
+      _log('OLD BACKEND: a cashier can save settings');
+      return;
+    }
     await expectLater(
       api.saveSettings(settings: settings, actorUserId: cashierId),
       throwsA(anything),
@@ -333,13 +350,13 @@ void main() {
     );
     final first = await api.saveOrderPayload(payload);
     final second = await api.saveOrderPayload(payload);
-    if (payload.containsKey('client_order_uuid')) {
+    if (payload.containsKey('client_order_uuid') && !_oldBackend) {
       expect(second, first);
       _log('retry returned the same order #$first (no duplicate)');
     } else {
       expect(second, isNot(first));
       _log('retry created a SECOND order (#$first and #$second) - '
-          'known old-app behaviour, fixed in the new app');
+          'no duplicate protection in the old app or old backend');
     }
   });
 }

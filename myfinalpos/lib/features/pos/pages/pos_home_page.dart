@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/layout_utils.dart';
 import '../../../core/utils/format_utils.dart';
 import '../../../core/utils/sales_history_window.dart';
+import '../../../services/orders_api_compat.dart';
 import '../../../core/utils/top_toast.dart';
 import '../../../models/checkout_completion.dart';
 import '../../../models/app_settings.dart';
@@ -2748,30 +2749,54 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   /// Runs after every sale, so sales history is refreshed only from
   /// [salesSince] (default today) - re-downloading the whole recent window
   /// after each checkout was megabytes per sale.
+  DateTime? _lastSalesHistoryRefresh;
+
   Future<void> _reloadServerLists({DateTime? salesSince}) async {
     if (isOfflineMode) return;
     final now = DateTime.now();
     final since = salesSince ?? DateTime(now.year, now.month, now.day);
-    try {
-      final results = await Future.wait<dynamic>([
-        api.fetchCustomers(),
-        api.fetchLoyaltyCards(),
-        api.fetchSalesHistory(from: since),
-      ]);
 
-      customers
-        ..clear()
-        ..addAll(
-          (results[0] as List<Customer>).where((customer) => !customer.isWalkIn),
-        );
-      loyaltyCards
-        ..clear()
-        ..addAll(results[1] as List<LoyaltyCard>);
-      _mergeRecentSales(results[2] as List<SalesHistoryRecord>, since: since);
-      if (mounted) setState(() {});
-    } catch (_) {
-      // Keep cached lists when the server is unreachable.
+    // An older backend sends the whole order history (14 MB) whatever we
+    // ask for, so after a sale refresh it at most every few minutes there.
+    final lastRefresh = _lastSalesHistoryRefresh;
+    final skipSales = OrdersApiCompat.serverIgnoresFilters &&
+        lastRefresh != null &&
+        now.difference(lastRefresh) < const Duration(minutes: 3);
+
+    // Separately, so a slow or failed history download never holds back the
+    // customers and loyalty points the next sale needs.
+    Future<void> reloadCustomerLists() async {
+      try {
+        final results = await Future.wait<dynamic>([
+          api.fetchCustomers(),
+          api.fetchLoyaltyCards(),
+        ]);
+        customers
+          ..clear()
+          ..addAll(
+            (results[0] as List<Customer>).where((customer) => !customer.isWalkIn),
+          );
+        loyaltyCards
+          ..clear()
+          ..addAll(results[1] as List<LoyaltyCard>);
+      } catch (_) {
+        // Keep cached lists when the server is unreachable.
+      }
     }
+
+    Future<void> reloadSales() async {
+      if (skipSales) return;
+      try {
+        final records = await api.fetchSalesHistory(from: since);
+        _mergeRecentSales(records, since: since);
+        _lastSalesHistoryRefresh = DateTime.now();
+      } catch (_) {
+        // Keep the sales already loaded.
+      }
+    }
+
+    await Future.wait([reloadCustomerLists(), reloadSales()]);
+    if (mounted) setState(() {});
   }
 
   @override

@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import 'api_session.dart';
 import 'monitor_disconnect_transport.dart';
+import 'orders_api_compat.dart';
 import '../core/utils/format_utils.dart';
 import '../core/utils/sales_history_window.dart';
 import '../core/utils/top_toast.dart';
@@ -764,20 +765,29 @@ class PosApi {
     final uri = Uri.parse('$apiBaseUrl/get_orders.php').replace(
       queryParameters: ordersDateQuery(from: from, to: to),
     );
-    final response = await _get(uri);
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    // Longer than the usual 10 s, and decoded off the UI thread: an older
+    // backend ignores from/to and sends every order (see OrdersApiCompat).
+    final response = await _get(uri, timeout: OrdersApiCompat.timeout);
+    final body = await decodeJsonOffUiThread(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
       throw Exception(body['message'] ?? 'Failed to load orders');
     }
 
     final data = body['data'] as List<dynamic>;
-    return data
+    final records = data
         .map(
           (item) =>
               SalesHistoryRecord.fromOrderJson(item as Map<String, dynamic>),
         )
         .toList();
+    return applyOrderFilters<SalesHistoryRecord>(
+      records,
+      idOf: (r) => r.orderId,
+      createdAtOf: (r) => r.createdAt,
+      from: from,
+      to: to,
+    );
   }
 
   Future<AccountingSummary> fetchAccountingSummary({
