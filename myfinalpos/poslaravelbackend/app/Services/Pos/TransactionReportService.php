@@ -269,7 +269,7 @@ class TransactionReportService
 
             $row = [
                 'id' => $orderId,
-                'receipt_number' => 'INV-'.str_pad((string) $orderId, 6, '0', STR_PAD_LEFT),
+                'receipt_number' => 'RCP-'.str_pad((string) $orderId, 6, '0', STR_PAD_LEFT),
                 'date' => $created->format('d M Y'),
                 'time' => strtolower($created->format('g:ia')),
                 'created_at' => $created->toIso8601String(),
@@ -588,15 +588,11 @@ class TransactionReportService
 
     private function itemDiscountJoin(): string
     {
-        return PosHelpers::columnExists('order_items', 'discount_amount')
-            ? 'LEFT JOIN (SELECT order_id, SUM(COALESCE(discount_amount, 0)) AS item_discount FROM order_items GROUP BY order_id) idisc ON idisc.order_id = o.id'
-            : '';
+        return PosHelpers::orderItemDiscountJoin();
     }
 
     private function itemDiscountExpr(): string
     {
-        return PosHelpers::columnExists('order_items', 'discount_amount')
-            ? 'COALESCE(idisc.item_discount, 0)'
-            : '0';
+        return PosHelpers::orderItemDiscountExpr();
     }
 }

@@ -609,7 +609,7 @@ test('every discount combination checks out, reports and refunds to the peso', f
         if (! near((float) $row['discount'], $wantDisc, 0.011)) {
             $fail($tag, "report discount {$row['discount']}, expected $wantDisc");
         }
-        if ($row['receipt_number'] !== sprintf('INV-%06d', $orderId)) {
+        if ($row['receipt_number'] !== sprintf('RCP-%06d', $orderId)) {
             $fail($tag, "report receipt_number {$row['receipt_number']}");
         }
     }
