@@ -1,6 +1,13 @@
 import 'product.dart';
 import 'product_variety.dart';
 
+/// Rounds to centavos half-up like the server (PHP round()), nudging past
+/// binary representation error so 1.005 rounds to 1.01, not 1.00.
+double roundMoney(double value) {
+  final nudge = value >= 0 ? 1e-9 : -1e-9;
+  return ((value * 100) + nudge).roundToDouble() / 100;
+}
+
 class CartItem {
   CartItem({
     required this.product,
@@ -20,7 +27,7 @@ class CartItem {
   /// Total peso amount knocked off this line (per-unit discount x quantity),
   /// capped at the line gross so a line can never go negative.
   double get discount =>
-      (discountPerUnit * quantity).clamp(0, grossTotal).toDouble();
+      roundMoney((discountPerUnit * quantity).clamp(0, grossTotal).toDouble());
 
   double get unitPrice => variety?.price ?? product.price;
 
@@ -34,10 +41,13 @@ class CartItem {
     return option == null ? product.name : '${product.name} - $option';
   }
 
-  /// Line total before any per-item discount.
-  double get grossTotal => unitPrice * quantity;
+  /// Line total before any per-item discount, rounded to centavos the way
+  /// the server rounds it - unrounded totals (e.g. 1.5 kg x 33.33 = 49.995)
+  /// made "Exact" cash fall a fraction of a centavo short of the total.
+  double get grossTotal => roundMoney(unitPrice * quantity);
 
-  double get total => (grossTotal - discount).clamp(0, grossTotal).toDouble();
+  double get total =>
+      roundMoney((grossTotal - discount).clamp(0, grossTotal).toDouble());
 
   /// Identity key used to deduplicate cart lines. Lines with the same product
   /// but different varieties are tracked separately.

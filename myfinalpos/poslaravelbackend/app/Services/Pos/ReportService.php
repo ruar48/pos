@@ -452,8 +452,11 @@ class ReportService
         $params = ['start' => $startDt, 'end' => $endDt];
 
         if ($search !== null && trim($search) !== '') {
-            $searchSql = 'AND (c.customer_name LIKE :search OR c.table_name LIKE :search)';
-            $params['search'] = '%'.trim($search).'%';
+            // One placeholder per use - with native prepares MySQL rejects a
+            // named parameter bound twice ("Invalid parameter number").
+            $searchSql = 'AND (c.customer_name LIKE :search_name OR c.table_name LIKE :search_location)';
+            $params['search_name'] = '%'.trim($search).'%';
+            $params['search_location'] = '%'.trim($search).'%';
         }
 
         $rows = DB::select(

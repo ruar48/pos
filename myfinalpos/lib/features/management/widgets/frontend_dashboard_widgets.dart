@@ -6,6 +6,7 @@ import '../../../core/utils/top_toast.dart';
 import '../../../core/utils/format_utils.dart';
 import '../../../models/product.dart';
 import '../../../models/sales_history_record.dart';
+import '../../../services/analytics_engine.dart';
 import '../../pos/pages/pos_home_page.dart';
 import 'management_widgets.dart';
 import 'sales_history_management_widgets.dart';
@@ -70,26 +71,18 @@ class _FrontendDashboardContentState extends State<FrontendDashboardContent> {
     final pageState = widget.pageState;
     final dashboardSales = pageState.salesHistoryForDashboard();
     final today = _recordsForToday(dashboardSales);
-    final todaySales =
-        today.fold<double>(0, (sum, record) => sum + record.total);
-    final todayDiscounts = today.fold<double>(
-      0,
-      (sum, record) =>
-          sum +
-          record.discountAmount +
-          record.couponDiscount +
-          record.loyaltyDiscount,
-    );
-    final todayItems = today.fold<double>(
-      0,
-      (sum, record) =>
-          sum + record.items.fold<double>(0, (s, item) => s + item.quantity),
-    );
-    final avgOrder = today.isEmpty ? 0.0 : todaySales / today.length;
+    // Net of refunds; a fully refunded order is not a transaction any more
+    // (same rules as the Reports screens - see AnalyticsEngine.summarize).
+    final todaySummary = AnalyticsEngine.summarize(today);
+    final todaySales = todaySummary.totalSales;
+    final todayDiscounts = todaySummary.totalDiscount;
+    final todayItems = todaySummary.itemCount;
+    final avgOrder = todaySummary.averageTicket;
     final lowStock = pageState.products.where(_isLowStock).toList();
     final paymentRows = _paymentBreakdownForToday(today, currency);
-    final trendLabels = _recentDayLabels(dashboardSales);
-    final trendValues = _recentDayTotals(dashboardSales, trendLabels);
+    final trendDays = recentDashboardDays();
+    final trendLabels = trendDays.map(_dayLabel).toList();
+    final trendValues = recentDayNetTotals(dashboardSales, trendDays);
     final storeName =
         (pageState.settings.receiptStore?['store_name'] ?? 'Agriculture POS')
             .toString()
@@ -108,7 +101,7 @@ class _FrontendDashboardContentState extends State<FrontendDashboardContent> {
       ),
       DashboardKpiCard(
         label: 'No. of Transactions',
-        value: '${today.length}',
+        value: '${todaySummary.orderCount}',
         tone: AgriKpiTone.green,
       ),
       DashboardKpiCard(
@@ -136,12 +129,12 @@ class _FrontendDashboardContentState extends State<FrontendDashboardContent> {
       ),
       DashboardKpiCard(
         label: 'Walk-In Today',
-        value: '${today.where((r) => r.isWalkIn).length}',
+        value: '${todaySummary.walkInOrders}',
         tone: AgriKpiTone.orange,
       ),
       DashboardKpiCard(
         label: 'Registered Today',
-        value: '${today.where((r) => !r.isWalkIn).length}',
+        value: '${todaySummary.registeredOrders}',
         tone: AgriKpiTone.coral,
       ),
     ];
@@ -757,8 +750,9 @@ List<List<String>> _paymentBreakdownForToday(
   List<SalesHistoryRecord> today,
   String currency,
 ) {
+  // Net of refunds; fully refunded orders are left out.
   final grouped = <String, List<SalesHistoryRecord>>{};
-  for (final record in today) {
+  for (final record in AnalyticsEngine.salesOnly(today)) {
     grouped.putIfAbsent(record.paymentMethod, () => []).add(record);
   }
 
@@ -769,40 +763,42 @@ List<List<String>> _paymentBreakdownForToday(
           '${entry.value.length}',
           formatMoney(
             currency,
-            entry.value.fold<double>(0, (sum, item) => sum + item.total),
+            entry.value.fold<double>(0, (sum, item) => sum + item.netTotal),
           ),
         ],
       )
       .toList();
 }
 
-List<String> _recentDayLabels(List<SalesHistoryRecord> records) {
-  final now = DateTime.now();
-  return List.generate(7, (index) {
-    final day = now.subtract(Duration(days: 6 - index));
-    final month = day.month.toString().padLeft(2, '0');
-    final date = day.day.toString().padLeft(2, '0');
-    return '$month/$date';
-  });
+/// The last 7 calendar days, oldest first, ending today.
+List<DateTime> recentDashboardDays([DateTime? now]) {
+  final today = now ?? DateTime.now();
+  return List.generate(
+    7,
+    (index) => DateTime(today.year, today.month, today.day - (6 - index)),
+  );
 }
 
-List<double> _recentDayTotals(
+String _dayLabel(DateTime day) =>
+    '${day.month.toString().padLeft(2, '0')}/${day.day.toString().padLeft(2, '0')}';
+
+String _dayKey(DateTime day) => '${day.year}-${day.month}-${day.day}';
+
+/// Net sales per day in [days]. Keyed with the year - a MM/DD key merged
+/// the same date of earlier years into this week once history spanned one.
+List<double> recentDayNetTotals(
   List<SalesHistoryRecord> records,
-  List<String> labels,
+  List<DateTime> days,
 ) {
-  final grouped = <String, double>{};
-  for (final label in labels) {
-    grouped[label] = 0;
-  }
+  final grouped = {for (final day in days) _dayKey(day): 0.0};
 
   for (final record in records) {
-    final month = record.createdAt.month.toString().padLeft(2, '0');
-    final day = record.createdAt.day.toString().padLeft(2, '0');
-    final label = '$month/$day';
-    if (grouped.containsKey(label)) {
-      grouped[label] = (grouped[label] ?? 0) + record.total;
+    final key = _dayKey(record.createdAt);
+    final current = grouped[key];
+    if (current != null) {
+      grouped[key] = current + record.netTotal;
     }
   }
 
-  return labels.map((label) => grouped[label] ?? 0).toList();
+  return days.map((day) => grouped[_dayKey(day)] ?? 0).toList();
 }

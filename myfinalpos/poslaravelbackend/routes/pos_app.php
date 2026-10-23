@@ -36,6 +36,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::match(['POST', 'OPTIONS'], 'login.php', [AuthController::class, 'login']);
+Route::match(['POST', 'OPTIONS'], 'logout.php', [AuthController::class, 'logout']);
 Route::match(['POST', 'OPTIONS'], 'change_password.php', [AuthController::class, 'changePassword']);
 Route::match(['POST', 'OPTIONS'], 'forgot_password.php', [AuthController::class, 'forgotPassword']);
 

@@ -13,6 +13,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/top_toast.dart';
 import '../../core/widgets/brand_logo.dart';
 import '../../models/app_user.dart';
+import '../../services/api_session.dart';
 import '../../services/offline/offline_catalog_store.dart';
 import '../../services/offline/pos_connectivity.dart';
 import 'forgot_password_dialog.dart';
@@ -222,6 +223,12 @@ class _LoginPageState extends State<LoginPage> {
         }
 
         await _persistUsername();
+        // Sign-in token: sent on every request so the server knows who is
+        // acting (older servers don't return one - the app still works).
+        await ApiSession.save(
+          data['token'] is String ? data['token'] as String : null,
+          persist: rememberMe,
+        );
         if (rememberMe) {
           await OfflineSessionStore.saveUser(user);
         } else {

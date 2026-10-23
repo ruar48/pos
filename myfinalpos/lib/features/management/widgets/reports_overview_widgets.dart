@@ -103,19 +103,23 @@ class _ReportsOverviewContentState extends State<ReportsOverviewContent> {
         ? records
         : AnalyticsEngine.filterRecords(records: records, range: range);
     final summary = AnalyticsEngine.summarize(filtered);
+    // Net of refunds, like summary.totalSales.
     final totalVat =
-        filtered.fold<double>(0, (sum, record) => sum + record.vat);
+        filtered.fold<double>(0, (sum, record) => sum + record.netVat);
     final totalSubtotal =
-        filtered.fold<double>(0, (sum, record) => sum + record.subtotal);
-    final manualDiscounts = filtered.fold<double>(
+        filtered.fold<double>(0, (sum, record) => sum + record.netSubtotal);
+    // Same orders and manual figure as summary.totalDiscount, so the
+    // breakdown adds up to the total shown above it.
+    final discountedSales = AnalyticsEngine.salesOnly(filtered);
+    final manualDiscounts = discountedSales.fold<double>(
       0,
-      (sum, record) => sum + record.discountAmount,
+      (sum, record) => sum + record.manualDiscount,
     );
-    final couponDiscounts = filtered.fold<double>(
+    final couponDiscounts = discountedSales.fold<double>(
       0,
       (sum, record) => sum + record.couponDiscount,
     );
-    final loyaltyDiscounts = filtered.fold<double>(
+    final loyaltyDiscounts = discountedSales.fold<double>(
       0,
       (sum, record) => sum + record.loyaltyDiscount,
     );
@@ -130,7 +134,8 @@ class _ReportsOverviewContentState extends State<ReportsOverviewContent> {
       records: filtered,
       products: widget.pageState.products,
     );
-    final topProducts = AnalyticsEngine.bestSellers(records: filtered, limit: 10);
+    final topProducts =
+        AnalyticsEngine.bestSellers(records: filtered, limit: 10);
     final topByRevenue = AnalyticsEngine.bestSellers(
       records: filtered,
       limit: 10,
@@ -302,10 +307,12 @@ class _ReportsOverviewContentState extends State<ReportsOverviewContent> {
               columns: const ['Product', 'Qty Sold', 'Revenue'],
               rows: topProducts
                   .map(
+                    // The product's own revenue - looking it up in the
+                    // top-10-by-revenue list showed ₱0.00 for the rest.
                     (item) => [
                       item.label,
-                      formatQuantity(item.secondary ?? item.value),
-                      formatMoney(currency, _revenueForProduct(topByRevenue, item.label)),
+                      formatQuantity(item.quantity ?? item.value),
+                      formatMoney(currency, item.revenue ?? 0),
                     ],
                   )
                   .toList(),
@@ -319,7 +326,7 @@ class _ReportsOverviewContentState extends State<ReportsOverviewContent> {
                     (item) => [
                       item.label,
                       formatMoney(currency, item.value),
-                      formatQuantity(item.secondary ?? 0),
+                      formatQuantity(item.quantity ?? 0),
                     ],
                   )
                   .toList(),
@@ -605,14 +612,20 @@ class _SummaryCardsGrid extends StatelessWidget {
             label: 'Net Sales',
             value: formatMoney(currency, summary.totalSales),
             icon: Icons.payments_outlined,
-            subtitle: 'Subtotal ${formatMoney(currency, totalSubtotal)}',
+            subtitle: summary.refundedAmount > 0
+                ? 'Subtotal ${formatMoney(currency, totalSubtotal)} • '
+                    'Refunds -${formatMoney(currency, summary.refundedAmount)}'
+                : 'Subtotal ${formatMoney(currency, totalSubtotal)}',
           ),
           SummaryCard(
             label: 'Orders',
             value: '${summary.orderCount}',
             icon: Icons.receipt_long_outlined,
             color: AppColors.darkGreen,
-            subtitle: '${summary.itemCount} items sold',
+            subtitle: summary.refundedOrders > 0
+                ? '${formatQuantity(summary.itemCount)} items sold • '
+                    '${summary.refundedOrders} fully refunded'
+                : '${formatQuantity(summary.itemCount)} items sold',
           ),
           SummaryCard(
             label: 'Avg Ticket',
@@ -956,7 +969,7 @@ class _RecentTransactionsCard extends StatelessWidget {
                         DataCell(Text('#${record.orderId}')),
                         DataCell(Text(record.customerName)),
                         DataCell(Text(record.paymentMethod)),
-                        DataCell(Text('${record.itemCount}')),
+                        DataCell(Text(formatQuantity(record.itemCount))),
                         DataCell(Text(formatMoney(currency, record.total))),
                         DataCell(
                           Text(
@@ -985,39 +998,31 @@ List<List<String>> _paymentRows(
   List<SalesHistoryRecord> records,
   String currency,
 ) {
+  // Net of refunds; fully refunded orders are not sales (see
+  // AnalyticsEngine.summarize) so they don't count toward a method.
   final grouped = <String, List<SalesHistoryRecord>>{};
-  for (final record in records) {
-    final method =
-        record.paymentMethod.trim().isEmpty ? 'Cash' : record.paymentMethod;
+  for (final record in AnalyticsEngine.salesOnly(records)) {
+    final method = record.paymentMethod.trim().isEmpty
+        ? 'Cash'
+        : record.paymentMethod.trim();
     grouped.putIfAbsent(method, () => []).add(record);
   }
 
+  double netSales(List<SalesHistoryRecord> group) =>
+      group.fold<double>(0, (sum, item) => sum + item.netTotal);
+
   final entries = grouped.entries.toList()
-    ..sort(
-      (a, b) => b.value
-          .fold<double>(0, (sum, item) => sum + item.total)
-          .compareTo(a.value.fold<double>(0, (sum, item) => sum + item.total)),
-    );
+    ..sort((a, b) => netSales(b.value).compareTo(netSales(a.value)));
 
   return entries
       .map(
         (entry) => [
           entry.key,
           '${entry.value.length}',
-          formatMoney(
-            currency,
-            entry.value.fold<double>(0, (sum, item) => sum + item.total),
-          ),
+          formatMoney(currency, netSales(entry.value)),
         ],
       )
       .toList();
-}
-
-double _revenueForProduct(List<AnalyticsNamedValue> byRevenue, String name) {
-  for (final item in byRevenue) {
-    if (item.label == name) return item.value;
-  }
-  return 0;
 }
 
 String _formatShortDate(DateTime value) {

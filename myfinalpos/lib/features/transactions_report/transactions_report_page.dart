@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../config/api_config.dart';
@@ -11,6 +13,7 @@ import '../transactions/refund_dialog.dart';
 import '../transactions/refund_pin_dialog.dart';
 import '../transactions/transaction_model.dart';
 import '../transactions/transaction_service.dart';
+import 'transactions_report_csv.dart';
 import 'transactions_report_models.dart';
 import 'transactions_report_service.dart';
 
@@ -54,6 +57,7 @@ class _TransactionsReportContentState extends State<TransactionsReportContent>
   bool _loading = true;
   String? _error;
   TransactionReportResponse? _response;
+  int? _refundingOrderId;
   int _expandedOrderId = -1;
   int _rowsPerPage = 25;
 
@@ -112,7 +116,9 @@ class _TransactionsReportContentState extends State<TransactionsReportContent>
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = error.toString();
+        _error = error is TimeoutException
+            ? 'The server took too long to answer.'
+            : cleanApiErrorMessage(error.toString());
         _loading = false;
       });
     }
@@ -140,58 +146,30 @@ class _TransactionsReportContentState extends State<TransactionsReportContent>
     final response = _response;
     if (response == null) return;
 
-    final buffer = StringBuffer();
-    if (_activeTab == TransactionReportTab.details ||
-        _activeTab == TransactionReportTab.transactions) {
-      buffer.writeln(
-        'Receipt,Date,Time,Cashier,Customer,Payment,Total,Refunded,Discount,Costs,Profits,Items,Status',
-      );
-      for (final row in response.orderRows) {
-        final totalLabel = formatReportMoney(
-          _currency,
-          row.total,
-          status: row.status,
-        );
-        final costsLabel = formatReportMoney(
-          _currency,
-          row.costs,
-          status: row.status,
-        );
-        buffer.writeln(
-          '${row.receiptNumber},${row.date},${row.time},'
-          '"${row.cashierName}","${row.customerName}",${row.paymentMethod},'
-          '$totalLabel,${formatRefundColumn(_currency, row.refundedAmount)},${row.discount},$costsLabel,${row.profits},'
-          '${row.itemsCount},${row.status}',
-        );
-      }
-    } else {
-      buffer.writeln(
-        'Period,Gross Sales,Refunded,Net Total,Transactions,Refunded Txns,Items,Discount,Costs,Expenses,Profits,Bank Transfer,Best Seller',
-      );
-      for (final row in response.periodRows) {
-        final currency = _currency;
-        buffer.writeln(
-          '"${row.label}",'
-          '${formatMoney(currency, row.grossTotal)},'
-          '${formatRefundColumn(currency, row.refundedAmount)},'
-          '${formatReportMoney(currency, row.total, status: row.status)},'
-          '${row.transactions},${row.refundedTransactions},${row.items},'
-          '${formatReportMoney(currency, row.discount, status: row.status)},'
-          '${formatReportMoney(currency, row.costs, status: row.status)},'
-          '${formatReportMoney(currency, row.expenses, status: row.status)},'
-          '${formatReportMoney(currency, row.profits, status: row.status)},'
-          '${formatReportMoney(currency, row.bankTransfer, status: row.status)},'
-          '"${row.bestSeller}"',
-        );
-      }
-    }
+    // Escaped text and plain-number money (see transactions_report_csv.dart).
+    final csv = (_activeTab == TransactionReportTab.details ||
+            _activeTab == TransactionReportTab.transactions)
+        ? buildOrderRowsCsv(response.orderRows)
+        : buildPeriodRowsCsv(response.periodRows);
 
-    await Clipboard.setData(ClipboardData(text: buffer.toString()));
+    await Clipboard.setData(ClipboardData(text: csv));
     if (!mounted) return;
     showTopSuccess(context, 'Report copied — paste into Excel or Sheets');
   }
 
   Future<void> _refundOrder(TransactionReportOrderRow row) async {
+    // One refund at a time, held until the list has reloaded, so a slow
+    // request can't be sent twice or retried against stale quantities.
+    if (_refundingOrderId != null) return;
+    setState(() => _refundingOrderId = row.id);
+    try {
+      await _runRefund(row);
+    } finally {
+      if (mounted) setState(() => _refundingOrderId = null);
+    }
+  }
+
+  Future<void> _runRefund(TransactionReportOrderRow row) async {
     final items = row.items
         .map(
           (item) => TransactionItem(
@@ -241,15 +219,18 @@ class _TransactionsReportContentState extends State<TransactionsReportContent>
       refundPin: refundPin,
     );
 
-    if (!mounted) return;
-    if (apiResult.success) {
-      await widget.pageState.refreshProductCatalog();
-      if (!mounted) return;
-      showTopSuccess(context, apiResult.message);
-      await _load(page: _response?.pagination.page ?? 1);
-    } else {
-      showTopError(context, apiResult.message);
+    if (!mounted) {
+      await showRefundOutcome(null, apiResult);
+      return;
     }
+    // Reload whatever the outcome - after a timeout the refund may still
+    // have gone through on the server.
+    final reload = _load(page: _response?.pagination.page ?? 1);
+    if (apiResult.success) {
+      unawaited(widget.pageState.refreshProductCatalog());
+    }
+    await showRefundOutcome(context, apiResult);
+    await reload;
   }
 
   @override
@@ -346,6 +327,7 @@ class _TransactionsReportContentState extends State<TransactionsReportContent>
                   () => _expandedOrderId = _expandedOrderId == id ? -1 : id,
                 ),
                 onRefund: _refundOrder,
+                refundingOrderId: _refundingOrderId,
               ),
             TransactionReportTab.transactions => _TransactionsTable(
                 rows: response.orderRows,
@@ -658,6 +640,7 @@ class _DetailsTable extends StatelessWidget {
     required this.expandedOrderId,
     required this.onToggle,
     required this.onRefund,
+    this.refundingOrderId,
   });
 
   final List<TransactionReportOrderRow> rows;
@@ -665,6 +648,10 @@ class _DetailsTable extends StatelessWidget {
   final int expandedOrderId;
   final ValueChanged<int> onToggle;
   final Future<void> Function(TransactionReportOrderRow) onRefund;
+
+  /// Order whose refund is in flight; every Refund button is disabled
+  /// meanwhile.
+  final int? refundingOrderId;
 
   @override
   Widget build(BuildContext context) {
@@ -740,8 +727,18 @@ class _DetailsTable extends StatelessWidget {
                         const SizedBox(width: 8),
                         if (row.canRefund)
                           FilledButton.tonal(
-                            onPressed: () => onRefund(row),
-                            child: const Text('Refund'),
+                            onPressed: refundingOrderId == null
+                                ? () => onRefund(row)
+                                : null,
+                            child: refundingOrderId == row.id
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('Refund'),
                           ),
                       ],
                     ),
@@ -775,7 +772,7 @@ class _DetailsTable extends StatelessWidget {
                               _meta('Discount', formatMoney(currency, row.discount)),
                               _meta('Costs', formatMoney(currency, row.costs)),
                               _meta('Profit', formatMoney(currency, row.profits)),
-                              _meta('Items', '${row.itemsCount}'),
+                              _meta('Items', formatQuantity(row.itemsCount)),
                               _meta('Status', row.status),
                             ],
                           ),
@@ -928,7 +925,7 @@ class _PeriodTable extends StatelessWidget {
                 row.refundedTransactions > 0 ? '${row.refundedTransactions}' : '—',
                 color: row.refundedTransactions > 0 ? AppColors.amber : AppColors.muted,
               ),
-              _cell(row.items.toStringAsFixed(1)),
+              _cell(formatQuantity(row.items)),
               _moneyCell(currency, row.discount, status: row.status),
               _moneyCell(currency, row.costs, status: row.status),
               _moneyCell(currency, row.expenses, status: row.status),

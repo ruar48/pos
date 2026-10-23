@@ -32,6 +32,8 @@ class OrdersPage extends StatelessWidget {
         final state = TransactionState(
           service: TransactionService(apiBaseUrl),
           actorUserId: pageState.widget.currentUser.id,
+          // Same printer as checkout: this tablet's own, else the store's.
+          resolvePrinter: () => pageState.resolvedPrinter,
         );
         state.loadTransactions();
         return state;
@@ -51,12 +53,89 @@ class TabletOrdersScreen extends StatefulWidget {
 }
 
 class _TabletOrdersScreenState extends State<TabletOrdersScreen> {
+  /// True from the moment Refund is tapped until the outcome is shown, so a
+  /// double tap can't open a second refund dialog. (state.isRefunding only
+  /// covers the request itself.)
+  bool _refundFlowOpen = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(widget.pageState.refreshAppSettings());
     });
+  }
+
+  // Lives here rather than in the detail pane: this State stays mounted
+  // while the list reloads underneath, so the outcome is always shown.
+  Future<void> _handleRefund(
+    TransactionState state,
+    TransactionRecord transaction,
+  ) async {
+    if (_refundFlowOpen || state.isRefunding) return;
+    _refundFlowOpen = true;
+    try {
+      final selected = state.selectedTransaction;
+      final current =
+          selected != null && selected.id == transaction.id ? selected : transaction;
+
+      final result = await showDialog<RefundDialogResult>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => RefundDialog(
+          title: 'Refund Order',
+          transactionId: current.id,
+          actionLabel: 'Refund',
+          items: current.items,
+        ),
+      );
+      if (result == null || !mounted) return;
+
+      String? refundPin;
+      if (widget.pageState.settings.hasRefundPin) {
+        refundPin = await showRefundPinDialog(context);
+        if (refundPin == null || !mounted) return;
+      }
+
+      final apiResult = await state.refundSelectedTransaction(
+        orderId: current.id,
+        reason: result.reason,
+        refundType: result.refundType,
+        items: result.items,
+        refundPin: refundPin,
+      );
+
+      if (apiResult.success) {
+        // Restocked items: refresh the catalog in the background so the
+        // give-back amount shows straight away.
+        unawaited(widget.pageState.refreshProductCatalog());
+      }
+      await showRefundOutcome(mounted ? context : null, apiResult);
+    } finally {
+      _refundFlowOpen = false;
+    }
+  }
+
+  Future<void> _handleReprint(TransactionState state) async {
+    final pageState = widget.pageState;
+    if (!pageState.isPrinterConfigured) {
+      showTopWarning(
+        context,
+        pageState.missingPrinterMessage(
+          canManageSettings: pageState.widget.currentUser.canManageSettings,
+        ),
+      );
+      return;
+    }
+
+    final apiResult = await state.reprintSelectedTransaction();
+    if (!mounted) return;
+
+    if (apiResult.success) {
+      showTopSuccess(context, apiResult.message);
+    } else {
+      showTopError(context, apiResult.message);
+    }
   }
 
   @override
@@ -71,6 +150,14 @@ class _TabletOrdersScreenState extends State<TabletOrdersScreen> {
         builder: (context, state, child) {
           if (state.isLoading) {
             return const Center(child: CircularProgressIndicator());
+          }
+
+          // A failed first load used to look like "0 orders".
+          if (state.errorMessage.isNotEmpty && state.transactions.isEmpty) {
+            return _OrdersLoadError(
+              message: state.errorMessage,
+              onRetry: state.refresh,
+            );
           }
 
           return LayoutBuilder(
@@ -90,7 +177,9 @@ class _TabletOrdersScreenState extends State<TabletOrdersScreen> {
                       Expanded(
                         child: _OrderDetailPane(
                           state: state,
-                          pageState: pageState,
+                          onRefund: (transaction) =>
+                              _handleRefund(state, transaction),
+                          onReprint: () => _handleReprint(state),
                         ),
                       ),
                     ],
@@ -234,6 +323,13 @@ class _OrderListPaneState extends State<_OrderListPane> {
                     isDense: true,
                   ),
                 ),
+                if (state.errorMessage.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _RefreshErrorBanner(
+                    message: state.errorMessage,
+                    onRetry: state.refresh,
+                  ),
+                ],
                 const SizedBox(height: 10),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -297,6 +393,94 @@ class _OrderListPaneState extends State<_OrderListPane> {
       TransactionFilterType.card => 'Card',
       TransactionFilterType.refunded => 'Refunded',
     };
+  }
+}
+
+class _OrdersLoadError extends StatelessWidget {
+  const _OrdersLoadError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.cloud_off_outlined,
+              size: 48,
+              color: AppColors.muted.withValues(alpha: 0.7),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Could not load orders',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppColors.text,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.muted),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.green),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown above a list that is still on screen but may be out of date
+/// (e.g. the reload after a refund failed).
+class _RefreshErrorBanner extends StatelessWidget {
+  const _RefreshErrorBanner({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, size: 18, color: AppColors.danger),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Could not refresh: $message',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.danger,
+              ),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
   }
 }
 
@@ -406,12 +590,11 @@ class _OrderListItem extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
+  // By units, like the server: money can be fully refunded while free
+  // lines are still returnable.
   String get _statusLabel {
-    if (order.refundedAmount > 0 &&
-        order.refundedAmount >= order.grandTotal - 0.01) {
-      return 'Refunded';
-    }
-    if (order.refundedAmount > 0) return 'Partial Refund';
+    if (order.isFullyRefunded) return 'Refunded';
+    if (order.hasAnyRefund) return 'Partial Refund';
     return 'Completed';
   }
 
@@ -550,11 +733,13 @@ class _OrderListItem extends StatelessWidget {
 class _OrderDetailPane extends StatelessWidget {
   const _OrderDetailPane({
     required this.state,
-    required this.pageState,
+    required this.onRefund,
+    required this.onReprint,
   });
 
   final TransactionState state;
-  final PosHomePageState pageState;
+  final Future<void> Function(TransactionRecord transaction) onRefund;
+  final Future<void> Function() onReprint;
 
   @override
   Widget build(BuildContext context) {
@@ -649,65 +834,6 @@ class _OrderDetailPane extends StatelessWidget {
     );
   }
 
-  Future<void> _handleRefund(
-    BuildContext context,
-    TransactionState state,
-    TransactionRecord transaction,
-  ) async {
-    final result = await showDialog<RefundDialogResult>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => RefundDialog(
-        title: 'Refund Order',
-        transactionId: transaction.id,
-        actionLabel: 'Refund',
-        items: transaction.items,
-      ),
-    );
-    if (result == null) return;
-    if (!context.mounted) return;
-
-    String? refundPin;
-    if (pageState.settings.hasRefundPin) {
-      refundPin = await showRefundPinDialog(context);
-      if (refundPin == null) return;
-      if (!context.mounted) return;
-    }
-
-    final apiResult = await state.refundSelectedTransaction(
-      reason: result.reason,
-      refundType: result.refundType,
-      items: result.items,
-      refundPin: refundPin,
-    );
-
-    if (!context.mounted) return;
-
-    if (apiResult.success) {
-      await pageState.refreshProductCatalog();
-      if (!context.mounted) return;
-      showTopSuccess(context, apiResult.message);
-      await state.refresh();
-    } else {
-      showTopError(context, apiResult.message);
-    }
-  }
-
-  Future<void> _handleReprint(
-    BuildContext context,
-    TransactionState state,
-  ) async {
-    final apiResult = await state.reprintSelectedTransaction();
-
-    if (!context.mounted) return;
-
-    if (apiResult.success) {
-      showTopSuccess(context, apiResult.message);
-    } else {
-      showTopError(context, apiResult.message);
-    }
-  }
-
   Widget _buildReceiptCard(TransactionRecord transaction) {
     final itemDiscountSum = transaction.items
         .fold<double>(0, (sum, item) => sum + item.discount);
@@ -718,6 +844,9 @@ class _OrderDetailPane extends StatelessWidget {
     final totalDiscount = max(transaction.discountAmount, itemDiscountSum) +
         transaction.couponDiscount +
         transaction.loyaltyDiscount;
+    // transaction.subtotal is already net of every discount. Show the gross
+    // (as the printed receipt does) so Subtotal - Discounts + VAT = Total.
+    final grossSubtotal = transaction.subtotal + totalDiscount;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -762,6 +891,18 @@ class _OrderDetailPane extends StatelessWidget {
                           height: 1,
                         ),
                       ),
+                      if (transaction.hasAnyRefund) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          '${transaction.isFullyRefunded ? 'Fully refunded' : 'Partly refunded'}'
+                          ' • ${formatMoney('₱', transaction.refundedAmount)} given back',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.danger,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -830,7 +971,7 @@ class _OrderDetailPane extends StatelessWidget {
               children: [
                 _TotalsRow(
                   label: 'Subtotal',
-                  value: formatMoney('₱', transaction.subtotal),
+                  value: formatMoney('₱', grossSubtotal),
                 ),
                 if (totalDiscount > 0) ...[
                   const SizedBox(height: 4),
@@ -845,6 +986,24 @@ class _OrderDetailPane extends StatelessWidget {
                   _TotalsRow(
                     label: 'VAT',
                     value: formatMoney('₱', transaction.vat),
+                  ),
+                ],
+                if (transaction.hasAnyRefund) ...[
+                  const SizedBox(height: 4),
+                  _TotalsRow(
+                    label: 'Total',
+                    value: formatMoney('₱', transaction.grandTotal),
+                  ),
+                  const SizedBox(height: 4),
+                  _TotalsRow(
+                    label: 'Refunded',
+                    value: '-${formatMoney('₱', transaction.refundedAmount)}',
+                    valueColor: AppColors.danger,
+                  ),
+                  const SizedBox(height: 4),
+                  _TotalsRow(
+                    label: 'Balance',
+                    value: formatMoney('₱', transaction.remainingTotal),
                   ),
                 ],
                 const SizedBox(height: 8),
@@ -885,7 +1044,19 @@ class _OrderDetailPane extends StatelessWidget {
     TransactionRecord transaction,
     TransactionState state,
   ) {
-    final canRefund = transaction.items.any((item) => item.hasRefundableQuantity);
+    // Units left, not money: free lines stay returnable after the paid
+    // amount is fully refunded (matches the server).
+    final canRefund = transaction.hasRefundableItems;
+    // Disabled with a spinner while a refund is sent and the order reloads,
+    // so a slow request can't be refunded twice.
+    final refunding = state.isRefunding;
+    final refundButton = _ThemedActionButton(
+      label: refunding ? 'Refunding...' : 'Refund',
+      icon: Icons.undo,
+      backgroundColor: AppColors.danger,
+      busy: refunding,
+      onTap: refunding ? null : () => onRefund(transaction),
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -904,16 +1075,9 @@ class _OrderDetailPane extends StatelessWidget {
                       state.selectedTransaction ?? transaction,
                     ),
                   ),
-                  if (canRefund) ...[
+                  if (canRefund || refunding) ...[
                     const SizedBox(height: 10),
-                    _ThemedActionButton(
-                      label: 'Refund',
-                      icon: Icons.undo,
-                      backgroundColor: AppColors.danger,
-                      onTap: () async {
-                        await _handleRefund(context, state, transaction);
-                      },
-                    ),
+                    refundButton,
                   ],
                 ],
               )
@@ -931,18 +1095,9 @@ class _OrderDetailPane extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (canRefund) ...[
+                  if (canRefund || refunding) ...[
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: _ThemedActionButton(
-                        label: 'Refund',
-                        icon: Icons.undo,
-                        backgroundColor: AppColors.danger,
-                        onTap: () async {
-                          await _handleRefund(context, state, transaction);
-                        },
-                      ),
-                    ),
+                    Expanded(child: refundButton),
                   ],
                 ],
               );
@@ -1035,7 +1190,7 @@ class _OrderDetailPane extends StatelessWidget {
                             children: [
                               FilledButton(
                                 onPressed: () async {
-                                  await _handleReprint(context, state);
+                                  await onReprint();
                                 },
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppColors.green,
@@ -1054,7 +1209,7 @@ class _OrderDetailPane extends StatelessWidget {
                               Expanded(
                                 child: FilledButton(
                                   onPressed: () async {
-                                    await _handleReprint(context, state);
+                                    await onReprint();
                                   },
                                   style: FilledButton.styleFrom(
                                     backgroundColor: AppColors.green,
@@ -1135,7 +1290,7 @@ class _OrderLineItemRow extends StatelessWidget {
       return sku;
     }
 
-    return '${item.quantity} x ${formatMoney('₱', item.unitPrice)}';
+    return '${formatQuantity(item.quantity)} x ${formatMoney('₱', item.unitPrice)}';
   }
 
   @override
@@ -1174,7 +1329,7 @@ class _OrderLineItemRow extends StatelessWidget {
               if (item.refundedQuantity > 0) ...[
                 const SizedBox(height: 4),
                 Text(
-                  '${item.refundedQuantity} refunded',
+                  '${formatQuantity(item.refundedQuantity)} refunded',
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.danger,
@@ -1216,15 +1371,22 @@ class _ThemedActionButton extends StatelessWidget {
     required this.icon,
     required this.backgroundColor,
     required this.onTap,
+    this.busy = false,
   });
 
   final String label;
   final IconData icon;
   final Color backgroundColor;
-  final VoidCallback onTap;
+
+  /// Null disables the button.
+  final VoidCallback? onTap;
+
+  /// Shows a spinner in place of the icon.
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1232,14 +1394,26 @@ class _ThemedActionButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: Ink(
           decoration: BoxDecoration(
-            color: backgroundColor,
+            color: enabled
+                ? backgroundColor
+                : backgroundColor.withValues(alpha: 0.55),
             borderRadius: BorderRadius.circular(16),
           ),
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: Colors.white, size: 20),
+              if (busy)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: Colors.white,
+                  ),
+                )
+              else
+                Icon(icon, color: Colors.white, size: 20),
               const SizedBox(width: 12),
               Text(
                 label,

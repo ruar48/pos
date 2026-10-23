@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import 'api_session.dart';
 import 'monitor_disconnect_transport.dart';
 import '../core/utils/format_utils.dart';
 import '../core/utils/sales_history_window.dart';
@@ -33,6 +35,36 @@ import '../models/pos_monitor.dart';
 import '../models/refund_item_request.dart';
 import '../models/sales_history_record.dart';
 
+/// The server's total for a sale differs from what the tablet charged
+/// (a price or points balance changed since the tablet loaded it).
+class OrderTotalChangedException implements Exception {
+  const OrderTotalChangedException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+/// The server refused a sale for a reason retrying won't fix (e.g. a
+/// product was deleted). Offline queue entries like this are set aside.
+class OrderRejectedException implements Exception {
+  const OrderRejectedException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+final Random _uuidRandom = Random.secure();
+
+/// Random id for one sale (UUID v4 format).
+String newClientOrderUuid() {
+  final bytes = List<int>.generate(16, (_) => _uuidRandom.nextInt(256));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+      '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+}
+
 class PosApi {
   const PosApi();
 
@@ -44,7 +76,7 @@ class PosApi {
       };
 
   Future<http.Response> _get(Uri uri, {Duration? timeout}) {
-    return http.get(uri).timeout(
+    return apiHttp.get(uri).timeout(
           timeout ?? apiLoadTimeout,
           onTimeout: () => throw TimeoutException(
             'The server took too long to respond.',
@@ -60,7 +92,7 @@ class PosApi {
   }) async {
     final uri = Uri.parse('$apiBaseUrl/categories.php');
     final trimmedIcon = icon?.trim();
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -120,7 +152,9 @@ class PosApi {
         if (revision != null && revision.isNotEmpty) 'revision': revision,
       },
     );
-    final response = await http.get(uri);
+    // With a timeout: a request hanging on a dropped connection used to
+    // leave live stock sync stuck "in flight" until the app restarted.
+    final response = await _get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -148,7 +182,7 @@ class PosApi {
           'settings_revision': settingsRevision,
       },
     );
-    final response = await http
+    final response = await apiHttp
         .get(uri)
         .timeout(const Duration(seconds: 35));
 
@@ -200,7 +234,7 @@ class PosApi {
     final uri = Uri.parse('$apiBaseUrl/loyalty_cards.php').replace(
       queryParameters: {'nfc_uid': normalized},
     );
-    final response = await http.get(uri);
+    final response = await apiHttp.get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -244,7 +278,7 @@ class PosApi {
     int? actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/coupons.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -282,7 +316,7 @@ class PosApi {
     int? actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/coupons.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -313,7 +347,7 @@ class PosApi {
     int? actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/coupons.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -336,15 +370,17 @@ class PosApi {
     double subtotal = 0,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/coupons.php');
-    final response = await http.post(
-      uri,
-      headers: _jsonHeaders,
-      body: jsonEncode({
-        'action': 'validate',
-        'code': code.trim().toUpperCase(),
-        'subtotal': subtotal,
-      }),
-    );
+    final response = await apiHttp
+        .post(
+          uri,
+          headers: _jsonHeaders,
+          body: jsonEncode({
+            'action': 'validate',
+            'code': code.trim().toUpperCase(),
+            'subtotal': subtotal,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -361,7 +397,7 @@ class PosApi {
     final uri = Uri.parse('$apiBaseUrl/users.php').replace(
       queryParameters: {'actor_user_id': '$actorUserId'},
     );
-    final response = await http.get(uri);
+    final response = await apiHttp.get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -384,7 +420,7 @@ class PosApi {
     int? branchId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/users.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -417,7 +453,7 @@ class PosApi {
     int? branchId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/users.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -445,7 +481,7 @@ class PosApi {
     required int actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/users.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -469,7 +505,7 @@ class PosApi {
     required String newPassword,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/change_password.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -487,7 +523,7 @@ class PosApi {
 
   Future<String> requestPasswordReset({required String email}) async {
     final uri = Uri.parse('$apiBaseUrl/forgot_password.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({'email': email.trim()}),
@@ -509,7 +545,7 @@ class PosApi {
     required int actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/users.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -538,7 +574,7 @@ class PosApi {
         if (module != null && module.isNotEmpty) 'module': module,
       },
     );
-    final response = await http.get(uri);
+    final response = await apiHttp.get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -584,7 +620,7 @@ class PosApi {
     int? actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/branches.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -612,7 +648,7 @@ class PosApi {
     required int actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/branches.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -638,7 +674,7 @@ class PosApi {
     required int actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/branches.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -670,7 +706,7 @@ class PosApi {
         if (branchId != null) 'branch_id': '$branchId',
       },
     );
-    final response = await http.get(uri);
+    final response = await apiHttp.get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -694,7 +730,7 @@ class PosApi {
     String? notes,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/staff_payments.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -750,7 +786,7 @@ class PosApi {
     final uri = Uri.parse('$apiBaseUrl/accounting_summary.php').replace(
       queryParameters: {'period': period},
     );
-    final response = await http.get(uri);
+    final response = await apiHttp.get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -778,7 +814,7 @@ class PosApi {
         if (revision != null && revision.isNotEmpty) 'revision': revision,
       },
     );
-    final response = await http.get(uri);
+    final response = await _get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -807,7 +843,7 @@ class PosApi {
       throw Exception('Customer name is required');
     }
 
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -832,7 +868,7 @@ class PosApi {
     int? actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/loyalty_cards.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -856,7 +892,7 @@ class PosApi {
     int? actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/loyalty_cards.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -885,7 +921,7 @@ class PosApi {
         'limit': '$limit',
       },
     );
-    final response = await http.get(uri);
+    final response = await apiHttp.get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -922,6 +958,17 @@ class PosApi {
   }) {
     final orderItems = cartItems.map((item) => item.toJson()).toList();
     return {
+      // One id per sale, kept in the offline queue: if a response is lost
+      // after the server saved the sale, the retry returns that order
+      // instead of saving it twice.
+      'client_order_uuid': newClientOrderUuid(),
+      // When the sale was rung up - an offline sale keeps this date when it
+      // syncs later (the server accepts it only for queued sales).
+      'sold_at_ms': (soldAt ?? DateTime.now()).millisecondsSinceEpoch,
+      // What this tablet charged. The server refuses an online sale whose
+      // own total differs (price or points changed) instead of storing a
+      // total that doesn't match the cash collected.
+      'client_total': double.parse(totalAmount.toStringAsFixed(2)),
       if (customerId != null && customerId > 0) 'customer_id': customerId,
       'is_walk_in': customerId == null || customerId <= 0,
       'items': orderItems,
@@ -944,24 +991,40 @@ class PosApi {
     };
   }
 
+  /// Sends a sale. Safe to retry with the same payload: the server
+  /// recognises its client_order_uuid and returns the existing order.
+  ///
+  /// Throws [OrderTotalChangedException] when the server's total differs
+  /// from what the tablet charged, [OrderRejectedException] when the server
+  /// refuses the sale for good (retrying won't help), and a plain
+  /// [Exception] / network error when it may work later.
   Future<int> saveOrderPayload(Map<String, dynamic> payload) async {
     final uri = Uri.parse('$apiBaseUrl/orders.php');
-    final response = await http.post(
-      uri,
-      headers: _jsonHeaders,
-      body: jsonEncode(payload),
-    );
+    // A dropped Wi-Fi connection used to leave "Processing..." waiting
+    // forever.
+    final response = await apiHttp
+        .post(uri, headers: _jsonHeaders, body: jsonEncode(payload))
+        .timeout(const Duration(seconds: 30));
 
     final body = parseApiJsonBody(response.body);
     if (body == null) {
       throw Exception(uploadHttpErrorMessage(response.statusCode, response.body));
     }
 
-    if (response.statusCode != 201 || body['success'] != true) {
-      throw Exception(body['message'] ?? 'Failed to save order');
+    if (response.statusCode == 201 && body['success'] == true) {
+      return toInt(body['order_id']);
     }
 
-    return toInt(body['order_id']);
+    final message = (body['message'] ?? 'Failed to save order').toString();
+    if (response.statusCode == 409) {
+      throw OrderTotalChangedException(message);
+    }
+    if (response.statusCode >= 400 &&
+        response.statusCode < 500 &&
+        !const {401, 408, 425, 429}.contains(response.statusCode)) {
+      throw OrderRejectedException(message);
+    }
+    throw Exception(message);
   }
 
   Future<int> saveOrder({
@@ -1048,7 +1111,7 @@ class PosApi {
     String? refundPin,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/process_refund.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -1076,7 +1139,7 @@ class PosApi {
     int? actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/inventory.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -1153,7 +1216,7 @@ class PosApi {
       payload['image_url'] = imageUrl.trim();
     }
 
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode(payload),
@@ -1183,6 +1246,7 @@ class PosApi {
     String? description,
     double? costPrice,
     double? stock,
+    double? stockBase,
     int? reorderLevel,
     String? unit,
     String? imageUrl,
@@ -1206,12 +1270,15 @@ class PosApi {
           ? null
           : trimmedOption,
       if (trimmedSku != null && trimmedSku.isNotEmpty) 'sku': trimmedSku,
-      if (trimmedBarcode != null && trimmedBarcode.isNotEmpty)
-        'barcode': trimmedBarcode,
-      if (trimmedDescription != null && trimmedDescription.isNotEmpty)
-        'description': trimmedDescription,
-      if (costPrice != null) 'cost_price': costPrice,
+      // Sent even when empty so clearing a field in the form really clears
+      // it (an omitted key keeps the old value on the server).
+      if (trimmedBarcode != null) 'barcode': trimmedBarcode,
+      if (trimmedDescription != null) 'description': trimmedDescription,
+      'cost_price': costPrice,
       if (stock != null) 'stock': stock,
+      // The stock the form showed when it opened: the server applies only
+      // the change the user made, so sales made meanwhile are kept.
+      if (stock != null && stockBase != null) 'stock_base': stockBase,
       if (reorderLevel != null) 'reorder_level': reorderLevel,
       if (unit != null && unit.trim().isNotEmpty) 'unit': unit.trim(),
       if (varieties != null) 'varieties': varieties,
@@ -1227,7 +1294,7 @@ class PosApi {
       payload['image_url'] = imageUrl.trim();
     }
 
-    final response = await http.put(
+    final response = await apiHttp.put(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode(payload),
@@ -1262,7 +1329,7 @@ class PosApi {
         : (filename.contains('.') ? filename : '$filename.jpg');
     final resolvedMime = _resolvedMimeType(mimeType, safeName);
 
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -1373,7 +1440,7 @@ class PosApi {
       payload['refund_pin'] = refundPin;
     }
 
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode(payload),
@@ -1399,7 +1466,7 @@ class PosApi {
         if (branchId != null) 'branch_id': '$branchId',
       },
     );
-    final response = await http.get(uri);
+    final response = await apiHttp.get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -1419,7 +1486,7 @@ class PosApi {
         if (date != null && date.isNotEmpty) 'date': date,
       },
     );
-    final response = await http.get(uri);
+    final response = await apiHttp.get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -1436,7 +1503,7 @@ class PosApi {
     final uri = Uri.parse('$apiBaseUrl/face_profiles.php').replace(
       queryParameters: {'user_id': '$userId'},
     );
-    final response = await http.get(uri);
+    final response = await apiHttp.get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -1457,7 +1524,7 @@ class PosApi {
         'actor_user_id': '$actorUserId',
       },
     );
-    final response = await http.get(uri);
+    final response = await apiHttp.get(uri);
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -1477,7 +1544,7 @@ class PosApi {
     int confidence = 95,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/face_profiles.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -1508,7 +1575,7 @@ class PosApi {
     required int actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/face_profiles.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -1529,7 +1596,7 @@ class PosApi {
     int? actorUserId,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/face_profiles.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -1562,7 +1629,7 @@ class PosApi {
     String? photoMime,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/attendance.php');
-    final response = await http.post(
+    final response = await apiHttp.post(
       uri,
       headers: _jsonHeaders,
       body: jsonEncode({
@@ -1594,7 +1661,7 @@ class PosApi {
   /// Lightweight check — tablet calls this before publishing cart snapshots.
   Future<bool> fetchMonitorActive() async {
     final uri = Uri.parse('$apiBaseUrl/monitor.php?action=active');
-    final response = await http
+    final response = await apiHttp
         .get(uri)
         .timeout(const Duration(seconds: 4));
     if (response.statusCode != 200) return false;
@@ -1608,7 +1675,7 @@ class PosApi {
 
   Future<void> publishMonitorState(Map<String, dynamic> payload) async {
     final uri = Uri.parse('$apiBaseUrl/monitor.php');
-    final response = await http
+    final response = await apiHttp
         .post(
           uri,
           headers: _jsonHeaders,
@@ -1626,7 +1693,7 @@ class PosApi {
 
   Future<void> publishMonitorPresence(Map<String, dynamic> payload) async {
     final uri = Uri.parse('$apiBaseUrl/monitor.php');
-    final response = await http
+    final response = await apiHttp
         .post(
           uri,
           headers: _jsonHeaders,
@@ -1645,7 +1712,7 @@ class PosApi {
   Future<void> publishMonitorDisconnect(Map<String, dynamic> payload) async {
     final uri = Uri.parse('$apiBaseUrl/monitor.php');
     try {
-      final response = await http
+      final response = await apiHttp
           .post(
             uri,
             headers: _jsonHeaders,
@@ -1675,7 +1742,7 @@ class PosApi {
       query['revision'] = revision;
     }
     final uri = Uri.parse('$apiBaseUrl/monitor.php').replace(queryParameters: query);
-    final response = await http
+    final response = await apiHttp
         .get(uri)
         .timeout(const Duration(seconds: 6));
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -1699,7 +1766,7 @@ class PosApi {
       query['actor_user_id'] = actorUserId.toString();
     }
     final uri = Uri.parse('$apiBaseUrl/monitor.php').replace(queryParameters: query);
-    final response = await http
+    final response = await apiHttp
         .get(uri)
         .timeout(const Duration(seconds: 35));
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -1716,7 +1783,7 @@ class PosApi {
     String? revision,
   }) async {
     final uri = Uri.parse('$apiBaseUrl/monitor.php');
-    final response = await http
+    final response = await apiHttp
         .post(
           uri,
           headers: _jsonHeaders,
@@ -1738,7 +1805,7 @@ class PosApi {
 
   Future<void> unsubscribeMonitorLive({required int actorUserId}) async {
     final uri = Uri.parse('$apiBaseUrl/monitor.php');
-    await http
+    await apiHttp
         .post(
           uri,
           headers: _jsonHeaders,
@@ -1763,7 +1830,7 @@ class PosApi {
         'end': endDay,
       },
     );
-    final response = await http.get(uri).timeout(const Duration(seconds: 8));
+    final response = await apiHttp.get(uri).timeout(const Duration(seconds: 8));
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {
@@ -1782,7 +1849,7 @@ class PosApi {
     final uri = Uri.parse('$apiBaseUrl/inventory_report.php').replace(
       queryParameters: {'start': start, 'end': end},
     );
-    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+    final response = await apiHttp.get(uri).timeout(const Duration(seconds: 12));
     final body = jsonDecode(response.body) as Map<String, dynamic>;
 
     if (response.statusCode != 200 || body['success'] != true) {

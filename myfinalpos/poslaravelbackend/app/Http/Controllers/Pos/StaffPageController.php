@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Pos\AttendanceExportService;
 use App\Services\Pos\PayrollService;
 use App\Support\AttendancePhotoStorage;
+use App\Support\PosHelpers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -46,6 +47,8 @@ class StaffPageController extends Controller
 
     public function exportAttendance(Request $request)
     {
+        PosHelpers::requireManagementActor((int) Auth::id());
+
         $start = trim((string) $request->query('start', ''));
         $end = trim((string) $request->query('end', ''));
 
@@ -72,6 +75,10 @@ class StaffPageController extends Controller
 
     public function payrollReport(Request $request): JsonResponse
     {
+        // Every colleague's hourly rate and pay - admins only (cashiers can
+        // sign in to the web too).
+        PosHelpers::requireManagementActor((int) Auth::id());
+
         $today = Carbon::today()->format('Y-m-d');
         $start = trim((string) $request->query('start', $today));
         $end = trim((string) $request->query('end', $today));
@@ -138,6 +145,8 @@ class StaffPageController extends Controller
 
     public function attendancePhotoStats(): JsonResponse
     {
+        PosHelpers::requireManagementActor((int) Auth::id());
+
         $stats = AttendancePhotoStorage::storageStats();
 
         return response()->json([
@@ -151,6 +160,9 @@ class StaffPageController extends Controller
 
     public function purgeAttendancePhotos(Request $request): JsonResponse
     {
+        // Deletes the clock-in selfies used to settle payroll disputes.
+        PosHelpers::requireManagementActor((int) Auth::id());
+
         $all = (bool) $request->boolean('all');
         $days = max(1, (int) $request->input('older_than_days', 30));
 

@@ -388,66 +388,6 @@ class _AddCategoryDialogState extends State<_AddCategoryDialog> {
   }
 }
 
-class _VarietyDraft {
-  _VarietyDraft({
-    this.id,
-    String name = '',
-    String price = '',
-    String cost = '',
-    String stock = '',
-    String reorder = '5',
-    String sku = '',
-    String barcode = '',
-    Set<String>? units,
-  })  : nameController = TextEditingController(text: name),
-        priceController = TextEditingController(text: price),
-        costController = TextEditingController(text: cost),
-        stockController = TextEditingController(text: stock),
-        reorderController = TextEditingController(text: reorder),
-        skuController = TextEditingController(text: sku),
-        barcodeController = TextEditingController(text: barcode),
-        selectedUnits = units == null || units.isEmpty ? {'pc'} : {...units};
-
-  final int? id;
-  final TextEditingController nameController;
-  final TextEditingController priceController;
-  final TextEditingController costController;
-  final TextEditingController stockController;
-  final TextEditingController reorderController;
-  final TextEditingController skuController;
-  final TextEditingController barcodeController;
-  Set<String> selectedUnits;
-
-  Map<String, dynamic> toPayload() {
-    final map = <String, dynamic>{
-      if (id != null) 'id': id,
-      'name': nameController.text.trim(),
-      'price': toDouble(priceController.text),
-      'stock': double.tryParse(stockController.text.trim()) ?? 0,
-      'reorder_level':
-          int.tryParse(reorderController.text.trim()) ?? Product.defaultReorderLevel,
-    };
-    final cost = costController.text.trim();
-    map['cost_price'] = cost.isEmpty ? null : toDouble(cost);
-    final sku = skuController.text.trim();
-    if (sku.isNotEmpty) map['sku'] = sku;
-    final barcode = barcodeController.text.trim();
-    if (barcode.isNotEmpty) map['barcode'] = barcode;
-    map['unit'] = encodeProductUnits(selectedUnits);
-    return map;
-  }
-
-  void dispose() {
-    nameController.dispose();
-    priceController.dispose();
-    costController.dispose();
-    stockController.dispose();
-    reorderController.dispose();
-    skuController.dispose();
-    barcodeController.dispose();
-  }
-}
-
 class _ProductFormDialog extends StatefulWidget {
   const _ProductFormDialog({
     required this.pageState,
@@ -480,8 +420,11 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   String? category;
   Set<String> selectedUnits = {};
   bool saving = false;
-  bool hasVarieties = false;
-  final List<_VarietyDraft> varietyDrafts = [];
+
+  /// Stock shown when the form opened. Sent as stock_base so the server
+  /// applies only the change typed here to the live stock - sales made
+  /// while the form was open are kept instead of being overwritten.
+  String _initialStockText = '';
 
   @override
   void initState() {
@@ -500,25 +443,10 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       if (existing.stock != null) {
         stockController.text = formatQuantity(existing.stock!);
       }
+      _initialStockText = stockController.text;
       reorderLevelController.text = existing.reorderLevel.toString();
       descriptionController.text = existing.description ?? '';
       category = existing.category;
-      hasVarieties = existing.varieties.isNotEmpty;
-      for (final variety in existing.varieties) {
-        varietyDrafts.add(
-          _VarietyDraft(
-            id: variety.id,
-            name: variety.name,
-            price: variety.price.toStringAsFixed(2),
-            cost: variety.costPrice?.toStringAsFixed(2) ?? '',
-            stock: variety.stock == null ? '' : formatQuantity(variety.stock!),
-            reorder: variety.reorderLevel.toString(),
-            sku: variety.sku ?? '',
-            barcode: variety.barcode ?? '',
-            units: parseProductUnits(variety.unit ?? existing.unit).toSet(),
-          ),
-        );
-      }
     } else {
       category = null;
       selectedUnits = {};
@@ -552,37 +480,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     reorderLevelController.dispose();
     descriptionController.dispose();
     optionController.dispose();
-    for (final draft in varietyDrafts) {
-      draft.dispose();
-    }
     super.dispose();
-  }
-
-  void _toggleVarieties(bool value) {
-    setState(() {
-      hasVarieties = value;
-      if (value && varietyDrafts.isEmpty) {
-        varietyDrafts.add(_VarietyDraft(units: selectedUnits));
-      }
-    });
-  }
-
-  void _addVarietyDraft() {
-    setState(
-      () => varietyDrafts.add(
-        _VarietyDraft(
-          units: varietyDrafts.isNotEmpty
-              ? varietyDrafts.last.selectedUnits
-              : selectedUnits,
-        ),
-      ),
-    );
-  }
-
-  void _removeVarietyDraft(int index) {
-    setState(() {
-      varietyDrafts.removeAt(index).dispose();
-    });
   }
 
   Future<void> _save() async {
@@ -607,7 +505,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       return;
     }
 
-    if (!hasVarieties && selectedUnits.isEmpty) {
+    if (selectedUnits.isEmpty) {
       showTopMessage(
         context,
         'Select at least one unit.',
@@ -625,44 +523,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       return;
     }
 
-    List<Map<String, dynamic>> varietiesPayload = [];
-    double effectivePrice = price;
-
-    if (hasVarieties) {
-      final drafts = varietyDrafts
-          .where((d) => d.nameController.text.trim().isNotEmpty)
-          .toList();
-      if (drafts.isEmpty) {
-        showTopMessage(
-          context,
-          'Add at least one variety, or turn varieties off.',
-          backgroundColor: AppColors.danger,
-        );
-        return;
-      }
-      for (final draft in drafts) {
-        if (toDouble(draft.priceController.text) <= 0) {
-          showTopMessage(
-            context,
-            'Enter a valid price for "${draft.nameController.text.trim()}".',
-            backgroundColor: AppColors.danger,
-          );
-          return;
-        }
-        if (draft.selectedUnits.isEmpty) {
-          showTopMessage(
-            context,
-            'Select a sold-by unit for "${draft.nameController.text.trim()}".',
-            backgroundColor: AppColors.danger,
-          );
-          return;
-        }
-      }
-      varietiesPayload = drafts.map((d) => d.toPayload()).toList();
-      effectivePrice = varietiesPayload
-          .map((v) => (v['price'] as num).toDouble())
-          .reduce((a, b) => a < b ? a : b);
-    } else if (price <= 0) {
+    if (price <= 0) {
       showTopMessage(
         context,
         'Enter a valid price.',
@@ -671,26 +532,26 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       return;
     }
 
+    final stockText = stockController.text.trim();
+    final stock = stockText.isEmpty ? null : double.tryParse(stockText);
+    if (stockText.isNotEmpty && stock == null) {
+      showTopMessage(
+        context,
+        'Enter a valid stock quantity.',
+        backgroundColor: AppColors.danger,
+      );
+      return;
+    }
+
     setState(() => saving = true);
     try {
-      final stockText = stockController.text.trim();
-      final stock = hasVarieties
-          ? null
-          : (stockText.isEmpty ? null : double.tryParse(stockText));
       final reorderText = reorderLevelController.text.trim();
       final reorderLevel = reorderText.isEmpty
           ? Product.defaultReorderLevel
           : int.tryParse(reorderText);
-      final unit = hasVarieties
-          ? encodeProductUnits(
-              varietyDrafts
-                  .where((d) => d.nameController.text.trim().isNotEmpty)
-                  .expand((draft) => draft.selectedUnits),
-            )
-          : encodeProductUnits(selectedUnits);
+      final unit = encodeProductUnits(selectedUnits);
       final costText = costPriceController.text.trim();
-      final costPrice =
-          hasVarieties || costText.isEmpty ? null : toDouble(costText);
+      final costPrice = costText.isEmpty ? null : toDouble(costText);
       final description = descriptionController.text.trim();
       final productOption = optionController.text.trim();
       final sku = _skuForSave();
@@ -700,31 +561,35 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       final imageMimeType = null;
       final savedImageUrl = null;
 
+      // Varieties are never sent: the backend dropped them, and saving with
+      // a varieties list replaced the price with the cheapest variety's.
       if (widget.isEditing) {
         await widget.pageState.updateManagedProduct(
           id: widget.existingProduct!.id,
           name: name,
           category: category!,
-          price: effectivePrice,
+          price: price,
           option: productOption.isEmpty ? null : productOption,
           sku: sku,
-          barcode: barcode.isEmpty ? null : barcode,
-          description: description.isEmpty ? null : description,
+          // '' / null are sent as-is so clearing a field clears it.
+          barcode: barcode,
+          description: description,
           costPrice: costPrice,
           stock: stock,
+          stockBase:
+              stock == null ? null : double.tryParse(_initialStockText),
           reorderLevel: reorderLevel,
           unit: unit,
           imageUrl: savedImageUrl,
           imageBytes: imageBytes,
           imageFilename: imageFilename,
           imageMimeType: imageMimeType,
-          varieties: varietiesPayload,
         );
       } else {
         await widget.pageState.addManagedProduct(
           name: name,
           category: category!,
-          price: effectivePrice,
+          price: price,
           option: productOption.isEmpty ? null : productOption,
           sku: sku,
           barcode: barcode.isEmpty ? null : barcode,
@@ -737,7 +602,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
           imageBytes: imageBytes,
           imageFilename: imageFilename,
           imageMimeType: imageMimeType,
-          varieties: varietiesPayload,
         );
       }
       if (!mounted) return;
@@ -752,42 +616,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       showTopError(context, error.toString());
       setState(() => saving = false);
     }
-  }
-
-  Widget _buildVarietyEditor(PosHomePageState pageState) {
-    final currency = pageState.settings.currencySymbol;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _FormSectionTitle(
-          icon: Icons.style_outlined,
-          label: 'Varieties',
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          'Each variety has its own price and stock, e.g. SUPER 222, INBRED-160.',
-          style: TextStyle(fontSize: 12, color: AppColors.muted),
-        ),
-        const SizedBox(height: 12),
-        for (var i = 0; i < varietyDrafts.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _VarietyDraftCard(
-              draft: varietyDrafts[i],
-              index: i,
-              currency: currency,
-              canRemove: varietyDrafts.length > 1,
-              onRemove: () => _removeVarietyDraft(i),
-              onChanged: () => setState(() {}),
-            ),
-          ),
-        OutlinedButton.icon(
-          onPressed: _addVarietyDraft,
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('Add Variety'),
-        ),
-      ],
-    );
   }
 
   @override
@@ -936,12 +764,6 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        _VarietyToggle(
-                          value: hasVarieties,
-                          onChanged: _toggleVarieties,
-                        ),
-                        const SizedBox(height: 16),
-                        if (!hasVarieties) ...[
                         const _FormSectionTitle(
                           icon: Icons.payments_outlined,
                           label: 'Pricing & Inventory',
@@ -994,9 +816,16 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                             Expanded(
                               child: TextField(
                                 controller: stockController,
-                                keyboardType: TextInputType.number,
+                                // Decimals allowed: goods sold by kg/L carry
+                                // fractional stock, and digitsOnly mangled
+                                // "2.5" into "25" on the first keystroke.
+                                keyboardType: const TextInputType.numberWithOptions(
+                                  decimal: true,
+                                ),
                                 inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'^\d*\.?\d{0,3}'),
+                                  ),
                                 ],
                                 decoration: const InputDecoration(
                                   labelText: 'Stock Qty',
@@ -1049,18 +878,12 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                           ],
                         ),
                         const SizedBox(height: 14),
-                        ] else ...[
-                          _buildVarietyEditor(pageState),
-                          const SizedBox(height: 16),
-                        ],
-                        if (!hasVarieties) ...[
-                          _ProductUnitSelector(
-                            selectedUnits: selectedUnits,
-                            onAdd: _addUnit,
-                            onRemove: _removeUnit,
-                          ),
-                          const SizedBox(height: 20),
-                        ],
+                        _ProductUnitSelector(
+                          selectedUnits: selectedUnits,
+                          onAdd: _addUnit,
+                          onRemove: _removeUnit,
+                        ),
+                        const SizedBox(height: 20),
                       ],
                     ),
                   ),
@@ -1711,215 +1534,6 @@ class _FormSectionTitle extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _VarietyToggle extends StatelessWidget {
-  const _VarietyToggle({required this.value, required this.onChanged});
-
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
-      decoration: BoxDecoration(
-        color: AppColors.softSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'This product has varieties',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.text,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Track price & stock per variety',
-                  style: TextStyle(fontSize: 12, color: AppColors.muted),
-                ),
-              ],
-            ),
-          ),
-          Switch(value: value, onChanged: onChanged),
-        ],
-      ),
-    );
-  }
-}
-
-class _VarietyDraftCard extends StatelessWidget {
-  const _VarietyDraftCard({
-    required this.draft,
-    required this.index,
-    required this.currency,
-    required this.canRemove,
-    required this.onRemove,
-    required this.onChanged,
-  });
-
-  final _VarietyDraft draft;
-  final int index;
-  final String currency;
-  final bool canRemove;
-  final VoidCallback onRemove;
-  final VoidCallback onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: draft.nameController,
-                  textCapitalization: TextCapitalization.characters,
-                  onChanged: (_) => onChanged(),
-                  decoration: InputDecoration(
-                    labelText: 'Variety ${index + 1} name *',
-                    hintText: 'e.g. SUPER 222',
-                    isDense: true,
-                  ),
-                ),
-              ),
-              IconButton(
-                onPressed: canRemove ? onRemove : null,
-                icon: const Icon(Icons.delete_outline),
-                color: AppColors.danger,
-                tooltip: 'Remove variety',
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: draft.priceController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(
-                      RegExp(r'^\d*\.?\d{0,2}'),
-                    ),
-                  ],
-                  decoration: InputDecoration(
-                    labelText: 'Price *',
-                    prefixText: currency,
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: draft.costController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(
-                      RegExp(r'^\d*\.?\d{0,2}'),
-                    ),
-                  ],
-                  decoration: InputDecoration(
-                    labelText: 'Cost',
-                    prefixText: currency,
-                    isDense: true,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: draft.stockController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Stock',
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: draft.reorderController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Reorder at',
-                    isDense: true,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _ProductUnitSelector(
-            selectedUnits: draft.selectedUnits,
-            onAdd: (value) {
-              if (value == null) return;
-              draft.selectedUnits = {
-                ...draft.selectedUnits,
-                normalizeProductUnit(value),
-              };
-              onChanged();
-            },
-            onRemove: (value) {
-              draft.selectedUnits = {...draft.selectedUnits}
-                ..remove(normalizeProductUnit(value));
-              onChanged();
-            },
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: draft.skuController,
-                  decoration: const InputDecoration(
-                    labelText: 'SKU (optional)',
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: draft.barcodeController,
-                  decoration: const InputDecoration(
-                    labelText: 'Barcode (optional)',
-                    isDense: true,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

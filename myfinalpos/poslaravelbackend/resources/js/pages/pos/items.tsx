@@ -693,6 +693,8 @@ type ProductFormState = {
     cost_price: string;
     deal: string;
     stock: string;
+    /** Stock when the edit dialog opened (see ProductInput.stock_base). */
+    stock_base?: number;
     reorder_level: string;
     description: string;
 };
@@ -1133,13 +1135,13 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
         try {
             let nextProducts = [...products];
 
+            // Send only the fields the user changed - the server keeps the
+            // rest. Sending the whole row (as loaded) wrote back the old stock
+            // and undid tablet sales; and edits for rows hidden by the current
+            // search/category filter used to be skipped while the toast still
+            // said "All changes saved".
             for (const [productId, edits] of pendingEdits) {
-                const base = products.find((product) => product.id === productId);
-                if (!base) {
-                    continue;
-                }
-                const merged = mergeProductWithPendingEdits(base, edits);
-                const payload = { ...productToPayload(merged), ...edits, id: productId };
+                const payload = { ...edits, id: productId } as ProductInput;
                 const res = await saveProduct(payload);
                 nextProducts = nextProducts.map((product) =>
                     product.id === productId ? res.data : product,
@@ -1367,9 +1369,16 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
 
                 setPendingEdits((current) => {
                     const next = new Map(current);
+                    const previous = next.get(row.product.id) ?? {};
                     next.set(row.product.id, {
-                        ...(next.get(row.product.id) ?? {}),
+                        ...previous,
                         ...patch,
+                        // Remember the stock the user was looking at the first
+                        // time they changed it (see ProductInput.stock_base).
+                        ...(patch.stock !== undefined &&
+                        previous.stock_base === undefined
+                            ? { stock_base: toNumber(row.product.stock) }
+                            : {}),
                     });
                     return next;
                 });
@@ -1646,6 +1655,7 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
                 product.stock === null || product.stock === undefined
                     ? ''
                     : String(toNumber(product.stock)),
+            stock_base: toNumber(product.stock),
             reorder_level: String(toNumber(product.reorder_level) || 5),
             description: product.description ?? '',
         });
@@ -1753,6 +1763,10 @@ export function ItemsCatalogView({ standalone = false }: { standalone?: boolean 
             deal: form.deal.trim() === '' ? null : form.deal.trim(),
             stock:
                 form.stock.trim() === '' ? 0 : parseFloat(form.stock),
+            // Only the change the user made is applied to live stock.
+            ...(form.id && form.stock_base !== undefined
+                ? { stock_base: form.stock_base }
+                : {}),
             reorder_level:
                 form.reorder_level.trim() === ''
                     ? 5

@@ -134,6 +134,11 @@ class RefundController extends Controller
                         throw new \RuntimeException('items array is required for refund by items');
                     }
 
+                    // Merge repeated order_item_ids first - each line used to be
+                    // checked against the same starting refunded_quantity, so
+                    // sending one item twice refunded (and restocked) more than
+                    // was ever sold.
+                    $requested = [];
                     foreach ($itemsInput as $line) {
                         $orderItemId = (int) ($line['order_item_id'] ?? 0);
                         $qty = (float) ($line['quantity'] ?? 0);
@@ -146,6 +151,10 @@ class RefundController extends Controller
                             throw new \RuntimeException("Invalid order_item_id: $orderItemId");
                         }
 
+                        $requested[$orderItemId] = round(($requested[$orderItemId] ?? 0) + $qty, 3);
+                    }
+
+                    foreach ($requested as $orderItemId => $qty) {
                         $refundLines[] = [
                             'order_item_id' => $orderItemId,
                             'quantity' => $qty,
@@ -229,6 +238,24 @@ class RefundController extends Controller
                     }
                 }
 
+                // Never pay back more than is still owed on the order, however
+                // the lines add up - scale the lines down to the balance.
+                $balanceOwed = max(0.0, round($orderTotal - $priorRefunded, 2));
+                if ($totalRefundAmount > $balanceOwed && count($processedLines) > 0) {
+                    $scale = $totalRefundAmount > 0 ? $balanceOwed / $totalRefundAmount : 0.0;
+                    $allocated = 0.0;
+                    foreach ($processedLines as $i => $line) {
+                        $processedLines[$i]['amount'] = round($line['amount'] * $scale, 2);
+                        $allocated += $processedLines[$i]['amount'];
+                    }
+                    $last = count($processedLines) - 1;
+                    $processedLines[$last]['amount'] = round(
+                        $processedLines[$last]['amount'] + ($balanceOwed - $allocated),
+                        2,
+                    );
+                    $totalRefundAmount = $balanceOwed;
+                }
+
                 // A line discounted to 0 still has to go back into stock -
                 // returning it refunds nothing, which is not an error.
                 $returnsGoods = count($processedLines) > 0;
@@ -283,9 +310,10 @@ class RefundController extends Controller
                 $remainingQty = (float) ($remainingRow->remaining_qty ?? 0);
 
                 $newRefundedAmount = round($priorRefunded + $totalRefundAmount, 2);
-                $newStatus = $newRefundedAmount >= $orderTotal - 0.01 || $remainingQty <= 0
-                    ? 'refunded'
-                    : 'partial_refund';
+                // "Refunded" only once every unit is back - going by money
+                // alone locked orders whose remaining lines were free (or whose
+                // total was 0), so those goods could never be returned.
+                $newStatus = $remainingQty <= 0.0001 ? 'refunded' : 'partial_refund';
 
                 DB::update(
                     'UPDATE orders
@@ -346,9 +374,12 @@ class RefundController extends Controller
                     'units_restored' => $unitsRestored,
                     'loyalty' => $loyalty,
                     'action' => $action,
-                    'message' => $unitsRestored > 0
-                        ? "$actionLabel processed successfully. {$unitsRestored} unit(s) returned to inventory."
-                        : "$actionLabel processed successfully",
+                    // The amount differs from the line price shown on the
+                    // tablet (order discounts are prorated, VAT added), so
+                    // say it outright - every app version shows this message.
+                    'message' => "$actionLabel processed. Give back ₱".number_format($totalRefundAmount, 2)
+                        .' to the customer.'
+                        .($unitsRestored > 0 ? " {$unitsRestored} unit(s) returned to inventory." : ''),
                 ];
             });
 

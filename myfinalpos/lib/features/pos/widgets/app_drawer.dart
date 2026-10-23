@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/brand.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/brand_logo.dart';
+import '../../../services/api_session.dart';
 import '../../../services/offline/offline_catalog_store.dart';
 import '../../auth/change_password_dialog.dart';
 import '../../auth/login.dart';
@@ -46,6 +47,7 @@ class AppDrawer extends StatelessWidget {
   }
 
   Future<void> _logout(BuildContext context) async {
+    await ApiSession.signOut();
     await OfflineSessionStore.clearUser();
     if (!context.mounted) return;
     Navigator.pop(context);

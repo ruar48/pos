@@ -702,6 +702,7 @@ class _AdjustStockDialog extends StatefulWidget {
 
 class _AdjustStockDialogState extends State<_AdjustStockDialog> {
   late final TextEditingController stockController;
+  late final double _initialStock;
   bool saving = false;
 
   @override
@@ -710,6 +711,9 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
     stockController = TextEditingController(
       text: formatQuantity(widget.product.stock ?? 0),
     );
+    // The value as shown (rounded the same way), so an untouched field
+    // means a change of exactly 0.
+    _initialStock = double.tryParse(stockController.text) ?? 0;
   }
 
   @override
@@ -733,23 +737,55 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
       return;
     }
 
+    // Send the change, not the absolute value: the server applies it to the
+    // live stock, so sales rung up while this dialog was open are kept.
+    final delta =
+        double.parse((newStock - _initialStock).toStringAsFixed(3));
+    if (delta == 0) {
+      Navigator.of(context).pop();
+      return;
+    }
+
     setState(() => saving = true);
     try {
       await widget.pageState.updateManagedStock(
         productId: widget.product.id,
-        stock: newStock,
+        delta: delta,
       );
       if (!mounted) return;
       Navigator.of(context).pop();
       widget.onSaved?.call();
+      final unit = widget.product.displayUnit;
+      final change = '${delta > 0 ? '+' : ''}${formatQuantity(delta)}';
+      final liveStock = _liveStock();
       showAppTopSuccess(
-        'Stock updated: ${widget.product.name} → $newStock ${widget.product.displayUnit}',
+        liveStock == null
+            ? 'Stock updated: ${widget.product.name} $change $unit'
+            : 'Stock updated: ${widget.product.name} $change $unit → '
+                '${formatQuantity(liveStock)} $unit',
       );
     } catch (error) {
       if (!mounted) return;
       showTopError(context, error.toString());
       setState(() => saving = false);
     }
+  }
+
+  String? _changeLabel() {
+    final value = double.tryParse(stockController.text.trim());
+    if (value == null) return null;
+    final delta = value - _initialStock;
+    if (delta.abs() < 0.0005) return null;
+    return 'Change: ${delta > 0 ? '+' : ''}${formatQuantity(delta)} '
+        '(added to the current stock)';
+  }
+
+  /// Stock after the save, from the catalog the save just reloaded.
+  double? _liveStock() {
+    for (final product in widget.pageState.products) {
+      if (product.id == widget.product.id) return product.stock;
+    }
+    return null;
   }
 
   @override
@@ -800,6 +836,7 @@ class _AdjustStockDialogState extends State<_AdjustStockDialog> {
                 labelText: 'Stock Quantity',
                 suffixText: unit,
                 prefixIcon: const Icon(Icons.inventory_2_outlined),
+                helperText: _changeLabel(),
               ),
               onChanged: (_) => setState(() {}),
             ),

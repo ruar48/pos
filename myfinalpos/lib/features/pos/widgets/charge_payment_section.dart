@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/format_utils.dart';
 import '../../../core/utils/top_toast.dart';
 import '../../receipt/receipt_printer.dart';
+import '../../../models/cart_item.dart';
 import '../../../models/order_payment.dart';
 import '../pages/pos_home_page.dart';
 import 'order_total_panel.dart';
@@ -116,35 +117,74 @@ class _ChargePaymentSectionState extends State<ChargePaymentSection> {
       }
     }
 
+    // Capture everything this sale needs before it is sent. Once the server
+    // has the sale it must be finished (receipt, print, cart cleared) even
+    // if this panel is no longer on screen - reading the live cart or the
+    // (by then disposed) text fields afterwards could also throw.
+    final pageState = widget.pageState;
+    final customer = pageState.selectedCustomer;
+    final cartItems = List<CartItem>.of(pageState.cart);
+    final lineItems = cartItems
+        .map(
+          (item) => ReceiptLineItem(
+            name: item.displayName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.total,
+          ),
+        )
+        .toList();
+    final itemCount = cartItems.fold<double>(0, (sum, item) => sum + item.quantity);
+    final netSubtotal = pageState.netSubtotal;
+    final vat = pageState.vatAmount;
+    final grandTotal = pageState.grandTotal;
+    final totalDiscount = pageState.totalDiscount;
+    final manualDiscount = pageState.manualDiscount;
+    final couponDiscount = pageState.couponDiscount;
+    final couponCode = pageState.appliedCouponCode;
+    final loyaltyDiscount = pageState.loyaltyDiscountAmount;
+    final loyaltyPointsRedeemed = pageState.loyaltyPointsRedeemed;
+    final pointsIfEarned = pageState.pointsEarnedForCurrentOrder();
+    final loyaltyCard = customer != null ? pageState.loyaltyCardFor(customer) : null;
+    final customerEarnsLoyalty = pageState.customerEarnsLoyalty(customer);
+    final tendered = amountTendered;
+    final change = changeAmount;
+    final method = paymentMethod;
+    final referenceText = referenceController.text.trim();
+    final orderType = pageState.orderType;
+    final currency = pageState.settings.currencySymbol;
+    final printer = pageState.resolvedPrinter;
+    final autoPrint = pageState.settings.autoPrintReceipt;
+    final doublePrint = pageState.settings.doublePrintReceipt;
+    final store = pageState.receiptStore;
+    final cashierName = pageState.widget.currentUser.fullName;
+
     setState(() => processing = true);
-    widget.pageState.publishMonitorPaymentProcessing();
+    pageState.setPaymentInFlight(true);
+    pageState.publishMonitorPaymentProcessing();
 
     try {
-      final customer = widget.pageState.selectedCustomer;
-
       final resolvedPaymentMethod = isSplit
           ? splitLines
               .map((p) => p.paymentMethod)
               .toSet()
               .join(' + ')
-          : paymentMethod;
+          : method;
 
-      final checkout = await widget.pageState.completeCheckout(
+      final checkout = await pageState.completeCheckout(
         customerId: customer?.id,
-        cartItems: widget.pageState.cart,
-        subtotal: widget.pageState.netSubtotal,
-        vat: widget.pageState.vatAmount,
-        totalAmount: widget.pageState.grandTotal,
-        clientChange: isSplit
-            ? 0
-            : (paymentMethod == 'Cash' ? changeAmount : 0),
-        paymentMethod: isSplit ? 'Split ($resolvedPaymentMethod)' : paymentMethod,
-        reference: isSplit ? '' : referenceController.text.trim(),
-        discountAmount: widget.pageState.manualDiscount,
-        couponDiscount: widget.pageState.couponDiscount,
-        couponCode: widget.pageState.appliedCouponCode,
-        loyaltyDiscount: widget.pageState.loyaltyDiscountAmount,
-        loyaltyPointsRedeemed: widget.pageState.loyaltyPointsRedeemed,
+        cartItems: cartItems,
+        subtotal: netSubtotal,
+        vat: vat,
+        totalAmount: grandTotal,
+        clientChange: isSplit ? 0 : (method == 'Cash' ? change : 0),
+        paymentMethod: isSplit ? 'Split ($resolvedPaymentMethod)' : method,
+        reference: isSplit ? '' : referenceText,
+        discountAmount: manualDiscount,
+        couponDiscount: couponDiscount,
+        couponCode: couponCode,
+        loyaltyDiscount: loyaltyDiscount,
+        loyaltyPointsRedeemed: loyaltyPointsRedeemed,
         payments: isSplit
             ? splitLines.map((payment) => payment.toJson()).toList()
             : null,
@@ -152,20 +192,11 @@ class _ChargePaymentSectionState extends State<ChargePaymentSection> {
       );
       final orderId = checkout.orderId;
       final invoiceNumber = checkout.invoiceNumber;
-      final currency = widget.pageState.settings.currencySymbol;
-      final earnsLoyalty = !checkout.isOfflinePending &&
-          widget.pageState.customerEarnsLoyalty(customer);
-      final loyaltyCard = customer != null
-          ? widget.pageState.loyaltyCardFor(customer)
-          : null;
-      final pointsEarned = earnsLoyalty
-          ? widget.pageState.pointsEarnedForCurrentOrder()
-          : 0;
+      final earnsLoyalty = !checkout.isOfflinePending && customerEarnsLoyalty;
+      final pointsEarned = earnsLoyalty ? pointsIfEarned : 0;
       final loyaltyBalance = loyaltyCard == null
           ? pointsEarned
-          : (loyaltyCard.points -
-                  widget.pageState.loyaltyPointsRedeemed +
-                  pointsEarned)
+          : (loyaltyCard.points - loyaltyPointsRedeemed + pointsEarned)
               .clamp(0, 999999999);
       final showLoyaltyOnReceipt =
           earnsLoyalty && (pointsEarned > 0 || loyaltyCard != null);
@@ -174,7 +205,7 @@ class _ChargePaymentSectionState extends State<ChargePaymentSection> {
         orderId: orderId,
         invoiceNumber: invoiceNumber,
         customerName: customer?.displayName ?? 'Walk In Farmer',
-        paymentMethod: isSplit ? 'Split ($resolvedPaymentMethod)' : paymentMethod,
+        paymentMethod: isSplit ? 'Split ($resolvedPaymentMethod)' : method,
         splitPayments: isSplit
             ? splitLines
                 .map(
@@ -186,34 +217,23 @@ class _ChargePaymentSectionState extends State<ChargePaymentSection> {
                 )
                 .toList()
             : null,
-        items: widget.pageState.cart
-            .map(
-              (item) => ReceiptLineItem(
-                name: item.displayName,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                total: item.total,
-              ),
-            )
-            .toList(),
-        subtotal: widget.pageState.netSubtotal,
-        vat: widget.pageState.vatAmount,
-        discount: widget.pageState.totalDiscount,
-        manualDiscount: widget.pageState.manualDiscount,
-        couponDiscount: widget.pageState.couponDiscount,
-        loyaltyDiscount: widget.pageState.loyaltyDiscountAmount,
-        total: widget.pageState.grandTotal,
+        items: lineItems,
+        subtotal: netSubtotal,
+        vat: vat,
+        discount: totalDiscount,
+        manualDiscount: manualDiscount,
+        couponDiscount: couponDiscount,
+        loyaltyDiscount: loyaltyDiscount,
+        total: grandTotal,
         amountTendered: isSplit
             ? splitLines.fold(0.0, (sum, p) => sum + p.amount)
-            : (paymentMethod == 'Cash'
-                ? amountTendered
-                : widget.pageState.grandTotal),
-        change: isSplit ? 0 : (paymentMethod == 'Cash' ? changeAmount : 0),
+            : (method == 'Cash' ? tendered : grandTotal),
+        change: isSplit ? 0 : (method == 'Cash' ? change : 0),
         currencySymbol: currency,
-        cashierName: widget.pageState.widget.currentUser.fullName,
-        itemCount: widget.pageState.cart.fold<double>(0, (sum, item) => sum + item.quantity),
-        orderType: widget.pageState.orderType,
-        reference: referenceController.text.trim(),
+        cashierName: cashierName,
+        itemCount: itemCount,
+        orderType: orderType,
+        reference: referenceText,
         receiptNote: checkout.isOfflinePending
             ? [
                 if (receiptNote.trim().isNotEmpty) receiptNote.trim(),
@@ -223,38 +243,38 @@ class _ChargePaymentSectionState extends State<ChargePaymentSection> {
         loyaltyPointsEarned: pointsEarned,
         loyaltyBalance: loyaltyBalance,
         isLoyaltyCustomer: showLoyaltyOnReceipt,
-        store: widget.pageState.receiptStore,
+        store: store,
       );
-
-      if (!mounted) return;
 
       unawaited(
         PosReceiptService.autoPrintOnComplete(
           receipt: receipt,
-          autoPrint: widget.pageState.settings.autoPrintReceipt,
-          doublePrint: widget.pageState.settings.doublePrintReceipt,
+          autoPrint: autoPrint,
+          doublePrint: doublePrint,
           openDrawer: isSplit
               ? splitLines.any((p) => p.paymentMethod == 'Cash')
-              : paymentMethod == 'Cash',
-          printer: widget.pageState.resolvedPrinter,
+              : method == 'Cash',
+          printer: printer,
         ),
       );
 
-      await widget.pageState.finishOrderAndShowReceipt(receipt);
+      pageState.setPaymentInFlight(false);
+      await pageState.finishOrderAndShowReceipt(receipt);
 
-      if (mounted) {
-        showAppTopSuccess(
-          checkout.isOfflinePending
-              ? 'Offline sale saved • $invoiceNumber • ${formatMoney(currency, receipt.total)}'
-              : 'Payment complete • $invoiceNumber • ${formatMoney(currency, receipt.total)}',
-        );
-      }
+      showAppTopSuccess(
+        checkout.isOfflinePending
+            ? 'Offline sale saved • $invoiceNumber • ${formatMoney(currency, receipt.total)}'
+            : 'Payment complete • $invoiceNumber • ${formatMoney(currency, receipt.total)}',
+      );
     } catch (error) {
+      final message = error.toString().replaceFirst('Exception: ', '');
       if (mounted) {
-        final message = error.toString().replaceFirst('Exception: ', '');
         showTopError(context, message);
+      } else {
+        showAppTopError(message);
       }
     } finally {
+      pageState.setPaymentInFlight(false);
       if (mounted) setState(() => processing = false);
     }
   }

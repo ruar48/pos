@@ -44,7 +44,7 @@ class SettingsController extends Controller
 
             $body = $request->all();
             $actorUserId = PosHelpers::currentActorId($request, $body);
-            $saved = $this->settings->save($body, $actorUserId);
+            $saved = $this->settings->save($body, (int) ($actorUserId ?? 0));
 
             return $this->posSuccess([
                 'message' => 'Settings saved successfully',

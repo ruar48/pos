@@ -191,6 +191,13 @@ class AppSettingsService
             throw new \RuntimeException('POS settings are not ready.');
         }
 
+        // Tax rate, negative stock, loyalty rates and the receipt header are
+        // store-wide - only an admin may change them. Previously only the PIN
+        // fields were checked, so a cashier web login (or an anonymous API
+        // call) could save the rest. Both the tablet and the web send the
+        // signed-in user here.
+        PosHelpers::requireAdminActor($actorUserId);
+
         $payload = [
             'tax_rate' => max(0.0, min(1.0, round((float) ($input['tax_rate'] ?? 0), 4))),
             'auto_print_receipt' => ! empty($input['auto_print_receipt']),

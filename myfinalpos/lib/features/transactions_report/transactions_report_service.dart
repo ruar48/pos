@@ -1,7 +1,6 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
-
+import '../../services/api_session.dart';
 import 'transactions_report_models.dart';
 
 class TransactionReportService {
@@ -28,9 +27,19 @@ class TransactionReportService {
 
     final uri = Uri.parse('$baseUrl/transaction_reports.php')
         .replace(queryParameters: query);
-    final response = await http.get(uri).timeout(const Duration(seconds: 20));
+    final response = await apiHttp.get(uri).timeout(const Duration(seconds: 20));
 
-    final body = jsonDecode(response.body);
+    // A gateway error page (e.g. HTML 504) isn't JSON; say so plainly
+    // instead of surfacing a FormatException full of markup.
+    Object? body;
+    try {
+      body = jsonDecode(response.body);
+    } on FormatException {
+      throw Exception(
+        'The server returned an error (HTTP ${response.statusCode}). '
+        'Please try again.',
+      );
+    }
     if (response.statusCode != 200 || body is! Map || body['success'] != true) {
       final message = body is Map
           ? body['message']?.toString()

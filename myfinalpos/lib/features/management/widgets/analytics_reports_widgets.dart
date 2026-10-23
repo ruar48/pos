@@ -85,28 +85,47 @@ class _AnalyticsReportsContentState extends State<AnalyticsReportsContent> {
     required bool isCompareA,
     bool compareB = false,
   }) async {
-    final initial = DateTime.now();
+    final isComparison = reportType == AnalyticsReportType.periodComparison;
+    final current = isComparison
+        ? (compareB
+            ? (isStart ? compareCustomStartB : compareCustomEndB)
+            : (isStart ? compareCustomStartA : compareCustomEndA))
+        : (isStart ? customStart : customEnd);
+    final firstDate = DateTime(2020);
+    final lastDate = DateTime.now().add(const Duration(days: 365));
+    var initial = current ?? DateTime.now();
+    if (initial.isBefore(firstDate)) initial = firstDate;
+    if (initial.isAfter(lastDate)) initial = lastDate;
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: firstDate,
+      lastDate: lastDate,
     );
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
+    var swapped = false;
     setState(() {
-      if (reportType == AnalyticsReportType.periodComparison) {
+      if (isComparison) {
         if (compareB) {
           if (isStart) {
             compareCustomStartB = picked;
           } else {
             compareCustomEndB = picked;
           }
+          final ordered = _orderedRange(compareCustomStartB, compareCustomEndB);
+          compareCustomStartB = ordered.start;
+          compareCustomEndB = ordered.end;
+          swapped = ordered.swapped;
         } else {
           if (isStart) {
             compareCustomStartA = picked;
           } else {
             compareCustomEndA = picked;
           }
+          final ordered = _orderedRange(compareCustomStartA, compareCustomEndA);
+          compareCustomStartA = ordered.start;
+          compareCustomEndA = ordered.end;
+          swapped = ordered.swapped;
         }
       } else {
         if (isStart) {
@@ -114,9 +133,30 @@ class _AnalyticsReportsContentState extends State<AnalyticsReportsContent> {
         } else {
           customEnd = picked;
         }
+        final ordered = _orderedRange(customStart, customEnd);
+        customStart = ordered.start;
+        customEnd = ordered.end;
+        swapped = ordered.swapped;
         periodPreset = AnalyticsPeriodPreset.custom;
       }
     });
+    // A From after To used to filter everything out silently.
+    if (swapped) {
+      showTopWarning(
+        context,
+        'The From date was after the To date - the two dates were swapped.',
+      );
+    }
+  }
+
+  ({DateTime? start, DateTime? end, bool swapped}) _orderedRange(
+    DateTime? start,
+    DateTime? end,
+  ) {
+    if (start != null && end != null && start.isAfter(end)) {
+      return (start: end, end: start, swapped: true);
+    }
+    return (start: start, end: end, swapped: false);
   }
 
   bool _canGenerateReport() {
@@ -941,8 +981,9 @@ class _ReportResults extends StatelessWidget {
     required Widget details,
   }) {
     final summary = AnalyticsEngine.summarize(filtered);
+    // VAT on refunded goods went back to the customer too.
     final totalVat =
-        filtered.fold<double>(0, (sum, record) => sum + record.vat);
+        filtered.fold<double>(0, (sum, record) => sum + record.netVat);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1036,16 +1077,6 @@ class _ReportResults extends StatelessWidget {
       records: filtered,
       byRevenue: bestSellersByRevenue,
     );
-    final revenueData = bestSellersByRevenue
-        ? data
-        : AnalyticsEngine.bestSellers(
-            records: filtered,
-            byRevenue: true,
-            limit: 10,
-          );
-    final revenueByName = {
-      for (final item in revenueData) item.label: item.value,
-    };
 
     return _numbersReport(
       title: 'Best Sellers',
@@ -1071,16 +1102,12 @@ class _ReportResults extends StatelessWidget {
                 : const ['Product', 'Qty Sold', 'Sales'],
             rows: data
                 .map(
+                  // Each product's own figures - looking revenue up in the
+                  // top-10-by-revenue list showed ₱0.00 for the rest.
                   (item) => [
                     item.label,
-                    formatQuantity(
-                        bestSellersByRevenue ? (item.secondary ?? 0) : item.value),
-                    formatMoney(
-                      currency,
-                      bestSellersByRevenue
-                          ? item.value
-                          : (revenueByName[item.label] ?? 0),
-                    ),
+                    formatQuantity(item.quantity ?? 0),
+                    formatMoney(currency, item.revenue ?? 0),
                   ],
                 )
                 .toList(),
@@ -1094,10 +1121,9 @@ class _ReportResults extends StatelessWidget {
 
   Widget _buildTrend(BuildContext context) {
     final filtered = _filtered();
-    final chartGranularity = AnalyticsEngine.granularityForRange(
-      primaryRange,
-      preset: periodPreset,
-    );
+    // The "Group By" choice - this used to be recomputed from the range,
+    // so the dropdown did nothing.
+    final chartGranularity = granularity;
     final data = AnalyticsEngine.salesTrend(
       records: filtered,
       granularity: chartGranularity,
@@ -1171,9 +1197,12 @@ class _ReportResults extends StatelessWidget {
       granularity: AnalyticsTrendGranularity.day,
       range: rangeB,
     );
-    final labels = trendA.map((item) => item.label).toList();
-    final valuesA = trendA.map((item) => item.value).toList();
-    final valuesB = trendB.map((item) => item.value).toList();
+    // Lined up by day offset and zero-padded: indexing B by A's length threw
+    // a RangeError whenever A had more days (Oct 31 vs Sep 30).
+    final aligned = AnalyticsEngine.alignComparisonSeries(trendA, trendB);
+    final labels = aligned.labels;
+    final valuesA = aligned.valuesA;
+    final valuesB = aligned.valuesB;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1208,8 +1237,8 @@ class _ReportResults extends StatelessWidget {
             ],
             [
               'Items Sold',
-              '${comparison.summaryA.itemCount}',
-              '${comparison.summaryB.itemCount}',
+              formatQuantity(comparison.summaryA.itemCount),
+              formatQuantity(comparison.summaryB.itemCount),
             ],
             [
               'Avg Ticket',
@@ -1220,6 +1249,11 @@ class _ReportResults extends StatelessWidget {
               'Discounts',
               formatMoney(currency, comparison.summaryA.totalDiscount),
               formatMoney(currency, comparison.summaryB.totalDiscount),
+            ],
+            [
+              'Refunds (deducted)',
+              formatMoney(currency, comparison.summaryA.refundedAmount),
+              formatMoney(currency, comparison.summaryB.refundedAmount),
             ],
           ],
         ),
@@ -1276,8 +1310,8 @@ class _ReportResults extends StatelessWidget {
             ],
             [
               'Items Sold',
-              '${comparison.summaryA.itemCount}',
-              '${comparison.summaryB.itemCount}',
+              formatQuantity(comparison.summaryA.itemCount),
+              formatQuantity(comparison.summaryB.itemCount),
             ],
             [
               'Avg Ticket',
@@ -1346,10 +1380,13 @@ class _ReportResults extends StatelessWidget {
   }
 
   Map<String, int> _paymentOrderCounts(List<SalesHistoryRecord> filtered) {
+    // Same orders and keys as AnalyticsEngine.paymentBreakdown: full
+    // refunds are not sales, and the method name is trimmed there too.
     final counts = <String, int>{};
-    for (final record in filtered) {
-      final method =
-          record.paymentMethod.trim().isEmpty ? 'Cash' : record.paymentMethod;
+    for (final record in AnalyticsEngine.salesOnly(filtered)) {
+      final method = record.paymentMethod.trim().isEmpty
+          ? 'Cash'
+          : record.paymentMethod.trim();
       counts[method] = (counts[method] ?? 0) + 1;
     }
     return counts;
@@ -1755,12 +1792,17 @@ class _SalesNumbersHero extends StatelessWidget {
               ),
               _HeroStatChip(
                 label: 'Items',
-                value: '${summary.itemCount}',
+                value: formatQuantity(summary.itemCount),
               ),
               _HeroStatChip(
                 label: 'Discounts',
                 value: formatMoney(currency, summary.totalDiscount),
               ),
+              if (summary.refundedAmount > 0)
+                _HeroStatChip(
+                  label: 'Refunds (deducted)',
+                  value: formatMoney(currency, summary.refundedAmount),
+                ),
             ],
           ),
         ],
@@ -1942,13 +1984,18 @@ class _AnalyticsKpiGrid extends StatelessWidget {
             label: 'Total Sales',
             value: formatMoney(currency, summary.totalSales),
             icon: Icons.payments_outlined,
+            subtitle: summary.refundedAmount > 0
+                ? 'Net of ${formatMoney(currency, summary.refundedAmount)} refunds'
+                : null,
           ),
           SummaryCard(
             label: 'Orders',
             value: '${summary.orderCount}',
             icon: Icons.receipt_long_outlined,
             color: AppColors.darkGreen,
-            subtitle: '${summary.itemCount} items',
+            subtitle: summary.refundedOrders > 0
+                ? '${formatQuantity(summary.itemCount)} items • ${summary.refundedOrders} fully refunded'
+                : '${formatQuantity(summary.itemCount)} items',
           ),
           SummaryCard(
             label: 'Avg Sale',

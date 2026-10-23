@@ -23,6 +23,84 @@ const _currencyOptions = <String, String>{
   'PHP': 'PHP label',
 };
 
+/// Tax and loyalty numbers read from the settings form.
+class SettingsNumbers {
+  const SettingsNumbers({
+    required this.taxRate,
+    required this.loyaltyPointsPerUnit,
+    required this.loyaltySpendUnit,
+    required this.loyaltyRedeemPointsPerPeso,
+  });
+
+  /// Fraction (0.12 = 12%).
+  final double taxRate;
+  final int loyaltyPointsPerUnit;
+  final double loyaltySpendUnit;
+  final int loyaltyRedeemPointsPerPeso;
+}
+
+/// Parses the numeric settings fields; [values] is null and [error] says
+/// which field to fix when one is blank or out of range. Nothing falls back
+/// to 0 - a blank field is an error, not "zero". With loyalty off its
+/// fields are hidden, so an unusable entry there keeps the [current] value
+/// instead of blocking the save.
+({SettingsNumbers? values, String? error}) validateSettingsNumbers({
+  required String taxRatePercent,
+  required String loyaltyPointsPerUnit,
+  required String loyaltySpendUnit,
+  required String loyaltyRedeemPointsPerPeso,
+  required bool loyaltyEnabled,
+  required AppSettingsModel current,
+}) {
+  ({SettingsNumbers? values, String? error}) fail(String message) =>
+      (values: null, error: message);
+
+  final taxText = taxRatePercent.trim();
+  if (taxText.isEmpty) {
+    return fail('Enter a tax / VAT rate (use 0 for no tax).');
+  }
+  final taxPercent = double.tryParse(taxText);
+  if (taxPercent == null ||
+      !taxPercent.isFinite ||
+      taxPercent < 0 ||
+      taxPercent > 100) {
+    return fail('Tax / VAT rate must be a number from 0 to 100%.');
+  }
+
+  final spendUnit = double.tryParse(loyaltySpendUnit.trim());
+  final pointsPerUnit = int.tryParse(loyaltyPointsPerUnit.trim());
+  final redeemPerPeso = int.tryParse(loyaltyRedeemPointsPerPeso.trim());
+  final spendValid = spendUnit != null && spendUnit.isFinite && spendUnit > 0;
+  final pointsValid = pointsPerUnit != null && pointsPerUnit >= 0;
+  final redeemValid = redeemPerPeso != null && redeemPerPeso >= 1;
+
+  if (loyaltyEnabled) {
+    if (!pointsValid) {
+      return fail('Enter the points earned (0 or more).');
+    }
+    if (!spendValid) {
+      return fail('Spend amount for points must be more than 0.');
+    }
+    if (!redeemValid) {
+      return fail(
+        'Points needed for a ${formatMoney(current.currencySymbol, 1)} discount must be at least 1.',
+      );
+    }
+  }
+
+  return (
+    values: SettingsNumbers(
+      taxRate: taxPercent / 100,
+      loyaltyPointsPerUnit:
+          pointsValid ? pointsPerUnit : current.loyaltyPointsPerUnit,
+      loyaltySpendUnit: spendValid ? spendUnit : current.loyaltySpendUnit,
+      loyaltyRedeemPointsPerPeso:
+          redeemValid ? redeemPerPeso : current.loyaltyRedeemPointsPerPeso,
+    ),
+    error: null,
+  );
+}
+
 class SettingsManagementContent extends StatefulWidget {
   const SettingsManagementContent({super.key, required this.pageState});
 
@@ -244,13 +322,29 @@ class _SettingsManagementContentState extends State<SettingsManagementContent> {
   }
 
   Future<void> _save() async {
+    // Blank number fields used to save as 0 (no VAT; a spend unit the
+    // server floors to 0.01, so a ₱1,000 sale earned 5,000,000 points).
+    final numbers = validateSettingsNumbers(
+      taxRatePercent: taxRateController.text,
+      loyaltyPointsPerUnit: loyaltyPointsController.text,
+      loyaltySpendUnit: loyaltySpendController.text,
+      loyaltyRedeemPointsPerPeso: loyaltyRedeemController.text,
+      loyaltyEnabled: settings.loyaltyEnabled,
+      current: settings,
+    );
+    final values = numbers.values;
+    if (values == null) {
+      showTopWarning(context, numbers.error ?? 'Check the number fields.');
+      return;
+    }
+
     setState(() => saving = true);
     try {
       final updatedSettings = settings.copyWith(
-        taxRate: toDouble(taxRateController.text) / 100,
-        loyaltyPointsPerUnit: toInt(loyaltyPointsController.text),
-        loyaltySpendUnit: toDouble(loyaltySpendController.text),
-        loyaltyRedeemPointsPerPeso: toInt(loyaltyRedeemController.text),
+        taxRate: values.taxRate,
+        loyaltyPointsPerUnit: values.loyaltyPointsPerUnit,
+        loyaltySpendUnit: values.loyaltySpendUnit,
+        loyaltyRedeemPointsPerPeso: values.loyaltyRedeemPointsPerPeso,
         lowStockEmailRecipients: lowStockRecipientsController.text.trim(),
       );
       final updatedReceiptStore = _draftReceiptStore();

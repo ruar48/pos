@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Pos;
 
 use App\Http\Controllers\Controller;
 use App\Support\PosApiResponse;
+use App\Support\PosApiToken;
 use App\Support\PosHelpers;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
@@ -278,6 +279,10 @@ class UserController extends Controller
             'UPDATE users SET password_hash = ? WHERE id = ?',
             [password_hash($password, PASSWORD_BCRYPT), $userId],
         );
+
+        // Sign the user out of every tablet - the old password's sessions
+        // shouldn't outlive the reset.
+        PosApiToken::revokeAllForUser($userId);
 
         PosHelpers::insertAuditLog(
             (int) $actor['id'],

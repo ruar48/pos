@@ -85,3 +85,62 @@ class OfflineStatusBanner extends StatelessWidget {
     );
   }
 }
+
+/// Shown while ONLINE when offline sales are still on this tablet: waiting to
+/// sync, or refused by the server and needing attention. The count used to
+/// appear only in offline mode, so a stuck queue went unnoticed.
+class OfflineSyncAttentionBanner extends StatelessWidget {
+  const OfflineSyncAttentionBanner({
+    super.key,
+    required this.pendingSyncCount,
+    required this.attentionCount,
+    required this.onRetry,
+  });
+
+  final int pendingSyncCount;
+  final int attentionCount;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final needsAttention = attentionCount > 0;
+    final message = needsAttention
+        ? '$attentionCount offline sale${attentionCount == 1 ? '' : 's'} could not be saved '
+            '(e.g. a product or customer was deleted). They are kept on this tablet - '
+            'fix the cause, then tap Retry.'
+        : '$pendingSyncCount offline sale${pendingSyncCount == 1 ? '' : 's'} waiting to sync.';
+
+    return Material(
+      color: needsAttention ? AppColors.danger : AppColors.orange,
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+        child: Row(
+          children: [
+            Icon(
+              needsAttention ? Icons.error_outline : Icons.cloud_upload_outlined,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: onRetry,
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

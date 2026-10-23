@@ -1,9 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 
 import '../../core/constants/pos_payment_methods.dart';
 import '../../core/utils/sales_history_window.dart';
+import '../../services/api_session.dart';
 import '../../models/printer_settings.dart';
 import '../../models/refund_item_request.dart';
 import '../receipt/receipt_printer.dart';
@@ -39,7 +40,7 @@ class TransactionService {
         orderId: orderId,
       ),
     );
-    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+    final response = await apiHttp.get(uri).timeout(const Duration(seconds: 12));
 
     if (response.statusCode != 200) {
       throw HttpException(
@@ -65,7 +66,7 @@ class TransactionService {
 
   Future<List<RefundRecord>> fetchRefunds() async {
     final uri = _buildUri('get_refunds.php');
-    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+    final response = await apiHttp.get(uri).timeout(const Duration(seconds: 12));
 
     if (response.statusCode != 200) {
       throw HttpException(
@@ -95,6 +96,12 @@ class TransactionService {
     return null;
   }
 
+  /// Without a limit a stalled request left the cashier looking at nothing,
+  /// and tapping Refund again could refund twice.
+  static const refundTimeout = Duration(seconds: 20);
+
+  /// Never throws: every failure comes back as an unsuccessful result the
+  /// screen can show.
   Future<TransactionApiResult> processRefund({
     required int orderId,
     required String reason,
@@ -104,28 +111,92 @@ class TransactionService {
     String? refundPin,
   }) async {
     final uri = _buildUri('process_refund.php');
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'order_id': orderId,
-        'refund_type': refundType,
-        'reason': reason,
-        'items': items.map((item) => item.toJson()).toList(),
-        'actor_user_id': actorUserId,
-        if (refundPin != null && refundPin.isNotEmpty) 'refund_pin': refundPin,
-      }),
-    );
+    try {
+      final response = await apiHttp
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'order_id': orderId,
+              'refund_type': refundType,
+              'reason': reason,
+              'items': items.map((item) => item.toJson()).toList(),
+              'actor_user_id': actorUserId,
+              if (refundPin != null && refundPin.isNotEmpty)
+                'refund_pin': refundPin,
+            }),
+          )
+          .timeout(refundTimeout);
+      return refundResultFromResponse(response.statusCode, response.body);
+    } on TimeoutException {
+      // The server may still finish the refund after we stop waiting.
+      return const TransactionApiResult(
+        success: false,
+        message: 'No answer from the server after 20 seconds. The refund '
+            'may still have gone through - check the order before '
+            'refunding again.',
+      );
+    } on SocketException {
+      return const TransactionApiResult(
+        success: false,
+        message: 'Could not reach the server. Check the connection, then '
+            'check the order before refunding again.',
+      );
+    } catch (error) {
+      return TransactionApiResult(
+        success: false,
+        message: 'Refund failed: $error. Check the order before refunding '
+            'again.',
+      );
+    }
+  }
 
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final success = response.statusCode == 200 && body['success'] == true;
-    final apiMessage = body['message']?.toString().trim();
+  /// Turns a process_refund.php reply into a result. A gateway error page
+  /// (e.g. an HTML 504) is not JSON, and decoding it used to throw so the
+  /// cashier saw nothing at all.
+  static TransactionApiResult refundResultFromResponse(
+    int statusCode,
+    String body,
+  ) {
+    Map<String, dynamic>? payload;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) payload = Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      payload = null;
+    }
+
+    final success = statusCode == 200 && payload?['success'] == true;
+    final apiMessage = payload?['message']?.toString().trim() ?? '';
+    final refundAmount = success
+        ? _toMoney(payload?['refund_amount'])
+        : null;
+
+    final String message;
+    if (apiMessage.isNotEmpty) {
+      message = apiMessage;
+    } else if (success) {
+      message = 'Refund processed. Give back '
+          '₱${(refundAmount ?? 0).toStringAsFixed(2)} to the customer.';
+    } else if (payload == null) {
+      // A proxy/server error page: the refund may or may not have run.
+      message = 'The server returned an error (HTTP $statusCode). The '
+          'refund may still have gone through - check the order before '
+          'refunding again.';
+    } else {
+      message = 'Refund failed (HTTP $statusCode)';
+    }
+
     return TransactionApiResult(
       success: success,
-      message: (apiMessage != null && apiMessage.isNotEmpty)
-          ? apiMessage
-          : (success ? 'Refund processed' : 'Refund failed'),
+      message: message,
+      refundAmount: refundAmount,
     );
+  }
+
+  static double _toMoney(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   Future<TransactionApiResult> reprintReceipt({
@@ -139,14 +210,13 @@ class TransactionService {
         transaction,
         store: store,
       );
-      final isCash =
-          transaction.paymentMethod.toLowerCase().contains('cash');
 
       await PosReceiptService.printReceipt(
         receipt: receipt,
         printer: printer,
         printerHost: printerHost,
-        openDrawer: isCash,
+        // No money changes hands on a reprint, so the drawer stays shut.
+        openDrawer: false,
       );
 
       return const TransactionApiResult(
@@ -226,6 +296,20 @@ class TransactionService {
       itemCount: transaction.totalQuantity,
       orderType: transaction.customerType,
       reference: transaction.reference,
+      // Split sales print each method's amount and reference, as at
+      // checkout.
+      splitPayments:
+          transaction.isSplitPayment && transaction.splitPayments.isNotEmpty
+              ? transaction.splitPayments
+                  .map(
+                    (payment) => ReceiptPaymentLine(
+                      paymentMethod: payment.paymentMethod,
+                      amount: payment.amount,
+                      reference: payment.reference,
+                    ),
+                  )
+                  .toList()
+              : null,
       isVatRegistered: transaction.vat > 0,
       dateTime: transaction.createdAt,
       store: store ?? const ReceiptStoreConfig(),

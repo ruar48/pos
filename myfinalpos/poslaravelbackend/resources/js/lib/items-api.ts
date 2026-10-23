@@ -48,6 +48,10 @@ export type ProductInput = {
     cost_price?: number | null;
     deal?: string | null;
     stock?: number;
+    /** Stock shown when the user edited it - the server applies only the
+     * change (stock - stock_base) to the live stock, so sales made meanwhile
+     * are not overwritten. */
+    stock_base?: number;
     reorder_level?: number;
     description?: string;
     image_url?: string;

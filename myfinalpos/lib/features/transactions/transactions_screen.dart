@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -67,49 +68,109 @@ class TransactionsScreen extends StatelessWidget {
 }
 
 class TransactionState extends ChangeNotifier {
-  TransactionState({required this.service, required this.actorUserId});
+  TransactionState({
+    required this.service,
+    required this.actorUserId,
+    this.resolvePrinter,
+  });
 
   final TransactionService service;
   final int? actorUserId;
 
+  /// The printer checkout uses (this tablet's own config, else the store
+  /// printer from settings). Without it reprints fall back to the local
+  /// device config / legacy `printer_host` only.
+  final PrinterConfig Function()? resolvePrinter;
+
   bool isLoading = false;
+  bool isRefunding = false;
   String errorMessage = '';
   String query = '';
   TransactionFilterType filter = TransactionFilterType.all;
   TransactionRecord? selectedTransaction;
   List<TransactionRecord> transactions = [];
 
-  Future<void> loadTransactions() async {
-    isLoading = true;
-    errorMessage = '';
-    notifyListeners();
+  /// Orders from before the default window that were fetched one by one
+  /// (receipt search). Reloads fetch them again by id so a refund or
+  /// Refresh doesn't make them vanish.
+  final Set<int> _outOfWindowIds = {};
+  int _loadSeq = 0;
+  bool _disposed = false;
+
+  /// [silent] keeps the current list on screen instead of the full-page
+  /// spinner (used after a refund so the detail pane stays put).
+  /// [selectId] picks the order to keep selected (defaults to the current
+  /// one).
+  Future<void> loadTransactions({bool silent = false, int? selectId}) async {
+    final seq = ++_loadSeq;
+    if (!silent) {
+      isLoading = true;
+      errorMessage = '';
+      notifyListeners();
+    }
 
     try {
-      final selectedId = selectedTransaction?.id;
-      transactions = await service.fetchTransactions();
+      final selectedId = selectId ?? selectedTransaction?.id;
+      final recent = await service.fetchTransactions();
+      final older = await _refetchOutOfWindow(recent);
+      if (seq != _loadSeq) return;
 
+      transactions = [...recent, ...older];
+      errorMessage = '';
+
+      TransactionRecord? refreshed;
       if (selectedId != null) {
-        TransactionRecord? refreshed;
         for (final transaction in transactions) {
           if (transaction.id == selectedId) {
             refreshed = transaction;
             break;
           }
         }
-        selectedTransaction = refreshed;
-      } else {
-        selectedTransaction = null;
       }
+      selectedTransaction = refreshed;
       _syncSelectionWithFilter();
     } catch (error) {
-      errorMessage = error.toString();
+      if (seq != _loadSeq) return;
+      errorMessage = describeLoadError(error);
     } finally {
-      isLoading = false;
-      notifyListeners();
+      if (seq == _loadSeq) {
+        isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
+  Future<List<TransactionRecord>> _refetchOutOfWindow(
+    List<TransactionRecord> recent,
+  ) async {
+    final recentIds = recent.map((t) => t.id).toSet();
+    final missing =
+        _outOfWindowIds.where((id) => !recentIds.contains(id)).toList();
+    if (missing.isEmpty) return const [];
+
+    final previous = {for (final t in transactions) t.id: t};
+    final results = await Future.wait(
+      missing.map((id) async {
+        try {
+          return await service.fetchTransactionDetail(id);
+        } catch (_) {
+          // Keep the copy we had rather than dropping the order the
+          // cashier is working on; the server re-checks any refund anyway.
+          return previous[id];
+        }
+      }),
+    );
+    return results.whereType<TransactionRecord>().toList();
+  }
+
   Future<void> refresh() => loadTransactions();
+
+  @override
+  void notifyListeners() {
+    // A load or refund can finish after the Orders page has closed.
+    if (_disposed) return;
+    super.notifyListeners();
+  }
 
   void select(TransactionRecord transaction) {
     selectedTransaction = transaction;
@@ -133,6 +194,7 @@ class TransactionState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _receiptLookupDebounce?.cancel();
     super.dispose();
   }
@@ -152,6 +214,7 @@ class TransactionState extends ChangeNotifier {
       final found = await service.fetchTransactionDetail(orderId);
       if (found == null || query != value) return;
       if (transactions.any((t) => t.id == found.id)) return;
+      _outOfWindowIds.add(found.id);
       transactions = [...transactions, found];
       _syncSelectionWithFilter();
       notifyListeners();
@@ -193,7 +256,7 @@ class TransactionState extends ChangeNotifier {
           transaction.paymentMethod.toLowerCase() == 'cash',
         TransactionFilterType.card =>
           transaction.paymentMethod.toLowerCase().contains('card'),
-        TransactionFilterType.refunded => transaction.refundedAmount > 0,
+        TransactionFilterType.refunded => transaction.hasAnyRefund,
       };
       return matchesQuery && matchesFilter;
     }).toList();
@@ -215,31 +278,57 @@ class TransactionState extends ChangeNotifier {
         .toList();
   }
 
+  /// Refunds [orderId] (default: the selected order). Only one refund runs
+  /// at a time, and [isRefunding] stays true until the order has been
+  /// reloaded, so the next refund always sees the new remaining quantities.
   Future<TransactionApiResult> refundSelectedTransaction({
     required String reason,
     required String refundType,
     required List<RefundItemRequest> items,
     String? refundPin,
+    int? orderId,
   }) async {
-    final transaction = selectedTransaction;
-    if (transaction == null) {
+    final targetId = orderId ?? selectedTransaction?.id;
+    if (targetId == null) {
       return const TransactionApiResult(
         success: false,
         message: 'No transaction selected',
       );
     }
+    if (isRefunding) {
+      return const TransactionApiResult(
+        success: false,
+        message: 'A refund is already being processed - please wait.',
+      );
+    }
 
-    final result = await service.processRefund(
-      orderId: transaction.id,
-      reason: reason,
-      refundType: refundType,
-      items: items,
-      actorUserId: actorUserId,
-      refundPin: refundPin,
-    );
+    isRefunding = true;
+    notifyListeners();
 
-    if (result.success) {
-      await refresh();
+    TransactionApiResult result;
+    try {
+      result = await service.processRefund(
+        orderId: targetId,
+        reason: reason,
+        refundType: refundType,
+        items: items,
+        actorUserId: actorUserId,
+        refundPin: refundPin,
+      );
+    } catch (error) {
+      result = TransactionApiResult(
+        success: false,
+        message: 'Refund failed: $error',
+      );
+    }
+
+    try {
+      // Reload whatever the outcome - after a timeout the refund may still
+      // have gone through on the server.
+      await loadTransactions(silent: true, selectId: targetId);
+    } finally {
+      isRefunding = false;
+      notifyListeners();
     }
     return result;
   }
@@ -253,10 +342,19 @@ class TransactionState extends ChangeNotifier {
       );
     }
 
+    final store = await ReceiptStoreConfig.loadFromPrefs();
+    final resolver = resolvePrinter;
+    if (resolver != null) {
+      return service.reprintReceipt(
+        transaction: transaction,
+        printer: resolver(),
+        store: store,
+      );
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final devicePrinter = await DevicePrinterSettings.load();
     final printerHost = prefs.getString('printer_host') ?? '';
-    final store = await ReceiptStoreConfig.loadFromPrefs();
     final printer = devicePrinter.hasLocalConfig
         ? devicePrinter.config
         : (printerHost.trim().isNotEmpty
@@ -270,6 +368,22 @@ class TransactionState extends ChangeNotifier {
       store: store,
     );
   }
+}
+
+/// Plain-language reason a list load failed (the raw exception text, e.g.
+/// "TimeoutException after 0:00:12.000000", means nothing to a cashier).
+String describeLoadError(Object error) {
+  if (error is TimeoutException) {
+    return 'The server took too long to answer.';
+  }
+  if (error is SocketException) {
+    return 'Could not reach the server. Check the connection.';
+  }
+  if (error is HttpException) return error.message;
+  if (error is FormatException) {
+    return 'The server sent an unexpected reply.';
+  }
+  return error.toString();
 }
 
 class _TransactionSidebar extends StatelessWidget {
@@ -344,6 +458,7 @@ class _TransactionDetailArea extends StatelessWidget {
 
     return TransactionDetailsWidget(
       transaction: transaction,
+      refunding: state.isRefunding,
       onPrint: () {},
       onReprint: () async {
         final result = await state.reprintSelectedTransaction();
@@ -356,6 +471,7 @@ class _TransactionDetailArea extends StatelessWidget {
         }
       },
       onRefund: () async {
+        if (state.isRefunding) return;
         final result = await showDialog<RefundDialogResult>(
           context: context,
           barrierDismissible: false,
@@ -370,18 +486,13 @@ class _TransactionDetailArea extends StatelessWidget {
         if (!context.mounted) return;
 
         final apiResult = await state.refundSelectedTransaction(
+          orderId: transaction.id,
           reason: result.reason,
           refundType: result.refundType,
           items: result.items,
         );
 
-        if (context.mounted) {
-          if (apiResult.success) {
-            showTopSuccess(context, apiResult.message);
-          } else {
-            showTopError(context, apiResult.message);
-          }
-        }
+        await showRefundOutcome(context.mounted ? context : null, apiResult);
       },
       onVoid: () {},
       onDownloadPdf: () async {

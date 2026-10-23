@@ -80,6 +80,7 @@ class _SalesHistoryManagementContentState
     }).toList();
   }
 
+  // Net of refunds - a refunded sale is money that went back out.
   double get todaySalesTotal {
     final now = DateTime.now();
     return records
@@ -89,7 +90,7 @@ class _SalesHistoryManagementContentState
               record.createdAt.month == now.month &&
               record.createdAt.day == now.day,
         )
-        .fold<double>(0, (sum, record) => sum + record.total);
+        .fold<double>(0, (sum, record) => sum + record.netTotal);
   }
 
   int get walkInCount => records.where((record) => record.isWalkIn).length;
@@ -464,7 +465,7 @@ class _SalesOrderTile extends StatelessWidget {
                           color: AppColors.darkGreen,
                         ),
                         _SalesBadge(
-                          label: '${record.itemCount} items',
+                          label: '${formatQuantity(record.itemCount)} items',
                           color: AppColors.amber,
                         ),
                         if (record.totalDiscount > 0)
@@ -472,6 +473,17 @@ class _SalesOrderTile extends StatelessWidget {
                             label:
                                 'Disc ${formatMoney(currencySymbol, record.totalDiscount)}',
                             color: AppColors.green,
+                          ),
+                        if (record.isFullyRefunded)
+                          const _SalesBadge(
+                            label: 'Refunded',
+                            color: AppColors.danger,
+                          )
+                        else if (record.hasRefund)
+                          _SalesBadge(
+                            label:
+                                'Refunded ${formatMoney(currencySymbol, record.refundedAmount)}',
+                            color: AppColors.danger,
                           ),
                       ],
                     ),
@@ -630,8 +642,8 @@ class _SalesOrderDetailsDialog extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 10),
-                          ...record.items.map(
-                            (item) => Padding(
+                          for (final (index, item) in record.items.indexed)
+                            Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Container(
                                 padding: const EdgeInsets.all(12),
@@ -670,6 +682,16 @@ class _SalesOrderDetailsDialog extends StatelessWidget {
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
+                                          if (record.refundedQuantityAt(index) >
+                                              0.0005)
+                                            Text(
+                                              '${formatQuantity(record.refundedQuantityAt(index))} refunded',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.danger,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ),
@@ -684,7 +706,6 @@ class _SalesOrderDetailsDialog extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          ),
                           const SizedBox(height: 12),
                           Container(
                             padding: const EdgeInsets.all(16),
@@ -695,10 +716,15 @@ class _SalesOrderDetailsDialog extends StatelessWidget {
                             ),
                             child: Column(
                               children: [
+                                // subtotal is stored net of every discount;
+                                // show the pre-discount amount so Subtotal -
+                                // Discount + VAT adds up to Total.
                                 _SalesTotalRow(
                                   label: 'Subtotal',
-                                  value:
-                                      formatMoney(currencySymbol, record.subtotal),
+                                  value: formatMoney(
+                                    currencySymbol,
+                                    record.grossSubtotal,
+                                  ),
                                 ),
                                 if (record.totalDiscount > 0) ...[
                                   const SizedBox(height: 8),
@@ -720,6 +746,23 @@ class _SalesOrderDetailsDialog extends StatelessWidget {
                                   value: formatMoney(currencySymbol, record.total),
                                   emphasized: true,
                                 ),
+                                if (record.hasRefund) ...[
+                                  const SizedBox(height: 8),
+                                  _SalesTotalRow(
+                                    label: 'Refunded',
+                                    value:
+                                        '-${formatMoney(currencySymbol, record.refundedAmount)}',
+                                    valueColor: AppColors.danger,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _SalesTotalRow(
+                                    label: 'Net After Refunds',
+                                    value: formatMoney(
+                                      currencySymbol,
+                                      record.netTotal,
+                                    ),
+                                  ),
+                                ],
                                 if (record.clientChange > 0) ...[
                                   const SizedBox(height: 8),
                                   _SalesTotalRow(

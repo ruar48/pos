@@ -743,10 +743,13 @@ class ThermalReceiptLayout {
   /// characters. Printable ASCII plus common Latin-1 accented letters
   /// (store/customer names and addresses may use them, e.g. "ñ") are kept;
   /// everything else is dropped rather than sent as raw bytes a clone
-  /// controller could misinterpret.
+  /// controller could misinterpret. ₱ isn't in the printer's code page, so
+  /// it becomes "P" - the same thing PrinterTransport.encodeText prints for
+  /// it on the lines that skip this (item lines).
   static String _sanitizeLine(String line) {
     if (line.isEmpty) return line;
-    final withoutTags = line.replaceAll(RegExp(r'<[^>]*>'), '');
+    final withoutTags =
+        line.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll('₱', 'P');
     final buffer = StringBuffer();
     for (final rune in withoutTags.runes) {
       final isPrintableAscii = rune >= 0x20 && rune <= 0x7E;
@@ -1070,15 +1073,14 @@ class _EscPosBuilder {
     if (small) _bytes.addAll(<int>[0x1B, 0x4D, 0x01]);
 
     for (final line in value.split('\n')) {
-      // Encode as proper UTF-8 bytes (not raw UTF-16 code units - a
-      // non-ASCII character like ₱ would otherwise turn into a code unit
-      // >255 truncated into a single stray byte, which some printer
-      // firmwares misinterpret as a control byte and start behaving
-      // unpredictably for everything after it). Use CRLF: some cheap/clone
+      // One code-page byte per character (see PrinterTransport.encodeText)
+      // - not UTF-8, whose 2-byte "ñ" printed as two wrong glyphs and
+      // overflowed every padded row by a column, and not raw UTF-16 code
+      // units, which can't fit in a byte at all. Use CRLF: some cheap/clone
       // ESC/POS controllers don't reliably reset their column position on a
       // bare LF and keep wrapping mid-word based on total bytes sent rather
       // than respecting line breaks.
-      _bytes.addAll(utf8.encode(line));
+      _bytes.addAll(PrinterTransport.encodeText(line));
       _bytes.addAll(<int>[0x0D, 0x0A]);
     }
 
@@ -1216,6 +1218,10 @@ class PosReceiptService {
     }
     return PrinterConfig(host: host);
   }
+
+  @visibleForTesting
+  static List<int> buildEscPosBytes(ReceiptData receipt) =>
+      _buildEscPosBytes(receipt);
 
   static List<int> _buildEscPosBytes(ReceiptData receipt) {
     final layout = ThermalReceiptLayout(receipt);

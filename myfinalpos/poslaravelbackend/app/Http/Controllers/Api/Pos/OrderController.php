@@ -13,6 +13,7 @@ use App\Support\PosApiResponse;
 use App\Support\PosDateTime;
 use App\Support\PosHelpers;
 use App\Support\StockLedger;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -63,10 +64,40 @@ class OrderController extends Controller
         $loyaltyDiscount = round((float) ($body['loyalty_discount'] ?? 0), 2);
         $loyaltyPointsRedeemed = (int) ($body['loyalty_points_redeemed'] ?? 0);
         $branchId = max(1, (int) ($body['branch_id'] ?? 1));
-        $createdAt = $this->resolveOrderCreatedAt($body);
+
+        // Sent by newer tablet builds only; absent from older ones, which keep
+        // the original behaviour.
+        // - client_order_uuid: one id per sale, kept in the offline queue, so a
+        //   retry of a sale the server already saved returns that order.
+        // - queued_offline: the sale was rung up (and paid) while offline and
+        //   is being synced now - record it as it happened instead of
+        //   rejecting it, since the money is already in the drawer.
+        // - client_total: what the tablet charged; an online sale whose
+        //   server-computed total differs (price or points changed) is
+        //   refused so the tablet can refresh instead of mis-recording it.
+        $clientOrderUuid = $this->cleanClientOrderUuid($body['client_order_uuid'] ?? null);
+        $queuedOffline = ! empty($body['queued_offline']);
+        $clientTotal = isset($body['client_total']) && is_numeric($body['client_total'])
+            ? round((float) $body['client_total'], 2)
+            : null;
+        $createdAt = $this->resolveOrderCreatedAt($body, $queuedOffline);
 
         if (! is_array($items) || count($items) === 0) {
             return $this->posError('At least one item is required', 400);
+        }
+
+        $existingOrderId = $this->findOrderByClientUuid($clientOrderUuid);
+        if ($existingOrderId !== null) {
+            PosApiLogger::info('orders.create.duplicate', [
+                'order_id' => $existingOrderId,
+                'client_order_uuid' => $clientOrderUuid,
+            ]);
+
+            return $this->posSuccess([
+                'message' => 'Order already saved',
+                'order_id' => $existingOrderId,
+                'duplicate' => true,
+            ], 201);
         }
 
         if (is_array($payments) && count($payments) >= 2) {
@@ -134,6 +165,9 @@ class OrderController extends Controller
                 $branchId,
                 $splitPayments,
                 $createdAt,
+                $clientOrderUuid,
+                $queuedOffline,
+                $clientTotal,
             ) {
                 if ($isWalkIn) {
                     if ($loyaltyPointsRedeemed > 0 || $loyaltyDiscount > 0) {
@@ -145,11 +179,20 @@ class OrderController extends Controller
                         [$customerId],
                     );
 
-                    if (! $customerRow) {
+                    if (! $customerRow && $queuedOffline) {
+                        // Customer deleted while this paid offline sale waited
+                        // to sync: record it as a walk-in, keeping the peso
+                        // discount the customer actually got.
+                        $isWalkIn = true;
+                        $customerId = 0;
+                        $discountAmount = round($discountAmount + $loyaltyDiscount, 2);
+                        $loyaltyDiscount = 0.0;
+                        $loyaltyPointsRedeemed = 0;
+                    } elseif (! $customerRow) {
                         throw new \RuntimeException('Customer not found');
                     }
 
-                    if (PosHelpers::isWalkInCustomerName((string) ($customerRow->customer_name ?? ''))) {
+                    if ($customerRow && PosHelpers::isWalkInCustomerName((string) ($customerRow->customer_name ?? ''))) {
                         throw new \RuntimeException(
                             'Walk-in customers are not stored. Complete checkout without a customer.',
                         );
@@ -161,7 +204,28 @@ class OrderController extends Controller
                 $stockChanges = [];
 
                 $hasVarietyTable = Schema::hasTable('product_varieties');
-                $allowNegativeStock = $this->allowNegativeStock();
+                // A paid offline sale is recorded even if stock ran out while
+                // it waited to sync - rejecting it jammed the tablet's queue.
+                $allowNegativeStock = $this->allowNegativeStock() || $queuedOffline;
+
+                // Lock every product row up front in id order: locking them in
+                // cart order let two tablets with the same items in opposite
+                // order deadlock each other.
+                $lockIds = array_values(array_unique(array_filter(array_map(
+                    static fn ($item) => (int) ($item['product_id'] ?? 0),
+                    $items,
+                ))));
+                sort($lockIds);
+                if ($lockIds !== []) {
+                    DB::select(
+                        'SELECT id FROM products WHERE id IN ('.implode(',', array_fill(0, count($lockIds), '?')).') ORDER BY id FOR UPDATE',
+                        $lockIds,
+                    );
+                }
+
+                // Quantity requested per product across all lines, so two
+                // lines of the same product can't each pass the stock check.
+                $requestedByProduct = [];
 
                 foreach ($items as $item) {
                     $productId = (int) ($item['product_id'] ?? 0);
@@ -242,11 +306,17 @@ class OrderController extends Controller
                     }
 
                     $stock = (float) ($product->stock ?? 0);
-                    if (! $allowNegativeStock && $stock < $quantity) {
+                    $requestedByProduct[$productId] = ($requestedByProduct[$productId] ?? 0) + $quantity;
+                    if (! $allowNegativeStock && $stock < $requestedByProduct[$productId]) {
                         throw new \RuntimeException('Insufficient stock for '.$product->name);
                     }
 
-                    $price = round((float) $product->price, 2);
+                    // An offline sale was charged at the price the tablet had
+                    // then; record that price rather than today's.
+                    $clientPrice = $item['price'] ?? null;
+                    $price = $queuedOffline && is_numeric($clientPrice) && (float) $clientPrice > 0
+                        ? round((float) $clientPrice, 2)
+                        : round((float) $product->price, 2);
                     $unitCost = round((float) ($product->cost_price ?? 0), 2);
                     $grossTotal = round($price * $quantity, 2);
                     $itemDiscount = min($itemDiscount, $grossTotal);
@@ -284,28 +354,37 @@ class OrderController extends Controller
                 $calculatedSubtotal = round($calculatedSubtotal, 2);
 
                 if ($couponCode !== '' && $couponDiscount > 0) {
-                    if (! PosHelpers::tableExists('coupons')) {
-                        throw new \RuntimeException('Coupons are not configured');
-                    }
+                    $coupon = PosHelpers::tableExists('coupons')
+                        ? PosHelpers::findCouponByCode($couponCode)
+                        : null;
 
-                    $coupon = PosHelpers::findCouponByCode($couponCode);
-                    if (! $coupon) {
-                        throw new \RuntimeException('Invalid coupon code');
-                    }
+                    if (! $queuedOffline) {
+                        if (! PosHelpers::tableExists('coupons')) {
+                            throw new \RuntimeException('Coupons are not configured');
+                        }
+                        if (! $coupon) {
+                            throw new \RuntimeException('Invalid coupon code');
+                        }
 
-                    $validationError = PosHelpers::isCouponCurrentlyValid(
-                        $coupon,
-                        $calculatedSubtotal,
-                    );
-                    if ($validationError !== null) {
-                        throw new \RuntimeException($validationError);
+                        $validationError = PosHelpers::isCouponCurrentlyValid(
+                            $coupon,
+                            $calculatedSubtotal,
+                        );
+                        if ($validationError !== null) {
+                            throw new \RuntimeException($validationError);
+                        }
                     }
+                    // A queued offline sale keeps the coupon it was paid with
+                    // even if the coupon expired or was used up since; the
+                    // amount is still capped below.
 
-                    // Never more than the coupon itself is worth on this order.
-                    $couponDiscount = min(
-                        $couponDiscount,
-                        PosHelpers::calculateCouponDiscount($coupon, $calculatedSubtotal),
-                    );
+                    if ($coupon) {
+                        // Never more than the coupon itself is worth on this order.
+                        $couponDiscount = min(
+                            $couponDiscount,
+                            PosHelpers::calculateCouponDiscount($coupon, $calculatedSubtotal),
+                        );
+                    }
                 }
 
                 // The tablet checks redeemed points against its cached card,
@@ -337,8 +416,26 @@ class OrderController extends Controller
                 [$vat, $totalAmount] = PosHelpers::saleVatAndTotal($netMerchandise);
                 $subtotal = $netMerchandise;
 
+                // The tablet charged $clientTotal. If the server's figure
+                // differs (price changed since the tablet loaded it, points
+                // balance lower than its cache) refuse an online sale so the
+                // cashier refreshes, instead of storing a total that doesn't
+                // match the cash collected. Small tolerance for per-line
+                // rounding of decimal quantities.
+                if (! $queuedOffline && $clientTotal !== null && abs($totalAmount - $clientTotal) > 0.05) {
+                    throw new \DomainException(sprintf(
+                        'The total changed to ₱%s on the server (this tablet showed ₱%s) - prices or points were updated. Refresh and charge again.',
+                        number_format($totalAmount, 2),
+                        number_format($clientTotal, 2),
+                    ));
+                }
+
                 if ($couponCode !== '' && $couponDiscount > 0) {
-                    PosHelpers::incrementCouponUsage($couponCode);
+                    // Claimed atomically so two tablets can't both take the
+                    // last allowed use; a paid offline sale always counts.
+                    if (! PosHelpers::claimCouponUse($couponCode, $queuedOffline)) {
+                        throw new \RuntimeException('Coupon usage limit reached');
+                    }
                 }
 
                 $hasBranchId = PosHelpers::columnExists('orders', 'branch_id');
@@ -371,6 +468,9 @@ class OrderController extends Controller
                 }
                 if ($hasReceiptNote) {
                     $orderRow['receipt_note'] = $receiptNote;
+                }
+                if ($clientOrderUuid !== null && PosHelpers::columnExists('orders', 'client_order_uuid')) {
+                    $orderRow['client_order_uuid'] = $clientOrderUuid;
                 }
 
                 $orderId = PosHelpers::insertRow('orders', $orderRow);
@@ -429,16 +529,20 @@ class OrderController extends Controller
                     );
                 }
 
-                if (! $isWalkIn && $customerId > 0 && PosHelpers::isLoyaltyProgramEnabled()) {
-                    if ($loyaltyPointsRedeemed > 0) {
-                        PosHelpers::deductRedeemedLoyaltyPoints(
-                            $customerId,
-                            $loyaltyPointsRedeemed,
-                            $orderId,
-                            $actorUserId,
-                        );
-                    }
+                // Points behind a stored loyalty discount are always deducted -
+                // gating this on the program being enabled let a tablet with
+                // stale settings give the peso discount while the points stayed
+                // on the card.
+                if (! $isWalkIn && $customerId > 0 && $loyaltyPointsRedeemed > 0) {
+                    PosHelpers::deductRedeemedLoyaltyPoints(
+                        $customerId,
+                        $loyaltyPointsRedeemed,
+                        $orderId,
+                        $actorUserId,
+                    );
+                }
 
+                if (! $isWalkIn && $customerId > 0 && PosHelpers::isLoyaltyProgramEnabled()) {
                     PosHelpers::awardLoyaltyPoints(
                         $customerId,
                         $totalAmount,
@@ -502,27 +606,69 @@ class OrderController extends Controller
                 return [
                     'order_id' => $orderId,
                     'stock_changes' => $stockChanges,
+                    'total_amount' => $totalAmount,
                 ];
-            });
+            }, 3); // retried on a deadlock; every attempt starts from the request values
 
             $orderId = (int) ($checkout['order_id'] ?? 0);
-            $notifier = app(LowStockNotificationService::class);
-            foreach (($checkout['stock_changes'] ?? []) as $productId => $change) {
-                $previousStock = (float) ($change['previous'] ?? 0);
-                $sold = (float) ($change['sold'] ?? 0);
-                $notifier->afterStockChange((int) $productId, $previousStock, $previousStock - $sold);
-            }
-
             PosApiLogger::info('orders.create.success', ['order_id' => $orderId]);
 
-            CatalogStockRevision::bump();
-            CashDrawerRevision::bump();
-            app(CashDrawerService::class)->forgetSalesCacheForToday();
+            // The sale is committed. Nothing below may turn this into an error
+            // response - the tablet would show the sale as failed and the
+            // cashier would ring it up again.
+            try {
+                $notifier = app(LowStockNotificationService::class);
+                foreach (($checkout['stock_changes'] ?? []) as $productId => $change) {
+                    $previousStock = (float) ($change['previous'] ?? 0);
+                    $sold = (float) ($change['sold'] ?? 0);
+                    $notifier->afterStockChange((int) $productId, $previousStock, $previousStock - $sold);
+                }
+            } catch (\Throwable $e) {
+                PosApiLogger::error('orders.create.low_stock_notify_failed', ['order_id' => $orderId], $e);
+            }
+
+            try {
+                CatalogStockRevision::bump();
+                CashDrawerRevision::bump();
+                app(CashDrawerService::class)->forgetSalesCacheForToday();
+
+                // A synced offline sale may belong to an earlier business day.
+                $saleDate = BusinessDay::dateForMoment(Carbon::parse($createdAt, BusinessDay::timezone()));
+                if ($saleDate !== BusinessDay::currentDate()) {
+                    CashDrawerRevision::bump($saleDate);
+                    [$startDt, $endDt] = BusinessDay::rangeFor($saleDate);
+                    app(CashDrawerService::class)->forgetSalesCacheForRange($startDt, $endDt);
+                }
+            } catch (\Throwable $e) {
+                PosApiLogger::error('orders.create.cache_bump_failed', ['order_id' => $orderId], $e);
+            }
 
             return $this->posSuccess([
                 'message' => 'Order saved successfully',
                 'order_id' => $orderId,
+                // What the server stored, so newer tablets can compare.
+                'total_amount' => (float) ($checkout['total_amount'] ?? 0),
             ], 201);
+        } catch (\DomainException $e) {
+            // Server total differs from what the tablet charged (see above).
+            PosApiLogger::warning('orders.create.total_mismatch', ['message' => $e->getMessage()]);
+
+            return $this->posError($e->getMessage(), 409);
+        } catch (QueryException $e) {
+            // Two retries of the same sale raced past the duplicate check:
+            // the unique client_order_uuid stops the second insert.
+            $existing = $this->findOrderByClientUuid($clientOrderUuid);
+            if ($existing !== null && (string) $e->getCode() === '23000') {
+                return $this->posSuccess([
+                    'message' => 'Order already saved',
+                    'order_id' => $existing,
+                    'duplicate' => true,
+                ], 201);
+            }
+
+            PosApiLogger::error('orders.create.failed', ['message' => $e->getMessage()]);
+
+            return $this->posServerError($e);
         } catch (\RuntimeException $e) {
             PosApiLogger::warning('orders.create.validation', ['message' => $e->getMessage()]);
 
@@ -540,7 +686,7 @@ class OrderController extends Controller
      * Checkout time stored as Philippines local wall clock for MySQL (+08:00 session).
      * Prefer sold_at_ms from the tablet when available.
      */
-    private function resolveOrderCreatedAt(array $body): string
+    private function resolveOrderCreatedAt(array $body, bool $queuedOffline = false): string
     {
         $tz = BusinessDay::timezone();
         $now = BusinessDay::now();
@@ -554,9 +700,35 @@ class OrderController extends Controller
             if ($client->diffInSeconds($now, true) <= 180) {
                 return $client->format('Y-m-d H:i:s');
             }
+
+            // A sale queued offline syncs later - keep when it was actually
+            // rung up (so it lands in that day's drawer and reports), as long
+            // as that is in the past and within a week. Only newer builds
+            // send queued_offline, and they send a correct epoch.
+            if ($queuedOffline && $client->lessThanOrEqualTo($now) && $client->greaterThan($now->copy()->subDays(7))) {
+                return $client->format('Y-m-d H:i:s');
+            }
         }
 
         return $now->format('Y-m-d H:i:s');
+    }
+
+    private function cleanClientOrderUuid(mixed $value): ?string
+    {
+        $value = trim((string) ($value ?? ''));
+
+        return preg_match('/^[A-Za-z0-9-]{8,64}$/', $value) === 1 ? $value : null;
+    }
+
+    private function findOrderByClientUuid(?string $uuid): ?int
+    {
+        if ($uuid === null || ! PosHelpers::columnExists('orders', 'client_order_uuid')) {
+            return null;
+        }
+
+        $id = DB::table('orders')->where('client_order_uuid', $uuid)->value('id');
+
+        return $id !== null ? (int) $id : null;
     }
 
     private function allowNegativeStock(): bool

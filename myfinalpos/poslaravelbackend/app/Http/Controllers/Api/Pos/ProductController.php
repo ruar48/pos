@@ -333,10 +333,15 @@ class ProductController extends Controller
             return $this->posError('name, category, and valid price are required', 400);
         }
 
-        $previousStock = (float) ($existing->stock ?? 0);
-
         try {
             DB::beginTransaction();
+
+            // Live stock, locked - the row read above can be stale by now.
+            $previousStock = (float) (DB::selectOne(
+                'SELECT stock FROM products WHERE id = ? LIMIT 1 FOR UPDATE',
+                [$productId],
+            )->stock ?? 0);
+            $payload['stock'] = $this->resolveEditedStock($request, $previousStock, (float) $payload['stock']);
 
             $categoryId = $this->resolveCategoryId($payload['category_name']);
 
@@ -485,6 +490,31 @@ class ProductController extends Controller
      *     option: ?string
      * }
      */
+    /**
+     * Stock to save for a product edit. Edit forms used to send the stock
+     * shown when they opened, and it was written as-is - silently undoing
+     * every sale made while the form was open.
+     * - no "stock" in the request: stock is not touched;
+     * - "stock" + "stock_base" (the value the form showed): only the change
+     *   the user made is applied to the live stock;
+     * - "stock" alone (older tablet builds): written as before.
+     */
+    private function resolveEditedStock(Request $request, float $liveStock, float $requestedStock): float
+    {
+        if (! $request->exists('stock')) {
+            return $liveStock;
+        }
+
+        $base = $request->input('stock_base');
+        if (is_numeric($base)) {
+            $change = round($requestedStock - (float) $base, 3);
+
+            return $change === 0.0 ? $liveStock : round($liveStock + $change, 3);
+        }
+
+        return $requestedStock;
+    }
+
     private function parseProductPayload(Request $request, ?array $existing = null): array
     {
         $name = trim((string) $request->input(

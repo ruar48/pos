@@ -54,15 +54,28 @@ class AnalyticsSummary {
     required this.averageTicket,
     required this.walkInOrders,
     required this.registeredOrders,
+    this.refundedAmount = 0,
+    this.refundedOrders = 0,
   });
 
+  /// Net of refunds.
   final double totalSales;
+
+  /// Orders still (at least partly) sold - fully refunded ones excluded.
   final int orderCount;
-  final int itemCount;
+
+  /// Units still sold after refunds.
+  final double itemCount;
   final double totalDiscount;
   final double averageTicket;
   final int walkInOrders;
   final int registeredOrders;
+
+  /// Money paid back on the summarized orders.
+  final double refundedAmount;
+
+  /// Orders refunded in full (not part of [orderCount]).
+  final int refundedOrders;
 }
 
 class AnalyticsNamedValue {
@@ -70,11 +83,31 @@ class AnalyticsNamedValue {
     required this.label,
     required this.value,
     this.secondary,
+    this.quantity,
+    this.revenue,
   });
 
   final String label;
   final double value;
   final double? secondary;
+
+  /// Set by [AnalyticsEngine.bestSellers] whichever way it ranks, so a
+  /// quantity ranking can still show each product's own revenue.
+  final double? quantity;
+  final double? revenue;
+}
+
+/// Two period series lined up by day offset (day 1 of A beside day 1 of B).
+class AnalyticsAlignedSeries {
+  const AnalyticsAlignedSeries({
+    required this.labels,
+    required this.valuesA,
+    required this.valuesB,
+  });
+
+  final List<String> labels;
+  final List<double> valuesA;
+  final List<double> valuesB;
 }
 
 class AnalyticsHourlyCell {
@@ -177,8 +210,14 @@ class AnalyticsEngine {
           label: 'Last Month',
         );
       case AnalyticsPeriodPreset.custom:
-        final start = customStart ?? todayStart;
-        final end = customEnd ?? todayEnd;
+        var start = customStart ?? todayStart;
+        var end = customEnd ?? todayEnd;
+        // From after To used to give an empty range (and an empty report).
+        if (start.isAfter(end)) {
+          final swap = start;
+          start = end;
+          end = swap;
+        }
         return AnalyticsDateRange(
           start: DateTime(start.year, start.month, start.day),
           end: DateTime(end.year, end.month, end.day, 23, 59, 59, 999),
@@ -202,35 +241,36 @@ class AnalyticsEngine {
     }).toList();
   }
 
-  static AnalyticsSummary summarize(List<SalesHistoryRecord> records) {
-    if (records.isEmpty) {
-      return const AnalyticsSummary(
-        totalSales: 0,
-        orderCount: 0,
-        itemCount: 0,
-        totalDiscount: 0,
-        averageTicket: 0,
-        walkInOrders: 0,
-        registeredOrders: 0,
-      );
-    }
+  /// Orders that are still sales: everything except full refunds.
+  static List<SalesHistoryRecord> salesOnly(List<SalesHistoryRecord> records) =>
+      records.where((record) => !record.isFullyRefunded).toList();
 
+  /// Refunds are netted against the order they belong to (its sale date).
+  /// A fully refunded order is no longer a sale, so it drops out of the
+  /// order count, average ticket, discounts and customer mix; a partly
+  /// refunded one still counts as one order for what the customer kept.
+  static AnalyticsSummary summarize(List<SalesHistoryRecord> records) {
+    final sales = salesOnly(records);
     final totalSales =
-        records.fold<double>(0, (sum, record) => sum + record.total);
+        sales.fold<double>(0, (sum, record) => sum + record.netTotal);
     final itemCount =
-        records.fold<int>(0, (sum, record) => sum + record.itemCount);
+        sales.fold<double>(0, (sum, record) => sum + record.netItemCount);
     final totalDiscount =
-        records.fold<double>(0, (sum, record) => sum + record.totalDiscount);
-    final walkInOrders = records.where((record) => record.isWalkIn).length;
+        sales.fold<double>(0, (sum, record) => sum + record.totalDiscount);
+    final refundedAmount =
+        records.fold<double>(0, (sum, record) => sum + record.refundedAmount);
+    final walkInOrders = sales.where((record) => record.isWalkIn).length;
 
     return AnalyticsSummary(
       totalSales: totalSales,
-      orderCount: records.length,
+      orderCount: sales.length,
       itemCount: itemCount,
       totalDiscount: totalDiscount,
-      averageTicket: totalSales / records.length,
+      averageTicket: sales.isEmpty ? 0 : totalSales / sales.length,
       walkInOrders: walkInOrders,
-      registeredOrders: records.length - walkInOrders,
+      registeredOrders: sales.length - walkInOrders,
+      refundedAmount: refundedAmount,
+      refundedOrders: records.length - sales.length,
     );
   }
 
@@ -245,7 +285,7 @@ class AnalyticsEngine {
     final totals = <String, double>{};
 
     for (final record in records) {
-      for (final item in record.items) {
+      for (final item in record.netItems) {
         final category = productCategory[item.productId] ?? 'Other';
         totals[category] = (totals[category] ?? 0) + item.total;
       }
@@ -270,7 +310,7 @@ class AnalyticsEngine {
     final revenue = <String, double>{};
 
     for (final record in records) {
-      for (final item in record.items) {
+      for (final item in record.netItems) {
         qty[item.productName] = (qty[item.productName] ?? 0) + item.quantity;
         revenue[item.productName] =
             (revenue[item.productName] ?? 0) + item.total;
@@ -292,6 +332,8 @@ class AnalyticsEngine {
             label: name,
             value: byRevenue ? (revenue[name] ?? 0) : (qty[name] ?? 0).toDouble(),
             secondary: qty[name],
+            quantity: qty[name] ?? 0,
+            revenue: revenue[name] ?? 0,
           ),
         )
         .toList();
@@ -302,22 +344,49 @@ class AnalyticsEngine {
     required AnalyticsTrendGranularity granularity,
     required AnalyticsDateRange range,
   }) {
+    // Bucketed by the bucket's start date (year included) so the same
+    // day/week of different years never merge; the label is display only.
     final buckets = <String, double>{};
 
     for (final record in records) {
-      final key = _bucketKey(record.createdAt, granularity);
-      buckets[key] = (buckets[key] ?? 0) + record.total;
+      final key = _dateKey(_bucketStart(record.createdAt, granularity));
+      buckets[key] = (buckets[key] ?? 0) + record.netTotal;
     }
 
-    final keys = _bucketKeysForRange(range, granularity);
-    return keys
+    final multiYear = range.start.year != range.end.year;
+    return _bucketStartsForRange(range, granularity)
         .map(
-          (key) => AnalyticsNamedValue(
-            label: key,
-            value: buckets[key] ?? 0,
+          (start) => AnalyticsNamedValue(
+            label: _bucketLabel(start, granularity, withYear: multiYear),
+            value: buckets[_dateKey(start)] ?? 0,
           ),
         )
         .toList();
+  }
+
+  /// Lines two daily series up by day offset and pads the shorter one with
+  /// zeros, so periods of different lengths (Oct vs Sep) chart side by
+  /// side. Labels come from A, or from B past the end of A.
+  static AnalyticsAlignedSeries alignComparisonSeries(
+    List<AnalyticsNamedValue> seriesA,
+    List<AnalyticsNamedValue> seriesB,
+  ) {
+    final length =
+        seriesA.length > seriesB.length ? seriesA.length : seriesB.length;
+    return AnalyticsAlignedSeries(
+      labels: [
+        for (var i = 0; i < length; i++)
+          i < seriesA.length ? seriesA[i].label : seriesB[i].label,
+      ],
+      valuesA: [
+        for (var i = 0; i < length; i++)
+          i < seriesA.length ? seriesA[i].value : 0,
+      ],
+      valuesB: [
+        for (var i = 0; i < length; i++)
+          i < seriesB.length ? seriesB[i].value : 0,
+      ],
+    );
   }
 
   static List<AnalyticsNamedValue> salesByBranch({
@@ -326,10 +395,10 @@ class AnalyticsEngine {
   }) {
     final totals = <String, double>{};
 
-    for (final record in records) {
+    for (final record in salesOnly(records)) {
       final branchId = record.branchId ?? 1;
       final label = branchNames[branchId] ?? record.branchName ?? 'Branch $branchId';
-      totals[label] = (totals[label] ?? 0) + record.total;
+      totals[label] = (totals[label] ?? 0) + record.netTotal;
     }
 
     final sorted = totals.entries.toList()
@@ -345,11 +414,11 @@ class AnalyticsEngine {
     List<SalesHistoryRecord> records,
   ) {
     final totals = <String, double>{};
-    for (final record in records) {
+    for (final record in salesOnly(records)) {
       final method = record.paymentMethod.trim().isEmpty
           ? 'Cash'
           : record.paymentMethod.trim();
-      totals[method] = (totals[method] ?? 0) + record.total;
+      totals[method] = (totals[method] ?? 0) + record.netTotal;
     }
 
     final sorted = totals.entries.toList()
@@ -365,10 +434,10 @@ class AnalyticsEngine {
     List<SalesHistoryRecord> records,
   ) {
     final totals = <String, double>{};
-    for (final record in records) {
+    for (final record in salesOnly(records)) {
       final name = record.cashierName?.trim();
       final label = name == null || name.isEmpty ? 'Staff' : name;
-      totals[label] = (totals[label] ?? 0) + record.total;
+      totals[label] = (totals[label] ?? 0) + record.netTotal;
     }
 
     final sorted = totals.entries.toList()
@@ -421,7 +490,7 @@ class AnalyticsEngine {
 
       var units = 0.0;
       var amount = 0.0;
-      for (final item in record.items) {
+      for (final item in record.netItems) {
         units += item.quantity;
         amount += item.total;
       }
@@ -464,9 +533,9 @@ class AnalyticsEngine {
     double registered = 0;
     for (final record in records) {
       if (record.isWalkIn) {
-        walkIn += record.total;
+        walkIn += record.netTotal;
       } else {
-        registered += record.total;
+        registered += record.netTotal;
       }
     }
     return [
@@ -596,43 +665,63 @@ class AnalyticsEngine {
     );
   }
 
-  static String _bucketKey(DateTime date, AnalyticsTrendGranularity granularity) {
+  /// First day of the day/week (Monday)/month bucket [date] falls in.
+  static DateTime _bucketStart(
+    DateTime date,
+    AnalyticsTrendGranularity granularity,
+  ) {
     switch (granularity) {
       case AnalyticsTrendGranularity.day:
-        return '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}';
+        return DateTime(date.year, date.month, date.day);
       case AnalyticsTrendGranularity.week:
-        final monday = date.subtract(Duration(days: date.weekday - 1));
-        return 'Wk ${monday.month}/${monday.day}';
+        return DateTime(date.year, date.month, date.day - (date.weekday - 1));
+      case AnalyticsTrendGranularity.month:
+        return DateTime(date.year, date.month, 1);
+    }
+  }
+
+  static String _bucketLabel(
+    DateTime start,
+    AnalyticsTrendGranularity granularity, {
+    bool withYear = false,
+  }) {
+    final yearSuffix = withYear ? '/${start.year % 100}' : '';
+    switch (granularity) {
+      case AnalyticsTrendGranularity.day:
+        return '${start.month.toString().padLeft(2, '0')}/'
+            '${start.day.toString().padLeft(2, '0')}$yearSuffix';
+      case AnalyticsTrendGranularity.week:
+        return 'Wk ${start.month}/${start.day}$yearSuffix';
       case AnalyticsTrendGranularity.month:
         const months = [
           'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
         ];
-        return '${months[date.month - 1]} ${date.year}';
+        return '${months[start.month - 1]} ${start.year}';
     }
   }
 
-  static List<String> _bucketKeysForRange(
+  static List<DateTime> _bucketStartsForRange(
     AnalyticsDateRange range,
     AnalyticsTrendGranularity granularity,
   ) {
-    final keys = <String>[];
-    var cursor = DateTime(range.start.year, range.start.month, range.start.day);
+    final starts = <DateTime>[];
+    var cursor = _bucketStart(range.start, granularity);
     final end = DateTime(range.end.year, range.end.month, range.end.day);
 
     while (!cursor.isAfter(end)) {
-      final key = _bucketKey(cursor, granularity);
-      if (!keys.contains(key)) keys.add(key);
+      starts.add(cursor);
+      // Calendar arithmetic (not Duration) so a DST shift can't skip a day.
       switch (granularity) {
         case AnalyticsTrendGranularity.day:
-          cursor = cursor.add(const Duration(days: 1));
+          cursor = DateTime(cursor.year, cursor.month, cursor.day + 1);
         case AnalyticsTrendGranularity.week:
-          cursor = cursor.add(const Duration(days: 7));
+          cursor = DateTime(cursor.year, cursor.month, cursor.day + 7);
         case AnalyticsTrendGranularity.month:
           cursor = DateTime(cursor.year, cursor.month + 1, 1);
       }
     }
 
-    return keys;
+    return starts;
   }
 }

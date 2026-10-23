@@ -112,7 +112,9 @@ class TransactionReportOrderRow {
   final double discount;
   final double costs;
   final double profits;
-  final int itemsCount;
+
+  /// Units left after refunds; fractional for kg/litre lines.
+  final double itemsCount;
   final String itemsSummary;
   final String status;
   final double refundedAmount;
@@ -120,9 +122,11 @@ class TransactionReportOrderRow {
   final List<TransactionReportLineItem> items;
 
   factory TransactionReportOrderRow.fromJson(Map<String, dynamic> json) {
-    final itemMaps = (json['items'] as List? ?? const [])
+    final items = (json['items'] as List? ?? const [])
         .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item));
+        .map((item) => Map<String, dynamic>.from(item))
+        .map(TransactionReportLineItem.fromJson)
+        .toList();
 
     return TransactionReportOrderRow(
       id: toInt(json['id']),
@@ -137,12 +141,17 @@ class TransactionReportOrderRow {
       discount: toDouble(json['discount']),
       costs: toDouble(json['costs']),
       profits: toDouble(json['profits']),
-      itemsCount: toInt(json['items_count']),
+      // toInt("2.5") was 0, so orders of 2.5 kg showed "Items 0".
+      itemsCount: toDouble(json['items_count']),
       itemsSummary: json['items_summary']?.toString() ?? '',
       status: json['status']?.toString() ?? 'completed',
       refundedAmount: toDouble(json['refunded_amount']),
-      canRefund: json['can_refund'] == true,
-      items: itemMaps.map(TransactionReportLineItem.fromJson).toList(),
+      // The server's can_refund goes by money; refunds go by units (free
+      // lines can still be returned once the paid amount is all back).
+      canRefund: items.isEmpty
+          ? json['can_refund'] == true
+          : items.any((item) => item.hasRefundableQuantity),
+      items: items,
     );
   }
 }
@@ -185,6 +194,8 @@ class TransactionReportLineItem {
       varietyName == null || varietyName!.isEmpty
           ? productName
           : '$productName · $varietyName';
+
+  bool get hasRefundableQuantity => quantity - refundedQuantity > 0.0005;
 }
 
 class TransactionReportPeriodRow {

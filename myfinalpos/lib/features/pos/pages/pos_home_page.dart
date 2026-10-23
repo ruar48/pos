@@ -113,7 +113,9 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   bool _catalogSyncInFlight = false;
   bool _catalogWatchLoopActive = false;
   bool _productTapInFlight = false;
-  bool _offlineSyncInFlight = false;
+  // Static: a page left over from a previous sign-in must not sync the same
+  // queue at the same time as the new one.
+  static bool _offlineSyncInFlight = false;
   int pendingOfflineCount = 0;
   DateTime? offlineCatalogSavedAt;
   VoidCallback? _connectivityListener;
@@ -151,7 +153,11 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     }).toList();
   }
 
-  double get subtotal => cart.fold(0, (sum, item) => sum + item.total);
+  // Every total below is rounded to centavos exactly as the server rounds
+  // it, so what the cashier is shown, charges and prints is what gets
+  // stored (and "Exact" cash always covers the total).
+  double get subtotal =>
+      roundMoney(cart.fold(0.0, (sum, item) => sum + item.total));
 
   /// Peso amount taken off by per-item discounts. [subtotal] is already net
   /// of these, so without breaking it out an item discount only shows up as
@@ -169,16 +175,18 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     if (appliedCouponCode.isEmpty) return 0;
     final coupon = _findCouponByCode(appliedCouponCode);
     if (coupon != null) {
-      return coupon.discountForSubtotal(subtotal);
+      return roundMoney(coupon.discountForSubtotal(subtotal));
     }
-    return appliedCouponDiscount.clamp(0, subtotal).toDouble();
+    return roundMoney(appliedCouponDiscount.clamp(0, subtotal).toDouble());
   }
 
-  double get totalDiscount =>
-      (manualDiscount + couponDiscount + loyaltyDiscountAmount)
-          .clamp(0, subtotal)
-          .toDouble();
-  double get netSubtotal => (subtotal - totalDiscount).clamp(0, subtotal);
+  double get totalDiscount => roundMoney(
+        (manualDiscount + couponDiscount + loyaltyDiscountAmount)
+            .clamp(0, subtotal)
+            .toDouble(),
+      );
+  double get netSubtotal =>
+      roundMoney((subtotal - totalDiscount).clamp(0, subtotal).toDouble());
 
   /// What is left of [subtotal] for one more order-level discount once the
   /// others are taken off. Each of manual / coupon / loyalty used to be
@@ -208,12 +216,12 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
         'order subtotal (${formatMoney(currency, subtotal)}). Reduce the '
         'manual discount, coupon, or loyalty points before payment.';
   }
-  double get vatAmount => netSubtotal * settings.taxRate;
-  double get grandTotal => netSubtotal + vatAmount;
-  double get loyaltyDiscountAmount => settings
+  double get vatAmount => roundMoney(netSubtotal * settings.taxRate);
+  double get grandTotal => roundMoney(netSubtotal + vatAmount);
+  double get loyaltyDiscountAmount => roundMoney(settings
       .pesoValueForPoints(loyaltyPointsRedeemed)
       .clamp(0, subtotal)
-      .toDouble();
+      .toDouble());
 
   bool get isMonitoringAllBranches =>
       dashboardMonitorBranchId == allBranchesMonitorId;
@@ -439,9 +447,16 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   void _startMonitorPresenceHeartbeat() {
     _monitorPresenceTimer?.cancel();
     unawaited(_publishMonitorPresence());
+    var ticks = 0;
     _monitorPresenceTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       if (!mounted) return;
       unawaited(_publishMonitorPresence());
+      // Retry waiting offline sales every 2 minutes - otherwise a sync that
+      // stopped on a server error only resumed when connectivity changed.
+      ticks++;
+      if (ticks % 6 == 0 && pendingOfflineCount > 0) {
+        unawaited(_syncPendingOfflineOrders());
+      }
     });
   }
 
@@ -644,6 +659,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     }
 
     pendingOfflineCount = await OfflineOrderQueue.pendingCount();
+    offlineAttentionCount = (await OfflineOrderQueue.needsAttention()).length;
 
     if (mounted) {
       _applyInitialCatalogState(
@@ -864,10 +880,32 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     }
   }
 
+  /// True while a sale is being sent to the server. The cart, payment mode
+  /// and held sales are locked meanwhile: tapping a product used to leave
+  /// payment mode, the panel finishing the sale disappeared, and the sale -
+  /// already saved on the server - stayed in the cart to be charged again.
+  bool paymentInFlight = false;
+
+  void setPaymentInFlight(bool value) {
+    if (paymentInFlight == value) return;
+    if (mounted) {
+      setState(() => paymentInFlight = value);
+    } else {
+      paymentInFlight = value;
+    }
+  }
+
+  bool _blockedByPaymentInFlight() {
+    if (!paymentInFlight) return false;
+    showAppTopWarning('Finishing the current sale - please wait.');
+    return true;
+  }
+
   Future<void> promptAddProductToCart(
     BuildContext context,
     Product product,
   ) async {
+    if (_blockedByPaymentInFlight()) return;
     if (_productTapInFlight) return;
     _productTapInFlight = true;
     try {
@@ -928,6 +966,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     double quantity, {
     ProductVariety? variety,
   }) {
+    if (_blockedByPaymentInFlight()) return;
     if (completedReceipt != null) {
       dismissCompletedReceipt();
     }
@@ -986,6 +1025,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   }
 
   void updateQuantity(CartItem item, double delta) {
+    if (_blockedByPaymentInFlight()) return;
     final liveProduct = _productById(item.product.id) ?? item.product;
     final nextQty = item.quantity + delta;
     if (delta > 0) {
@@ -1082,6 +1122,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   }
 
   void removeItem(CartItem item) {
+    if (_blockedByPaymentInFlight()) return;
     setState(() => cart.remove(item));
     _scheduleMonitorPublish();
   }
@@ -1281,6 +1322,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   }
 
   void exitPaymentMode() {
+    if (_blockedByPaymentInFlight()) return;
     setState(() => isPaymentMode = false);
     _publishMonitorNow();
   }
@@ -1299,6 +1341,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   }
 
   Future<void> finishOrderAndShowReceipt(ReceiptData receipt) async {
+    if (!mounted) return;
     setState(() {
       completedReceipt = receipt;
       isPaymentMode = false;
@@ -1372,11 +1415,20 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
           invoiceNumber: 'INV-${orderId.toString().padLeft(6, '0')}',
         );
       } on SocketException catch (_) {
+        // The server may have saved the sale before the connection dropped;
+        // it is queued below with the same client_order_uuid, so the sync
+        // gets the existing order back instead of saving it twice.
         await PosConnectivity.instance.refresh(force: true);
       } on TimeoutException catch (_) {
         await PosConnectivity.instance.refresh(force: true);
       } on http.ClientException catch (_) {
         await PosConnectivity.instance.refresh(force: true);
+      } on OrderTotalChangedException {
+        // Prices or the customer's points changed on the server: reload them
+        // so the cashier can charge the correct total.
+        unawaited(refreshProductCatalog());
+        unawaited(_reloadServerLists());
+        rethrow;
       } catch (error) {
         throw Exception(
           error is Exception ? error.toString().replaceFirst('Exception: ', '') : '$error',
@@ -1412,23 +1464,35 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     try {
       final pending = await OfflineOrderQueue.loadAll();
       if (pending.isEmpty) {
-        if (mounted) setState(() => pendingOfflineCount = 0);
+        await _refreshOfflineCounts();
         return;
       }
 
       var synced = 0;
+      var parked = 0;
       for (final order in pending) {
         try {
-          await api.saveOrderPayload(order.payload);
+          // These sales were already paid: queued_offline tells the server
+          // to record them as they happened (sale time, price, coupon) rather
+          // than re-check them against today's stock and prices.
+          await api.saveOrderPayload({...order.payload, 'queued_offline': true});
           await OfflineOrderQueue.remove(order.localId);
           synced++;
+        } on OrderRejectedException catch (error) {
+          // Refused for good - set it aside so it no longer blocks the
+          // sales queued after it (the whole queue used to stop here).
+          await OfflineOrderQueue.park(order.localId, error.message);
+          parked++;
+        } on OrderTotalChangedException catch (error) {
+          await OfflineOrderQueue.park(order.localId, error.message);
+          parked++;
         } catch (_) {
+          // Network or server trouble: try again later, in order.
           break;
         }
       }
 
-      pendingOfflineCount = await OfflineOrderQueue.pendingCount();
-      if (mounted) setState(() {});
+      await _refreshOfflineCounts();
 
       if (synced > 0) {
         showAppTopSuccess(
@@ -1437,15 +1501,41 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
               : '$synced offline sales synced to the server.',
         );
         await Future.wait([
-          // Synced sales keep the date they were rung up offline.
+          // Synced sales keep the date they were rung up offline, so reload
+          // the whole recent window rather than just today.
           _reloadServerLists(salesSince: defaultSalesHistoryStart()),
           refreshProductCatalog(),
           _syncProductStock(),
         ]);
       }
+      if (parked > 0) {
+        showAppTopWarning(
+          '$parked offline sale${parked == 1 ? '' : 's'} could not be saved '
+          'and need attention - see the banner at the top.',
+        );
+      }
     } finally {
       _offlineSyncInFlight = false;
     }
+  }
+
+  /// Offline sales the server refused, kept for staff to retry.
+  int offlineAttentionCount = 0;
+
+  Future<void> _refreshOfflineCounts() async {
+    pendingOfflineCount = await OfflineOrderQueue.pendingCount();
+    offlineAttentionCount = (await OfflineOrderQueue.needsAttention()).length;
+    if (mounted) setState(() {});
+  }
+
+  /// Puts every "needs attention" sale back in the queue and syncs again
+  /// (e.g. after the missing product or customer was restored).
+  Future<void> retryOfflineAttention() async {
+    for (final order in await OfflineOrderQueue.needsAttention()) {
+      await OfflineOrderQueue.retryParked(order.localId);
+    }
+    await _refreshOfflineCounts();
+    await _syncPendingOfflineOrders();
   }
 
   void dismissCompletedReceipt() {
@@ -1530,18 +1620,29 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       });
       _scheduleMonitorPublish();
       return null;
+    } on SocketException {
+      return _applyCachedCoupon(normalized);
+    } on TimeoutException {
+      return _applyCachedCoupon(normalized);
+    } on http.ClientException {
+      return _applyCachedCoupon(normalized);
     } catch (error) {
-      return _applyCachedCoupon(normalized) ??
-          error.toString().replaceFirst('Exception: ', '');
+      // The server checked the coupon and refused it (expired, used up,
+      // minimum not met). Falling back to this tablet's cached copy here
+      // applied it anyway while the dialog showed the error.
+      return error.toString().replaceFirst('Exception: ', '');
     }
   }
 
+  /// Applies a coupon from this tablet's cache - only when the server can't
+  /// be reached to check it.
   String? _applyCachedCoupon(String normalized) {
     final localCoupon = _findCouponByCode(normalized);
     if (localCoupon == null) {
+      // Used to return null (= success) when online, without applying it.
       return isOfflineMode
           ? 'Coupon $normalized is not in the offline cache.'
-          : null;
+          : 'Could not check coupon $normalized - check the connection and try again.';
     }
     if (!localCoupon.isCurrentlyValid) {
       return _couponUnavailableMessage(localCoupon);
@@ -1658,6 +1759,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   }
 
   void holdCurrentTransaction() {
+    if (_blockedByPaymentInFlight()) return;
     if (cart.isEmpty) return;
     final holdId = _nextHoldId++;
     setState(() {
@@ -1695,6 +1797,13 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   }
 
   void resumeHeldTransaction(HeldTransaction transaction) {
+    if (_blockedByPaymentInFlight()) return;
+    // Resuming used to wipe whatever was in the cart. Hold it first so the
+    // other customer's items aren't lost.
+    if (cart.isNotEmpty) {
+      holdCurrentTransaction();
+      showAppTopSuccess('Current cart held so you can resume the other sale.');
+    }
     setState(() {
       cart
         ..clear()
@@ -1772,6 +1881,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
     String? description,
     double? costPrice,
     double? stock,
+    double? stockBase,
     int? reorderLevel,
     String? unit,
     String? imageUrl,
@@ -1791,6 +1901,7 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
       description: description,
       costPrice: costPrice,
       stock: stock,
+      stockBase: stockBase,
       reorderLevel: reorderLevel,
       unit: unit,
       imageUrl: imageUrl,
@@ -2586,7 +2697,8 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
   double staffSalesTotal(int userId) {
     return salesHistory
         .where((sale) => sale.cashierUserId == userId)
-        .fold<double>(0, (sum, sale) => sum + sale.total);
+        // Net of refunds, like every other sales figure.
+        .fold<double>(0, (sum, sale) => sum + sale.netTotal);
   }
 
   Future<void> reloadAnalyticsData() async {
@@ -2690,6 +2802,12 @@ class PosHomePageState extends State<PosHomePage> with WidgetsBindingObserver {
               OfflineStatusBanner(
                 pendingSyncCount: pendingOfflineCount,
                 catalogSavedAt: offlineCatalogSavedAt,
+              )
+            else if (pendingOfflineCount > 0 || offlineAttentionCount > 0)
+              OfflineSyncAttentionBanner(
+                pendingSyncCount: pendingOfflineCount,
+                attentionCount: offlineAttentionCount,
+                onRetry: () => unawaited(retryOfflineAttention()),
               ),
             Expanded(
               child: splitView

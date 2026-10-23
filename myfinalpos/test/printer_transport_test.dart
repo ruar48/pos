@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myfinalpos/features/receipt/printer_transport.dart';
 
@@ -29,7 +27,7 @@ void main() {
   });
 
   group('PrinterTransport Bluetooth test receipt bytes', () {
-    test('buildBluetoothTestReceiptBytes has no ESC/POS control bytes and is valid UTF-8', () {
+    test('buildBluetoothTestReceiptBytes has no ESC/POS control bytes and sends ñ as one code-page byte', () {
       final bytes = PrinterTransport.buildBluetoothTestReceiptBytes();
 
       expect(bytes.isNotEmpty, isTrue);
@@ -42,12 +40,13 @@ void main() {
           reason: 'Unexpected control byte: $byte',
         );
       }
-      // Must be proper UTF-8, not raw UTF-16 code units - the brand name
-      // contains 'ñ', which .codeUnits would mangle into a single invalid
-      // byte instead of encoding it as two valid UTF-8 bytes.
-      final decoded = utf8.decode(bytes);
-      expect(decoded, contains('Muñoz Macam Agri BT Test'));
-      expect(decoded, contains('Bluetooth printer OK'));
+      // The brand name's 'ñ' must be its single PC437 byte 0xA4, not the
+      // two UTF-8 bytes the printer would show as two wrong glyphs. Each
+      // byte read back as one char, so 0xA4 shows up as U+00A4.
+      final text = String.fromCharCodes(bytes);
+      expect(text, contains('Mu¤oz Macam Agri BT Test\n'));
+      expect(text, contains('Bluetooth printer OK\n'));
+      expect(bytes, isNot(contains(0xC3)));
     });
   });
 }

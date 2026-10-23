@@ -70,9 +70,17 @@ class CustomerLoyaltyService
             && Schema::hasColumn('loyalty_cards', 'nfc_uid');
 
         if ($search !== null && trim($search) !== '') {
-            $nfcSearch = $hasNfcUid ? ' OR lc.nfc_uid LIKE :search' : '';
-            $searchSql = "AND (c.customer_name LIKE :search OR c.table_name LIKE :search OR lc.card_number LIKE :search{$nfcSearch})";
-            $params['search'] = '%'.trim($search).'%';
+            // One placeholder per use - with native prepares MySQL rejects a
+            // named parameter bound more than once.
+            $term = '%'.trim($search).'%';
+            $nfcSearch = $hasNfcUid ? ' OR lc.nfc_uid LIKE :search_nfc' : '';
+            $searchSql = "AND (c.customer_name LIKE :search_name OR c.table_name LIKE :search_location OR lc.card_number LIKE :search_card{$nfcSearch})";
+            $params['search_name'] = $term;
+            $params['search_location'] = $term;
+            $params['search_card'] = $term;
+            if ($hasNfcUid) {
+                $params['search_nfc'] = $term;
+            }
         }
 
         $hasCards = Schema::hasTable('loyalty_cards');

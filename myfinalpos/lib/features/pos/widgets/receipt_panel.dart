@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/format_utils.dart';
 import '../../../core/utils/top_toast.dart';
+import '../../receipt/printer_transport.dart';
 import '../../receipt/receipt_preview_widget.dart';
 import '../../receipt/receipt_printer.dart';
 import '../pages/pos_home_page.dart';
@@ -26,6 +27,8 @@ class _ReceiptPanelState extends State<ReceiptPanel> {
   bool downloading = false;
 
   Future<void> _print() async {
+    // A second tap can land before the rebuild that disables the button.
+    if (printing || PrinterTransport.busy.value) return;
     final pageState = widget.pageState;
     if (!pageState.isPrinterConfigured) {
       if (!mounted) return;
@@ -37,10 +40,12 @@ class _ReceiptPanelState extends State<ReceiptPanel> {
 
     setState(() => printing = true);
     try {
+      // Never kicks the drawer: checkout's auto-print/complete already
+      // opened it for a cash sale, and this is just another copy.
       await PosReceiptService.printReceipt(
         receipt: widget.receipt,
         printer: pageState.resolvedPrinter,
-        openDrawer: widget.receipt.includesCashPayment,
+        openDrawer: false,
       );
       if (mounted) {
         showTopSuccess(context, 'Receipt sent to printer');
@@ -170,21 +175,34 @@ class _ReceiptPanelState extends State<ReceiptPanel> {
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: printing ? null : _print,
-                        icon: printing
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.print_outlined, size: 20),
-                        label: const Text('Print'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(46),
-                          foregroundColor: AppColors.green,
-                          side: const BorderSide(color: AppColors.greenBorder),
-                        ),
+                      // Listens to the shared print queue, not just this
+                      // button's own job, so it also stays disabled while
+                      // the checkout auto-print is still going.
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: PrinterTransport.busy,
+                        builder: (context, printerBusy, _) {
+                          final busy = printing || printerBusy;
+                          return OutlinedButton.icon(
+                            onPressed: busy ? null : _print,
+                            icon: busy
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.print_outlined, size: 20),
+                            label: const Text('Print'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(46),
+                              foregroundColor: AppColors.green,
+                              side: const BorderSide(
+                                color: AppColors.greenBorder,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: 8),

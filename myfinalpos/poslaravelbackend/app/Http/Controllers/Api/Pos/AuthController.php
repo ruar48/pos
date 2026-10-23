@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Api\Pos;
 
 use App\Http\Controllers\Controller;
 use App\Support\PosApiResponse;
+use App\Support\PosApiToken;
 use App\Support\PosHelpers;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 
 class AuthController extends Controller
@@ -23,6 +25,22 @@ class AuthController extends Controller
 
         if ($email === '' || $password === '') {
             return $this->posError('Email and password are required', 400);
+        }
+
+        // Tablet login used to allow unlimited guesses (the web login is
+        // already throttled by Fortify). Limit wrong passwords per account
+        // and per IP; a successful login clears the account counter.
+        $accountKey = 'pos-login:'.sha1(strtolower($email)).'|'.$request->ip();
+        $ipKey = 'pos-login-ip:'.$request->ip();
+        foreach ([[$accountKey, 10], [$ipKey, 50]] as [$key, $max]) {
+            if (RateLimiter::tooManyAttempts($key, $max)) {
+                $minutes = max(1, (int) ceil(RateLimiter::availableIn($key) / 60));
+
+                return $this->posError(
+                    "Too many failed sign-in attempts. Try again in {$minutes} minute(s).",
+                    429,
+                );
+            }
         }
 
         if (! Schema::hasTable('users')) {
@@ -44,8 +62,13 @@ class AuthController extends Controller
         );
 
         if (! $user || ! password_verify($password, (string) $user->password_hash)) {
+            RateLimiter::hit($accountKey, 300);
+            RateLimiter::hit($ipKey, 300);
+
             return $this->posError('Invalid username or password', 401);
         }
+
+        RateLimiter::clear($accountKey);
 
         if ($hasStatus && (int) ($user->status ?? 1) !== 1) {
             return $this->posError(
@@ -61,8 +84,16 @@ class AuthController extends Controller
             );
         }
 
+        // Sign-in token for newer tablet builds (older ones ignore it). The
+        // tablet sends it on every request so the server knows who is acting.
+        $token = PosApiToken::issue(
+            (int) $user->id,
+            trim((string) $request->input('device_name', '')) ?: null,
+        );
+
         return $this->posSuccess([
             'message' => 'Login successful',
+            'token' => $token,
             'user' => [
                 'id' => (int) $user->id,
                 'full_name' => $user->full_name,
@@ -71,6 +102,18 @@ class AuthController extends Controller
                 'role' => $user->role,
             ],
         ]);
+    }
+
+    /** Signs this tablet out: its token stops working immediately. */
+    public function logout(Request $request): JsonResponse
+    {
+        if ($request->isMethod('options')) {
+            return $this->posSuccess();
+        }
+
+        PosApiToken::revoke((string) $request->bearerToken());
+
+        return $this->posSuccess(['message' => 'Signed out']);
     }
 
     public function changePassword(Request $request): JsonResponse

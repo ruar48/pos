@@ -330,8 +330,15 @@ class ProductImportExportService
                     continue;
                 }
 
-                $price = $this->parseMoney($row['price'] ?? null, "Row {$displayLine}: invalid price");
-                if ($price === null) {
+                // A blank price cell used to parse as ₱0 and was saved -
+                // items then rang up free. Blank now means "leave the price
+                // as it is" for an existing item (and is an error for a new
+                // one, checked below once we know which it is).
+                $priceCell = trim((string) ($row['price'] ?? ''));
+                $price = $priceCell === ''
+                    ? null
+                    : $this->parseMoney($priceCell, "Row {$displayLine}: invalid price");
+                if ($priceCell !== '' && $price === null) {
                     $skipped++;
                     if (count($errors) < $maxErrors) {
                         $errors[] = "Row {$displayLine}: invalid price";
@@ -351,6 +358,15 @@ class ProductImportExportService
                 }
 
                 $stockCellBlank = trim((string) ($row['stock'] ?? '')) === '';
+                if (! $stockCellBlank && ! is_numeric(trim((string) $row['stock']))) {
+                    // Text in the stock cell used to become 0 stock.
+                    $skipped++;
+                    if (count($errors) < $maxErrors) {
+                        $errors[] = "Row {$displayLine}: invalid stock";
+                    }
+
+                    continue;
+                }
                 $stock = $this->parseQuantity($row['stock'] ?? 0, 0.0);
                 $hasSnapshot = array_key_exists('stock_snapshot', $row) && trim((string) $row['stock_snapshot']) !== '';
                 $reorder = max(0, $this->parseInt($row['reorder_level'] ?? 5, 5));
@@ -392,11 +408,20 @@ class ProductImportExportService
                     }
                 }
 
+                if ($existing === null && $price === null) {
+                    $skipped++;
+                    if (count($errors) < $maxErrors) {
+                        $errors[] = "Row {$displayLine}: price is required for a new item";
+                    }
+
+                    continue;
+                }
+
                 $payload = [
                     'category_id' => $categoryId,
                     'name' => $name,
                     'description' => $description === '' ? null : $description,
-                    'price' => $price,
+                    'price' => $price ?? 0.0,
                     'cost_price' => $costPrice,
                     'reorder_level' => $reorder,
                     'status' => $status,
@@ -417,7 +442,53 @@ class ProductImportExportService
 
                 if ($existing !== null) {
                     $productId = (int) $existing->id;
-                    $currentStock = (float) $existing->stock;
+
+                    // Update only what the file actually provides. A column
+                    // missing from the file - or a blank cell - used to wipe
+                    // the barcode, deal and description, reset the reorder
+                    // level to 5, re-activate items and blank the cost. (The
+                    // app's own export has no description column, so even an
+                    // export-then-import cleared every description.)
+                    $filled = static fn (string $key): bool => array_key_exists($key, $row)
+                        && trim((string) $row[$key]) !== '';
+                    $payload = [
+                        'category_id' => $categoryId,
+                        'name' => $name,
+                        'updated_at' => $now,
+                    ];
+                    if ($price !== null) {
+                        $payload['price'] = $price;
+                    }
+                    if ($filled('cost_price')) {
+                        $payload['cost_price'] = $costPrice;
+                    }
+                    if ($filled('reorder_level')) {
+                        $payload['reorder_level'] = $reorder;
+                    }
+                    if ($filled('description')) {
+                        $payload['description'] = $description;
+                    }
+                    if ($filled('status')) {
+                        $payload['status'] = $status;
+                    }
+                    if ($hasOption && array_key_exists('option', $row)) {
+                        // Part of the item's identity (used to match it).
+                        $payload['option'] = $option === '' ? null : $option;
+                    }
+                    if ($hasDeal && $filled('deal')) {
+                        $payload['deal'] = $deal;
+                    }
+                    if ($hasBarcode && $filled('barcode')) {
+                        $payload['barcode'] = $barcode;
+                    }
+
+                    // Live stock, locked: the index was read before the
+                    // import started (it can take a minute), so writing a
+                    // value derived from it undid sales made meanwhile.
+                    $currentStock = (float) (DB::selectOne(
+                        'SELECT stock FROM products WHERE id = ? LIMIT 1 FOR UPDATE',
+                        [$productId],
+                    )->stock ?? 0);
 
                     if ($stockMode === 'recount') {
                         // A full physical count: the typed number IS the true stock, written
@@ -457,15 +528,33 @@ class ProductImportExportService
                                 $this->formatQuantity($resolvedStock),
                             );
                         }
+                    } elseif ($stockCellBlank) {
+                        // No snapshot and nothing typed: leave stock alone
+                        // (a blank cell used to set it to 0).
+                        $resolvedStock = $currentStock;
                     } else {
+                        // Older sheets (e.g. "Morning Inventory") without a
+                        // snapshot column: the typed number is an exact count.
                         $resolvedStock = $stock;
+                        if ($resolvedStock !== $currentStock && count($stockDriftWarnings) < $maxErrors) {
+                            $stockDriftWarnings[] = sprintf(
+                                "Row %d: '%s' stock set to %s as an exact count (the file has no stock-at-export column, so sales since it was made can't be accounted for; it was %s).",
+                                $displayLine,
+                                $name,
+                                $this->formatQuantity($resolvedStock),
+                                $this->formatQuantity($currentStock),
+                            );
+                        }
                     }
 
                     if ($resolvedStock < 0) {
                         $resolvedStock = 0.0;
                     }
 
-                    $payload['stock'] = $resolvedStock;
+                    // Only write stock when it actually changes.
+                    if (round($resolvedStock - $currentStock, 3) !== 0.0) {
+                        $payload['stock'] = $resolvedStock;
+                    }
                     DB::table('products')->where('id', $productId)->update($payload);
 
                     $delta = round($resolvedStock - $currentStock, 3);

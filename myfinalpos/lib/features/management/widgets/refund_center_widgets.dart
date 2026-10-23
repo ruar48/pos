@@ -44,10 +44,9 @@ class RefundCenterState extends ChangeNotifier {
   double get totalRefundedAmount =>
       refunds.fold<double>(0, (sum, refund) => sum + refund.amount);
 
-  bool _hasRefundableItems(TransactionRecord order) {
-    if (order.refundedAmount >= order.grandTotal - 0.01) return false;
-    return order.items.any((item) => item.hasRefundableQuantity);
-  }
+  // Units left, not money - like the server, a fully paid-back order can
+  // still have free lines to return.
+  bool _hasRefundableItems(TransactionRecord order) => order.hasRefundableItems;
 }
 
 class RefundCenterContent extends StatelessWidget {

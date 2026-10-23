@@ -72,10 +72,15 @@ class TransactionItem {
     );
   }
 
-  bool get hasRefundableQuantity => quantity - refundedQuantity > 0;
+  // Quantities are stored to 3 decimals; the tolerance stops float noise
+  // (2.5 - 2.4999999) from leaving a phantom refundable sliver.
+  bool get hasRefundableQuantity => quantity - refundedQuantity > 0.0005;
 
-  double get remainingQuantity =>
-      quantity - refundedQuantity < 0 ? 0 : quantity - refundedQuantity;
+  double get remainingQuantity {
+    final remaining = quantity - refundedQuantity;
+    if (remaining <= 0.0005) return 0;
+    return (remaining * 1000).round() / 1000;
+  }
 
   double get refundedAmount {
     if (refundedQuantity <= 0 || quantity <= 0) return 0;
@@ -188,6 +193,22 @@ class TransactionRecord {
   double get grandTotal => totalAmount;
 
   bool get hasRefunds => refundedAmount > 0.009;
+
+  /// Same rule as the server: an order stays refundable while any unit is
+  /// left. Money alone can't tell - once the paid amount is all refunded,
+  /// free (zero-value) lines can still be returned for ₱0.
+  bool get hasRefundableItems =>
+      items.any((item) => item.hasRefundableQuantity);
+
+  bool get hasRefundedUnits => items.any((item) => item.refundedQuantity > 0);
+
+  bool get isFullyRefunded {
+    if (items.isEmpty) return status.toLowerCase() == 'refunded';
+    return hasRefundedUnits && !hasRefundableItems;
+  }
+
+  /// Any refund at all, including a ₱0 return of a free item.
+  bool get hasAnyRefund => hasRefunds || hasRefundedUnits;
 
   double get remainingTotal {
     final remaining = grandTotal - refundedAmount;
@@ -335,8 +356,13 @@ class TransactionApiResult {
   const TransactionApiResult({
     required this.success,
     required this.message,
+    this.refundAmount,
   });
 
   final bool success;
   final String message;
+
+  /// Pesos the cashier hands back for a successful refund (the server's
+  /// `refund_amount`, after prorated order discounts and VAT).
+  final double? refundAmount;
 }

@@ -14,6 +14,7 @@ class TransactionDetailsWidget extends StatelessWidget {
     required this.onVoid,
     required this.onDownloadPdf,
     required this.onShare,
+    this.refunding = false,
     super.key,
   });
 
@@ -24,6 +25,9 @@ class TransactionDetailsWidget extends StatelessWidget {
   final VoidCallback onVoid;
   final VoidCallback onDownloadPdf;
   final VoidCallback onShare;
+
+  /// A refund is in flight - Refund is disabled so it can't be sent twice.
+  final bool refunding;
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +153,22 @@ class TransactionDetailsWidget extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (transaction.hasRefunds) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Refunded'),
+                      Text(
+                        '-${formatMoney('₱', transaction.refundedAmount)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.danger,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -162,11 +182,18 @@ class TransactionDetailsWidget extends StatelessWidget {
                 icon: const Icon(Icons.print_outlined),
                 label: const Text('Reprint'),
               ),
-              FilledButton.icon(
-                onPressed: onRefund,
-                icon: const Icon(Icons.undo),
-                label: const Text('Refund'),
-              ),
+              if (transaction.hasRefundableItems)
+                FilledButton.icon(
+                  onPressed: refunding ? null : onRefund,
+                  icon: refunding
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.undo),
+                  label: Text(refunding ? 'Refunding...' : 'Refund'),
+                ),
               OutlinedButton.icon(
                 onPressed: onDownloadPdf,
                 icon: const Icon(Icons.picture_as_pdf_outlined),

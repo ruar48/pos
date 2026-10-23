@@ -13,7 +13,11 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function (): void {
-            Route::middleware(['api', \App\Http\Middleware\LogPosApiRequests::class])
+            Route::middleware([
+                'api',
+                \App\Http\Middleware\LogPosApiRequests::class,
+                \App\Http\Middleware\PosApiToken::class,
+            ])
                 ->prefix('pos_app')
                 ->group(base_path('routes/pos_app.php'));
         },

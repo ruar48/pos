@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/utils/format_utils.dart';
 import '../../../core/utils/top_toast.dart';
 import '../../../models/printer_settings.dart';
 import '../../management/widgets/management_widgets.dart';
@@ -34,6 +33,8 @@ class _TabletPrinterSettingsPanelState
   bool bluetoothTesting = false;
 
   static const _paperWidthOptions = [24, 26, 28, 30, 32, 42, 48];
+  static const _portErrorMessage =
+      'Port must be a number from 1 to 65535 (leave blank for 9100).';
 
   @override
   void initState() {
@@ -57,10 +58,21 @@ class _TabletPrinterSettingsPanelState
     );
   }
 
+  /// Blank means the standard raw-printing port 9100; null means the input
+  /// is invalid. Clamping used to turn a blank field (parsed as 0) into
+  /// port 1, which no printer listens on.
+  int? get _parsedPort {
+    final text = printerPortController.text.trim();
+    if (text.isEmpty) return 9100;
+    final port = int.tryParse(text);
+    if (port == null || port < 1 || port > 65535) return null;
+    return port;
+  }
+
   PrinterConfig get _draftConfig => PrinterConfig(
         type: printerType,
         host: printerHostController.text.trim(),
-        port: toInt(printerPortController.text).clamp(1, 65535),
+        port: _parsedPort ?? 9100,
         device: printerType == PrinterConnectionType.bluetooth
             ? PrinterTransport.normalizeMacAddress(
                 printerDeviceController.text.trim(),
@@ -248,6 +260,10 @@ class _TabletPrinterSettingsPanelState
       );
       return;
     }
+    if (printerType == PrinterConnectionType.network && _parsedPort == null) {
+      showTopWarning(context, _portErrorMessage);
+      return;
+    }
 
     setState(() => saving = true);
     try {
@@ -349,10 +365,11 @@ class _TabletPrinterSettingsPanelState
                   controller: printerPortController,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Port',
                     hintText: '9100',
-                    prefixIcon: Icon(Icons.numbers_outlined),
+                    prefixIcon: const Icon(Icons.numbers_outlined),
+                    errorText: _parsedPort == null ? _portErrorMessage : null,
                   ),
                   onChanged: (_) => setState(() {}),
                 ),

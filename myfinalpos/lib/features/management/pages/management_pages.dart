@@ -5,8 +5,6 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/format_utils.dart';
 import '../../../models/app_settings.dart';
-import '../../../models/product.dart';
-import '../../../models/sales_history_record.dart';
 import '../../orders/orders.dart';
 import '../../pos/pages/pos_home_page.dart';
 import '../../pos/widgets/app_drawer_section.dart';
@@ -502,6 +500,8 @@ class SalesLedgerPage extends StatelessWidget {
           'VAT',
           'Discount',
           'Total',
+          'Refunded',
+          'Net',
         ],
         rows: pageState.salesHistory
             .map(
@@ -511,13 +511,12 @@ class SalesLedgerPage extends StatelessWidget {
                 record.customerName,
                 formatMoney(currency, record.subtotal),
                 formatMoney(currency, record.vat),
-                formatMoney(
-                  currency,
-                  record.discountAmount +
-                      record.couponDiscount +
-                      record.loyaltyDiscount,
-                ),
+                formatMoney(currency, record.totalDiscount),
                 formatMoney(currency, record.total),
+                // Refunds are journaled against their order; Net is what
+                // the store kept.
+                formatMoney(currency, record.refundedAmount),
+                formatMoney(currency, record.netTotal),
               ],
             )
             .toList(),
@@ -542,52 +541,6 @@ class SettingsPage extends StatelessWidget {
       child: SettingsManagementContent(pageState: pageState),
     );
   }
-}
-
-double _todaySalesTotal(List<SalesHistoryRecord> records) {
-  final now = DateTime.now();
-  return records
-      .where(
-        (record) =>
-            record.createdAt.year == now.year &&
-            record.createdAt.month == now.month &&
-            record.createdAt.day == now.day,
-      )
-      .fold<double>(0, (sum, record) => sum + record.total);
-}
-
-List<String> _categoryLabels(List<Product> products) {
-  final totals = <String, double>{};
-  for (final product in products) {
-    totals[product.category] = (totals[product.category] ?? 0) + product.price;
-  }
-  return totals.keys.toList();
-}
-
-List<double> _categoryTotals(List<Product> products) {
-  final totals = <String, double>{};
-  for (final product in products) {
-    totals[product.category] = (totals[product.category] ?? 0) + product.price;
-  }
-  return totals.values.toList();
-}
-
-List<String> _recentDayLabels(List<SalesHistoryRecord> records) {
-  final grouped = <String, double>{};
-  for (final record in records.take(7)) {
-    final label = _formatDate(record.createdAt);
-    grouped[label] = (grouped[label] ?? 0) + record.total;
-  }
-  return grouped.keys.toList();
-}
-
-List<double> _recentDayTotals(List<SalesHistoryRecord> records) {
-  final grouped = <String, double>{};
-  for (final record in records.take(7)) {
-    final label = _formatDate(record.createdAt);
-    grouped[label] = (grouped[label] ?? 0) + record.total;
-  }
-  return grouped.values.toList();
 }
 
 String _formatDate(DateTime value) {

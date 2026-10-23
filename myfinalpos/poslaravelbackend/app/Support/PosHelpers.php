@@ -6,6 +6,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 
 class PosHelpers
@@ -1126,18 +1127,49 @@ class PosHelpers
 
     public static function verifyCashDrawerPin(string $pin): bool
     {
-        if (! self::tableExists('app_settings') || ! self::columnExists('app_settings', 'cash_drawer_pin_hash')) {
+        return self::throttledPinCheck('cash_drawer', $pin, 'cash_drawer_pin_hash');
+    }
+
+    /** Wrong PIN attempts allowed per device/IP before a cool-down. */
+    private const PIN_MAX_FAILURES = 8;
+
+    /** Cool-down after too many wrong PINs, in seconds. */
+    private const PIN_LOCKOUT_SECONDS = 900;
+
+    /**
+     * Checks a 4-6 digit PIN against the stored hash, with a lockout after
+     * repeated wrong guesses from the same IP - without it a script could try
+     * all 10,000 PINs in minutes. A correct PIN clears the counter, so a
+     * cashier's occasional typo never locks anyone out.
+     */
+    private static function throttledPinCheck(string $kind, string $pin, string $hashColumn): bool
+    {
+        if (! self::tableExists('app_settings') || ! self::columnExists('app_settings', $hashColumn)) {
             return false;
         }
 
-        $row = DB::selectOne('SELECT cash_drawer_pin_hash FROM app_settings WHERE id = 1 LIMIT 1');
-        $hash = trim((string) ($row->cash_drawer_pin_hash ?? ''));
-
-        if ($hash === '' || $pin === '') {
-            return false;
+        $key = 'pos-pin:'.$kind.':'.(request()?->ip() ?? 'cli');
+        if (RateLimiter::tooManyAttempts($key, self::PIN_MAX_FAILURES)) {
+            $minutes = max(1, (int) ceil(RateLimiter::availableIn($key) / 60));
+            throw new HttpResponseException(
+                response()->json([
+                    'success' => false,
+                    'message' => "Too many wrong PIN attempts. Try again in {$minutes} minute(s).",
+                ], 429),
+            );
         }
 
-        return password_verify($pin, $hash);
+        $row = DB::selectOne("SELECT {$hashColumn} AS pin_hash FROM app_settings WHERE id = 1 LIMIT 1");
+        $hash = trim((string) ($row->pin_hash ?? ''));
+        $ok = $hash !== '' && $pin !== '' && password_verify($pin, $hash);
+
+        if ($ok) {
+            RateLimiter::clear($key);
+        } else {
+            RateLimiter::hit($key, self::PIN_LOCKOUT_SECONDS);
+        }
+
+        return $ok;
     }
 
     public static function isRefundPinRequired(): bool
@@ -1153,18 +1185,7 @@ class PosHelpers
 
     public static function verifyRefundPin(string $pin): bool
     {
-        if (! self::tableExists('app_settings') || ! self::columnExists('app_settings', 'refund_pin_hash')) {
-            return false;
-        }
-
-        $row = DB::selectOne('SELECT refund_pin_hash FROM app_settings WHERE id = 1 LIMIT 1');
-        $hash = trim((string) ($row->refund_pin_hash ?? ''));
-
-        if ($hash === '' || $pin === '') {
-            return false;
-        }
-
-        return password_verify($pin, $hash);
+        return self::throttledPinCheck('refund', $pin, 'refund_pin_hash');
     }
 
     public static function requireAuthenticatedActor(?int $actorUserId): array
@@ -1393,6 +1414,30 @@ class PosHelpers
         }
 
         return round(min($subtotal, $value), 2);
+    }
+
+    /**
+     * Counts one use of a coupon in a single statement, refusing when its
+     * max_uses is already reached - read-then-increment let two simultaneous
+     * checkouts both take the last use. $force counts it regardless (a paid
+     * offline sale that is only now syncing).
+     */
+    public static function claimCouponUse(string $code, bool $force = false): bool
+    {
+        $normalized = self::normalizeCouponCode($code);
+        if ($normalized === '' || ! self::tableExists('coupons')) {
+            return $force;
+        }
+
+        $affected = DB::update(
+            'UPDATE coupons
+             SET usage_count = usage_count + 1
+             WHERE UPPER(code) = UPPER(?)
+               AND (? = 1 OR max_uses IS NULL OR usage_count < max_uses)',
+            [$normalized, $force ? 1 : 0],
+        );
+
+        return $affected > 0 || $force;
     }
 
     public static function incrementCouponUsage(string $code): void

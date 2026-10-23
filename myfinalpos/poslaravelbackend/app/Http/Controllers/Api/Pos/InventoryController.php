@@ -87,33 +87,40 @@ class InventoryController extends Controller
             return $this->posError('stock or delta is required', 400);
         }
 
-        $product = DB::selectOne(
-            'SELECT p.id, p.name, p.stock, p.price
-             FROM products p
-             WHERE p.id = ? AND p.status = "active"
-             LIMIT 1',
-            [$productId],
-        );
-
-        if (! $product) {
-            return $this->posError('Product not found', 404);
-        }
-
-        $currentStock = (float) ($product->stock ?? 0);
-        $newStock = $hasStock ? (float) $stock : ($currentStock + (float) $delta);
-
-        if (! $this->allowNegativeStock() && $newStock < 0) {
-            PosApiLogger::warning('inventory.update.rejected_negative_stock', [
-                'product_id' => $productId,
-                'current_stock' => $currentStock,
-                'requested_stock' => $newStock,
-            ]);
-
-            return $this->posError('Stock cannot be negative', 400);
-        }
-
         try {
             DB::beginTransaction();
+
+            // Read (and lock) the current stock inside the transaction - the
+            // read used to happen before it, so a sale committed in between
+            // was overwritten by the absolute value written below.
+            $product = DB::selectOne(
+                'SELECT p.id, p.name, p.stock, p.price
+                 FROM products p
+                 WHERE p.id = ? AND p.status = "active"
+                 LIMIT 1
+                 FOR UPDATE',
+                [$productId],
+            );
+
+            if (! $product) {
+                DB::rollBack();
+
+                return $this->posError('Product not found', 404);
+            }
+
+            $currentStock = (float) ($product->stock ?? 0);
+            $newStock = $hasStock ? (float) $stock : ($currentStock + (float) $delta);
+
+            if (! $this->allowNegativeStock() && $newStock < 0) {
+                DB::rollBack();
+                PosApiLogger::warning('inventory.update.rejected_negative_stock', [
+                    'product_id' => $productId,
+                    'current_stock' => $currentStock,
+                    'requested_stock' => $newStock,
+                ]);
+
+                return $this->posError('Stock cannot be negative', 400);
+            }
 
             DB::table('products')
                 ->where('id', $productId)

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -33,8 +32,81 @@ class PrinterTransport {
     return _macPattern.hasMatch(normalizeMacAddress(raw));
   }
 
+  /// Latin-1 letters PC437 has, keyed by code point. Each byte is the same
+  /// letter in PC850 too, so text stays right whichever of the two a
+  /// printer defaults to - safer than sending `ESC t`, whose code-table
+  /// numbers differ between printer brands.
+  static const Map<int, int> _pc437Letters = {
+    0xC4: 0x8E, // Ä
+    0xC5: 0x8F, // Å
+    0xC6: 0x92, // Æ
+    0xC7: 0x80, // Ç
+    0xC9: 0x90, // É
+    0xD1: 0xA5, // Ñ
+    0xD6: 0x99, // Ö
+    0xDC: 0x9A, // Ü
+    0xDF: 0xE1, // ß
+    0xE0: 0x85, // à
+    0xE1: 0xA0, // á
+    0xE2: 0x83, // â
+    0xE4: 0x84, // ä
+    0xE5: 0x86, // å
+    0xE6: 0x91, // æ
+    0xE7: 0x87, // ç
+    0xE8: 0x8A, // è
+    0xE9: 0x82, // é
+    0xEA: 0x88, // ê
+    0xEB: 0x89, // ë
+    0xEC: 0x8D, // ì
+    0xED: 0xA1, // í
+    0xEE: 0x8C, // î
+    0xEF: 0x8B, // ï
+    0xF1: 0xA4, // ñ
+    0xF2: 0x95, // ò
+    0xF3: 0xA2, // ó
+    0xF4: 0x93, // ô
+    0xF6: 0x94, // ö
+    0xF7: 0xF6, // ÷
+    0xF9: 0x97, // ù
+    0xFA: 0xA3, // ú
+    0xFB: 0x96, // û
+    0xFC: 0x81, // ü
+    0xFF: 0x98, // ÿ
+  };
+
+  /// Plain-ASCII stand-in for each of U+00C0-U+00FF (indexed from 0xC0),
+  /// used for the ones [_pc437Letters] doesn't cover.
+  static const String _latin1Fold = 'AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPs'
+      'aaaaaaaceeeeiiiidnooooo/ouuuuypy';
+
+  /// Encodes printable text as exactly one byte per character for the
+  /// printer's single-byte code page (PC437 after `ESC @`). UTF-8 sent "ñ"
+  /// as two bytes, which printed as two wrong glyphs and pushed every
+  /// padded column one place right. Anything with no byte becomes '?' so a
+  /// row keeps the width the layout counted; line endings are the
+  /// caller's job.
+  static List<int> encodeText(String text) {
+    final bytes = <int>[];
+    for (final rune in text.runes) {
+      if (rune >= 0x20 && rune <= 0x7E) {
+        bytes.add(rune);
+      } else if (rune >= 0xC0 && rune <= 0xFF) {
+        bytes.add(_pc437Letters[rune] ?? _latin1Fold.codeUnitAt(rune - 0xC0));
+      } else if (rune == 0x20B1) {
+        bytes.add(0x50); // ₱ isn't in PC437/PC850 - print "P".
+      } else if (rune >= 0x0300 && rune <= 0x036F) {
+        // Combining accent of a decomposed letter ("n" + U+0303) - the
+        // base letter already printed, so drop the accent.
+        continue;
+      } else {
+        bytes.add(0x3F);
+      }
+    }
+    return bytes;
+  }
+
   /// Deliberately plain: no init, no bold/center ESC sequences, no feed/cut
-  /// - just ASCII text and line feeds. This receipt keeps garbling even on
+  /// - just text and line feeds. This receipt keeps garbling even on
   /// this short 4-line test regardless of chunk pacing, so the next thing
   /// to rule out is whether the ESC/POS control bytes themselves (which a
   /// non-standard clone controller could be misinterpreting as literal
@@ -47,11 +119,10 @@ class PrinterTransport {
     final bytes = <int>[];
 
     void line(String text) {
-      // utf8.encode, not .codeUnits - AppBrand.shortName contains 'ñ'
-      // (U+00F1), and .codeUnits would emit that as a single raw byte 241
-      // instead of its correct 2-byte UTF-8 sequence, which is exactly the
-      // kind of single bad byte that can desync a cheap printer's parser.
-      bytes.addAll(utf8.encode('$text\n'));
+      // Same encoding as real receipts - AppBrand.shortName contains 'ñ',
+      // which must go out as its single PC437 byte, not UTF-8.
+      bytes.addAll(encodeText(text));
+      bytes.add(0x0A);
     }
 
     line(title);
@@ -63,9 +134,57 @@ class PrinterTransport {
     return bytes;
   }
 
+  /// Tail of the print queue. Every job that talks to the printer (receipt,
+  /// drawer kick, Bluetooth test) chains onto it so only one runs at a
+  /// time - overlapping jobs share one Bluetooth link, and each job's
+  /// connect/disconnect cut the other off (truncated receipts, lost drawer
+  /// kick).
+  static Future<void> _queueTail = Future<void>.value();
+  static int _queuedJobs = 0;
+  static final ValueNotifier<bool> _busy = ValueNotifier<bool>(false);
+
+  /// True while a print job is running or waiting its turn - lets the UI
+  /// hold off a manual print while e.g. the checkout auto-print is going.
+  static ValueListenable<bool> get busy => _busy;
+
+  /// Runs [job] after every job queued before it. Never call this from
+  /// inside a job - it would wait on itself.
+  @visibleForTesting
+  static Future<T> runExclusive<T>(Future<T> Function() job) {
+    _queuedJobs++;
+    _busy.value = true;
+    final result = _queueTail.then((_) => job());
+    // The caller gets the job's error from `result`; the queue ignores it
+    // so one failed print doesn't block the next. The timeout is a valve
+    // for a job stuck in a plugin call, which would otherwise block all
+    // printing until the app restarts.
+    _queueTail = result
+        .timeout(const Duration(seconds: 60))
+        .then<void>((_) {}, onError: (_) {})
+        .whenComplete(() {
+      _queuedJobs--;
+      if (_queuedJobs == 0) _busy.value = false;
+    });
+    return result;
+  }
+
   static Future<BluetoothPrinterTestResult> testBluetoothConnection({
     required String macAddress,
     bool sendTestReceipt = true,
+  }) {
+    // Queued like a print job: it connects and disconnects the same
+    // Bluetooth link a receipt in progress would be using.
+    return runExclusive(
+      () => _testBluetoothConnection(
+        macAddress: macAddress,
+        sendTestReceipt: sendTestReceipt,
+      ),
+    );
+  }
+
+  static Future<BluetoothPrinterTestResult> _testBluetoothConnection({
+    required String macAddress,
+    required bool sendTestReceipt,
   }) async {
     final steps = <BluetoothPrinterTestStep>[];
 
@@ -192,8 +311,8 @@ class PrinterTransport {
       addStep('Connection', true, 'Connected to the printer.');
 
       if (sendTestReceipt) {
-        // Must match the real receipt path exactly (settle delay + small
-        // paced chunks via _writeInChunks) - this used to call
+        // Must match the real receipt path exactly (settle delay + paced
+        // line writes via _writeInChunks) - this used to call
         // PrintBluetoothThermal.writeBytes directly in one shot, so the
         // test print never actually exercised the pacing fix and could
         // garble even after that fix was applied to real receipts.
@@ -300,24 +419,26 @@ class PrinterTransport {
       payload.addAll(kCashDrawerKickBytes);
     }
 
-    switch (config.type) {
-      case PrinterConnectionType.network:
-        await _sendNetwork(
-          host: config.host.trim(),
-          port: config.port > 0 ? config.port : 9100,
-          bytes: payload,
-        );
-      case PrinterConnectionType.bluetooth:
-        await _sendBluetooth(
-          macAddress: config.device.trim(),
-          bytes: payload,
-        );
-      case PrinterConnectionType.usb:
-        await _sendUsb(
-          deviceId: config.device.trim(),
-          bytes: payload,
-        );
-    }
+    await runExclusive(() async {
+      switch (config.type) {
+        case PrinterConnectionType.network:
+          await _sendNetwork(
+            host: config.host.trim(),
+            port: config.port > 0 ? config.port : 9100,
+            bytes: payload,
+          );
+        case PrinterConnectionType.bluetooth:
+          await _sendBluetooth(
+            macAddress: config.device.trim(),
+            bytes: payload,
+          );
+        case PrinterConnectionType.usb:
+          await _sendUsb(
+            deviceId: config.device.trim(),
+            bytes: payload,
+          );
+      }
+    });
   }
 
   static Future<List<BluetoothInfo>> listBluetoothPrinters() async {
@@ -354,8 +475,13 @@ class PrinterTransport {
     required int port,
     required List<int> bytes,
   }) async {
+    // A printer that stops reading (paper out, jammed, dropped off WiFi)
+    // leaves flush/close pending forever, which would hang the job and
+    // every job queued behind it.
+    const ioTimeout = Duration(seconds: 10);
+    Socket? socket;
     try {
-      final socket = await Socket.connect(
+      socket = await Socket.connect(
         host,
         port,
         timeout: const Duration(seconds: 5),
@@ -369,13 +495,14 @@ class PrinterTransport {
       for (var offset = 0; offset < bytes.length; offset += chunkSize) {
         final end = (offset + chunkSize).clamp(0, bytes.length);
         socket.add(bytes.sublist(offset, end));
-        await socket.flush();
+        await socket.flush().timeout(ioTimeout);
         if (end < bytes.length) {
           await Future<void>.delayed(const Duration(milliseconds: 20));
         }
       }
-      await socket.close();
+      await socket.close().timeout(ioTimeout);
     } catch (error) {
+      socket?.destroy();
       debugPrint('Network printer: $error');
       throw ReceiptPrintException(
         'Could not reach printer at $host:$port. Check the IP, power, and network.',
@@ -442,66 +569,44 @@ class PrinterTransport {
     }
   }
 
-  /// Writes bytes to the connected Bluetooth printer in small chunks with a
-  /// short pause between each — some cheap thermal printers silently drop
-  /// or corrupt bytes when a large payload (a full receipt) is written in
-  /// one burst, which can show up as a single line printing misaligned or
-  /// with missing characters even though the generated text is correct.
-  /// Deliberately conservative (small chunks, longer pause) - some units
-  /// still garble even fixed, short header text at the previous, less
-  /// conservative pacing, so their receive buffer is smaller/slower than
-  /// most.
+  /// Writes bytes to the connected Bluetooth printer one line per write
+  /// with a short pause between writes — some cheap thermal printers
+  /// silently drop or corrupt bytes when a large payload (a full receipt)
+  /// is written in one burst, which can show up as a single line printing
+  /// misaligned or with missing characters even though the generated text
+  /// is correct.
   ///
-  /// Chunk boundaries are aligned to CRLF line endings rather than a raw
-  /// byte count: once character-level garbling was fixed, receipts still
-  /// wrapped mid-word at arbitrary points (e.g. "Re" / "ceipt No:"). A
-  /// fixed-size byte chunk can land in the middle of a text line, and if
-  /// the printer times out its input buffer during the pacing delay, it
-  /// force-linefeeds whatever partial line it has - which reproduces
-  /// exactly that pattern. Sending each full line as one write removes
-  /// that failure mode; a single line longer than chunkSize still falls
-  /// back to sub-chunking within that line only.
+  /// Each write is a whole line up to and including its line ending, never
+  /// part of one: receipts wrapped mid-word at arbitrary points (e.g. "Re"
+  /// / "ceipt No:") because if the printer times out its input buffer
+  /// during a pause, it force-linefeeds whatever partial line it has. The
+  /// earlier 32-byte sub-chunking of long lines still did that to every
+  /// padded 48-column row (50 bytes with CRLF).
   static Future<void> _writeInChunks(List<int> bytes) async {
-    const chunkSize = 32;
     const delay = Duration(milliseconds: 40);
 
-    for (final segment in _splitIntoLineSegments(bytes)) {
-      if (segment.length <= chunkSize) {
-        final ok = await PrintBluetoothThermal.writeBytes(segment);
-        if (!ok) {
-          throw ReceiptPrintException('Bluetooth printer rejected the print job.');
-        }
-        await Future<void>.delayed(delay);
-        continue;
+    for (final segment in splitIntoLineSegments(bytes)) {
+      final ok = await PrintBluetoothThermal.writeBytes(segment);
+      if (!ok) {
+        throw ReceiptPrintException('Bluetooth printer rejected the print job.');
       }
-
-      for (var offset = 0; offset < segment.length; offset += chunkSize) {
-        final end = (offset + chunkSize).clamp(0, segment.length);
-        final chunk = segment.sublist(offset, end);
-        final ok = await PrintBluetoothThermal.writeBytes(chunk);
-        if (!ok) {
-          throw ReceiptPrintException('Bluetooth printer rejected the print job.');
-        }
-        await Future<void>.delayed(delay);
-      }
+      await Future<void>.delayed(delay);
     }
   }
 
-  /// Splits a byte stream into segments that each end at a CRLF (0x0D
-  /// 0x0A) line ending, so a paced write never lands mid-line. Any trailing
-  /// bytes without a terminating CRLF (e.g. the feed/cut control bytes at
-  /// the end of a receipt) form a final segment on their own.
-  static List<List<int>> _splitIntoLineSegments(List<int> bytes) {
+  /// Splits a byte stream into segments that each end at a line feed
+  /// (0x0A - the end of a CRLF, or the bare LF the test receipt uses), so
+  /// a paced write never lands mid-line. Any trailing bytes without a line
+  /// ending (e.g. the feed/cut control bytes at the end of a receipt) form
+  /// a final segment on their own.
+  @visibleForTesting
+  static List<List<int>> splitIntoLineSegments(List<int> bytes) {
     final segments = <List<int>>[];
     var start = 0;
-    var i = 0;
-    while (i < bytes.length - 1) {
-      if (bytes[i] == 0x0D && bytes[i + 1] == 0x0A) {
-        segments.add(bytes.sublist(start, i + 2));
-        start = i + 2;
-        i += 2;
-      } else {
-        i++;
+    for (var i = 0; i < bytes.length; i++) {
+      if (bytes[i] == 0x0A) {
+        segments.add(bytes.sublist(start, i + 1));
+        start = i + 1;
       }
     }
     if (start < bytes.length) {

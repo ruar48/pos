@@ -293,7 +293,10 @@ class TransactionReportService
                 'items_summary' => implode(', ', $itemLabels),
                 'status' => (string) $order->status,
                 'refunded_amount' => $refunded,
-                'can_refund' => $refunded < (float) $order->total_amount - 0.01,
+                // Units left to return, not money: a sale whose money is all
+                // paid back can still have free (₱0) lines to restock, and
+                // refunds go by units since the refund rework.
+                'can_refund' => $itemsCount > 0.0005,
                 'items' => $itemRows,
                 'payments' => PosHelpers::loadOrderPayments($orderId),
             ];
@@ -360,6 +363,11 @@ class TransactionReportService
         foreach ($pageBuckets as $bucket) {
             $bucketKey = (string) $bucket->bucket_key;
             [$bucketStart, $bucketEnd] = $this->bucketBounds($view, $bucketKey);
+            // Keep each bucket inside the requested range - a month row for
+            // "Sep 15 - Oct 14" used to show Sep 15-30 sales next to the costs,
+            // expenses and profit of the whole of September.
+            $bucketStart = max($bucketStart, $startDt);
+            $bucketEnd = min($bucketEnd, $endDt);
 
             $metrics = DB::selectOne(
                 "SELECT
