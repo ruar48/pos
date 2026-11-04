@@ -71,6 +71,11 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/pos/inventory/stock/update', [InventoryPageController::class, 'updateStockWithPin'])
         ->middleware('throttle:10,1')
         ->name('pos.inventory.stock.update');
+    Route::get('/pos/inventory/stock/entries', [InventoryPageController::class, 'stockEntries'])
+        ->name('pos.inventory.stock.entries');
+    Route::post('/pos/inventory/stock/entries/fix', [InventoryPageController::class, 'fixStockEntry'])
+        ->middleware('throttle:10,1')
+        ->name('pos.inventory.stock.entries.fix');
     Route::get('/pos/reports', [ReportsPageController::class, 'index'])->name('pos.reports');
     Route::get('/pos/reports/summary', [ReportsPageController::class, 'summary'])->name('pos.reports.summary');
     Route::get('/pos/reports/sales-visuals', [ReportsPageController::class, 'salesVisuals'])->name('pos.reports.sales-visuals');

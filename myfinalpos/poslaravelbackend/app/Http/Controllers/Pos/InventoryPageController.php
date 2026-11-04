@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Pos;
 use App\Http\Controllers\Api\Pos\InventoryController as PosInventoryApiController;
 use App\Http\Controllers\Api\Pos\InventoryReportController;
 use App\Http\Controllers\Controller;
+use App\Services\Pos\StockEntryFixService;
 use App\Services\Pos\StockUpdateService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,6 +43,32 @@ class InventoryPageController extends Controller
         }
 
         return response()->json(['message' => 'Stock updated', 'data' => $result]);
+    }
+
+    public function stockEntries(Request $request): JsonResponse
+    {
+        return response()->json([
+            'data' => app(StockEntryFixService::class)->recentEntries(
+                (int) $request->query('product_id', 0),
+            ),
+        ]);
+    }
+
+    public function fixStockEntry(Request $request): JsonResponse
+    {
+        try {
+            $result = app(StockEntryFixService::class)->fix(
+                entryId: (int) $request->input('entry_id', 0),
+                newDelta: (float) $request->input('quantity', 0),
+                reason: (string) $request->input('reason', ''),
+                pin: (string) $request->input('pin', ''),
+                actorUserId: Auth::id(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['message' => 'Stock entry corrected', 'data' => $result]);
     }
 
     public function adjustStock(Request $request): JsonResponse

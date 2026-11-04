@@ -229,6 +229,37 @@ export async function updateInventoryStockWithPin(input: {
     });
 }
 
+export type StockEntry = {
+    id: number;
+    type: 'adjustment';
+    quantity_delta: number;
+    balance_after: number | null;
+    note: string | null;
+    created_at: string | null;
+};
+
+/** Recent manual add/remove entries for a product that can be rewritten. */
+export async function fetchStockEntries(productId: number) {
+    const res = await laravelFetch<{ data: StockEntry[] }>(
+        `/pos/inventory/stock/entries?product_id=${productId}`,
+    );
+    return res.data ?? [];
+}
+
+/** Rewrite a mistaken entry to its right quantity (0 removes it). */
+export async function fixInventoryStockEntry(input: {
+    entry_id: number;
+    quantity: number;
+    reason: string;
+    pin: string;
+}) {
+    clearInventoryReportCache();
+    return laravelFetch('/pos/inventory/stock/entries/fix', {
+        method: 'POST',
+        body: JSON.stringify(input),
+    });
+}
+
 export async function adjustInventoryStock(input: {
     product_id: number;
     variety_id?: number;

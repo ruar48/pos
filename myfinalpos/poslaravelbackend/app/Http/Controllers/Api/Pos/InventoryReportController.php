@@ -71,7 +71,11 @@ class InventoryReportController extends Controller
             $deducted = $m ? (float) $m->deducted : 0;
             $sold = $m ? (float) $m->sold : 0;
 
-            $beginning = $live - $deltaFromStart;
+            // An "Update" (exact count) is not an add or deduction: it is left
+            // out of both columns and folded into Beginning instead, so
+            // beginning + added - deducted still equals ending.
+            $countUpdate = $m ? (float) $m->count_update : 0;
+            $beginning = $live - $deltaFromStart + $countUpdate;
             $ending = $live - $deltaAfterEnd;
 
             $fallbackCost = $p->cost_price !== null ? (float) $p->cost_price : 0.0;
@@ -306,8 +310,9 @@ class InventoryReportController extends Controller
             'SELECT product_id,
                     SUM(CASE WHEN created_at >= :start1 THEN quantity_delta ELSE 0 END) AS delta_from_start,
                     SUM(CASE WHEN created_at > :end1 THEN quantity_delta ELSE 0 END) AS delta_after_end,
-                    SUM(CASE WHEN created_at BETWEEN :start2 AND :end2 AND quantity_delta > 0 THEN quantity_delta ELSE 0 END) AS added,
-                    SUM(CASE WHEN created_at BETWEEN :start3 AND :end3 AND quantity_delta < 0 THEN -quantity_delta ELSE 0 END) AS deducted,
+                    SUM(CASE WHEN created_at BETWEEN :start2 AND :end2 AND NOT (type = "adjustment" AND note LIKE "Stock update:%") AND quantity_delta > 0 THEN quantity_delta ELSE 0 END) AS added,
+                    SUM(CASE WHEN created_at BETWEEN :start3 AND :end3 AND NOT (type = "adjustment" AND note LIKE "Stock update:%") AND quantity_delta < 0 THEN -quantity_delta ELSE 0 END) AS deducted,
+                    SUM(CASE WHEN created_at BETWEEN :start5 AND :end5 AND type = "adjustment" AND note LIKE "Stock update:%" THEN quantity_delta ELSE 0 END) AS count_update,
                     SUM(CASE WHEN created_at BETWEEN :start4 AND :end4 AND type = "sale" THEN -quantity_delta ELSE 0 END) AS sold
              FROM stock_movements
              GROUP BY product_id',
@@ -320,6 +325,8 @@ class InventoryReportController extends Controller
                 'end3' => $endDt,
                 'start4' => $startDt,
                 'end4' => $endDt,
+                'start5' => $startDt,
+                'end5' => $endDt,
             ],
         );
 

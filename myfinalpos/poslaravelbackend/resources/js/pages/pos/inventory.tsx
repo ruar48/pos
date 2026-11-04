@@ -42,9 +42,12 @@ import {
 } from '@/components/ui/select';
 import {
     adjustInventoryStock,
+    fetchStockEntries,
+    fixInventoryStockEntry,
     updateInventoryStockWithPin,
     fetchInventoryReport,
     fetchInventoryReportPage,
+    type StockEntry,
     type InventoryFilteredTotals,
     type InventoryReport,
     type InventoryRow,
@@ -1265,11 +1268,15 @@ function StockAdjustDialog({
     onClose: () => void;
     onSaved: () => void;
 }) {
-    const [mode, setMode] = useState<'update' | 'add' | 'remove'>('add');
+    const [mode, setMode] = useState<
+        'update' | 'add' | 'remove' | 'fix'
+    >('add');
     const [amount, setAmount] = useState('');
     const [reason, setReason] = useState('');
     const [pin, setPin] = useState('');
     const [saving, setSaving] = useState(false);
+    const [entries, setEntries] = useState<StockEntry[]>([]);
+    const [entryId, setEntryId] = useState<number | null>(null);
 
     useEffect(() => {
         if (target) {
@@ -1277,30 +1284,59 @@ function StockAdjustDialog({
             setAmount('');
             setReason('');
             setPin('');
+            setEntries([]);
+            setEntryId(null);
         }
     }, [target]);
+
+    const productId = target?.product_id;
+    useEffect(() => {
+        if (mode !== 'fix' || !productId) return;
+        let cancelled = false;
+        fetchStockEntries(productId)
+            .then((rows) => !cancelled && setEntries(rows))
+            .catch(() => !cancelled && toast.error('Could not load entries'));
+        return () => {
+            cancelled = true;
+        };
+    }, [mode, productId]);
 
     if (!target) return null;
 
     const parsed = parseFloat(amount);
-    const amountValid = Number.isFinite(parsed) && parsed >= 0 && amount.trim() !== '';
+    const selectedEntry = entries.find((e) => e.id === entryId) ?? null;
+    // A fixed entry takes its right signed quantity, where 0 removes the entry.
+    const amountValid =
+        Number.isFinite(parsed) &&
+        (mode === 'fix' || parsed >= 0) &&
+        amount.trim() !== '';
+    const needsPin = mode === 'update' || mode === 'fix';
     const valid =
         amountValid &&
-        (mode !== 'update' || (reason.trim() !== '' && pin.trim() !== ''));
+        (mode !== 'fix' || selectedEntry !== null) &&
+        (!needsPin || (reason.trim() !== '' && pin.trim() !== ''));
     const projected =
         mode === 'update'
             ? parsed
-            : mode === 'add'
-              ? target.live_stock + parsed
-              : target.live_stock - parsed;
+            : mode === 'fix'
+              ? target.live_stock +
+                parsed -
+                (selectedEntry?.quantity_delta ?? 0)
+              : mode === 'add'
+                ? target.live_stock + parsed
+                : target.live_stock - parsed;
 
     const save = async () => {
         if (!amountValid) {
             toast.error('Enter a valid quantity');
             return;
         }
-        if (mode === 'update' && (reason.trim() === '' || pin.trim() === '')) {
+        if (needsPin && (reason.trim() === '' || pin.trim() === '')) {
             toast.error('Enter a reason and the cash drawer PIN');
+            return;
+        }
+        if (mode === 'fix' && !selectedEntry) {
+            toast.error('Pick the entry to fix');
             return;
         }
         if (mode !== 'update' && projected < 0) {
@@ -1315,7 +1351,14 @@ function StockAdjustDialog({
                     ? { variety_id: target.variety_id }
                     : {}),
             };
-            if (mode === 'update') {
+            if (mode === 'fix' && selectedEntry) {
+                await fixInventoryStockEntry({
+                    entry_id: selectedEntry.id,
+                    quantity: parsed,
+                    reason: reason.trim(),
+                    pin: pin.trim(),
+                });
+            } else if (mode === 'update') {
                 await updateInventoryStockWithPin({
                     ...base,
                     stock: parsed,
@@ -1325,7 +1368,7 @@ function StockAdjustDialog({
             } else {
                 await adjustInventoryStock({
                     ...base,
-                    delta: mode === 'add' ? parsed : -parsed,
+                    delta: mode === 'remove' ? -parsed : parsed,
                 });
             }
             const label = target.variety_name
@@ -1361,6 +1404,7 @@ function StockAdjustDialog({
                             [
                                 { key: 'add', label: 'Add' },
                                 { key: 'remove', label: 'Remove' },
+                                { key: 'fix', label: 'Fix entry' },
                                 { key: 'update', label: 'Update' },
                             ] as const
                         ).map((m) => (
@@ -1380,14 +1424,55 @@ function StockAdjustDialog({
                         ))}
                     </div>
 
+                    {mode === 'fix' && (
+                        <div className="space-y-1.5">
+                            <Label>Which entry was wrong?</Label>
+                            <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border p-1">
+                                {entries.length === 0 && (
+                                    <p className="px-2 py-3 text-center text-sm text-muted-foreground">
+                                        No manual entries found
+                                    </p>
+                                )}
+                                {entries.map((e) => (
+                                    <button
+                                        key={e.id}
+                                        type="button"
+                                        onClick={() => {
+                                            setEntryId(e.id);
+                                            setAmount(String(e.quantity_delta));
+                                        }}
+                                        className={cn(
+                                            'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm',
+                                            entryId === e.id
+                                                ? 'bg-primary/10 text-primary'
+                                                : 'hover:bg-secondary/50',
+                                        )}
+                                    >
+                                        <span className="font-semibold tabular-nums">
+                                            {e.quantity_delta > 0 ? '+' : ''}
+                                            {formatInt(e.quantity_delta)}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                            {e.created_at}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="space-y-1.5">
                         <Label htmlFor="adjust-amount">
-                            {mode === 'update' ? 'New quantity' : 'Quantity'}
+                            {mode === 'update'
+                                ? 'New quantity'
+                                : mode === 'fix'
+                                  ? 'Right quantity for that entry (0 = remove it)'
+                                  : 'Quantity'}
                         </Label>
                         <Input
                             id="adjust-amount"
                             type="number"
-                            min={0}
+                            min={mode === 'fix' ? undefined : 0}
                             step="0.001"
                             inputMode="decimal"
                             autoFocus
@@ -1397,7 +1482,7 @@ function StockAdjustDialog({
                         />
                     </div>
 
-                    {mode === 'update' && (
+                    {needsPin && (
                         <>
                             <div className="space-y-1.5">
                                 <Label htmlFor="adjust-reason">Reason</Label>
