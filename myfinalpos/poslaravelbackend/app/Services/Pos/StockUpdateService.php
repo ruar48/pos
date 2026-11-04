@@ -33,9 +33,6 @@ class StockUpdateService
         if ($productId <= 0) {
             throw new \InvalidArgumentException('product_id is required');
         }
-        if ($newStock < 0) {
-            throw new \InvalidArgumentException('Stock cannot be negative');
-        }
         if ($reason === '') {
             throw new \InvalidArgumentException('A reason is required');
         }
@@ -105,6 +102,21 @@ class StockUpdateService
                     'previous_stock' => $previousStock,
                     'new_stock' => $newStock,
                     'delta' => $delta,
+                    'reason' => $reason,
+                ],
+            );
+
+            PosHelpers::insertUserTransaction(
+                $actorUserId,
+                'stock_update',
+                'products',
+                $productId,
+                0.0,
+                'Stock updated with PIN: '.$reason,
+                [
+                    'variety' => $variety?->name,
+                    'previous_stock' => $previousStock,
+                    'new_stock' => $newStock,
                     'reason' => $reason,
                 ],
             );

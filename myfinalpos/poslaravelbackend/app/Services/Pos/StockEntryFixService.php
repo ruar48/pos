@@ -101,12 +101,6 @@ class StockEntryFixService
             $diff = $newDelta - $previousDelta;
             $newStock = (float) $product->stock + $diff;
 
-            if ($newStock < 0) {
-                throw new \InvalidArgumentException(
-                    'Stock would go below zero - part of it has already been sold',
-                );
-            }
-
             if ($newDelta == 0.0) {
                 DB::table('stock_movements')->where('id', $entryId)->delete();
             } else {
@@ -142,6 +136,24 @@ class StockEntryFixService
                     'previous_stock' => (float) $product->stock,
                     'new_stock' => $newStock,
                     'reason' => $reason,
+                    // The original row, so a removed entry can be reconstructed.
+                    'original_entry' => (array) $entry,
+                ],
+            );
+
+            PosHelpers::insertUserTransaction(
+                $actorUserId,
+                'stock_entry_fix',
+                'stock_movements',
+                $entryId,
+                0.0,
+                ($newDelta == 0.0 ? 'Stock entry removed: ' : 'Stock entry corrected: ').$reason,
+                [
+                    'name' => $product->name,
+                    'previous_delta' => $previousDelta,
+                    'new_delta' => $newDelta,
+                    'previous_stock' => (float) $product->stock,
+                    'new_stock' => $newStock,
                 ],
             );
 

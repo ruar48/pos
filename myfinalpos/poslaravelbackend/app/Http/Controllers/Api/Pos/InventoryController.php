@@ -111,7 +111,9 @@ class InventoryController extends Controller
             $currentStock = (float) ($product->stock ?? 0);
             $newStock = $hasStock ? (float) $stock : ($currentStock + (float) $delta);
 
-            if (! $this->allowNegativeStock() && $newStock < 0) {
+            // A change that raises stock is always fine, even if the item is
+            // still negative afterwards (e.g. -10 + 5); only going lower is blocked.
+            if (! $this->allowNegativeStock() && $newStock < 0 && $newStock < $currentStock) {
                 DB::rollBack();
                 PosApiLogger::warning('inventory.update.rejected_negative_stock', [
                     'product_id' => $productId,

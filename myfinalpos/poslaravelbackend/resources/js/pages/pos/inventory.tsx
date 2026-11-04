@@ -1308,7 +1308,7 @@ function StockAdjustDialog({
     // A fixed entry takes its right signed quantity, where 0 removes the entry.
     const amountValid =
         Number.isFinite(parsed) &&
-        (mode === 'fix' || parsed >= 0) &&
+        (mode === 'fix' || mode === 'update' || parsed >= 0) &&
         amount.trim() !== '';
     const needsPin = mode === 'update' || mode === 'fix';
     const valid =
@@ -1337,10 +1337,6 @@ function StockAdjustDialog({
         }
         if (mode === 'fix' && !selectedEntry) {
             toast.error('Pick the entry to fix');
-            return;
-        }
-        if (mode !== 'update' && projected < 0) {
-            toast.error('Stock cannot go below zero');
             return;
         }
         setSaving(true);
@@ -1472,7 +1468,11 @@ function StockAdjustDialog({
                         <Input
                             id="adjust-amount"
                             type="number"
-                            min={mode === 'fix' ? undefined : 0}
+                            min={
+                                mode === 'fix' || mode === 'update'
+                                    ? undefined
+                                    : 0
+                            }
                             step="0.001"
                             inputMode="decimal"
                             autoFocus
