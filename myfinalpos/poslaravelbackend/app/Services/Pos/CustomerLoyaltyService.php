@@ -3,8 +3,13 @@
 namespace App\Services\Pos;
 
 use App\Support\PosHelpers;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CustomerLoyaltyService
 {
@@ -148,6 +153,118 @@ class CustomerLoyaltyService
                 'has_loyalty_card' => $row->card_number !== null,
             ];
         }, $rows);
+    }
+
+    /**
+     * Excel of every loyalty member's points balance, with lifetime earned /
+     * redeemed (net of refunds, same rules as the Points Activity totals) and
+     * a grand-total row.
+     */
+    public function downloadMembersExcel(?string $search = null): StreamedResponse
+    {
+        $members = array_values(array_filter(
+            $this->customersWithPoints($search),
+            static fn (array $row) => $row['has_loyalty_card'],
+        ));
+
+        $lifetime = [];
+        if (Schema::hasTable('loyalty_point_logs')) {
+            $logRows = DB::select(
+                "SELECT customer_id,
+                    COALESCE(SUM(CASE
+                        WHEN action = 'earn' THEN points_change
+                        WHEN action = 'refund' AND points_change < 0 THEN points_change
+                        ELSE 0 END), 0) AS earned,
+                    COALESCE(SUM(CASE
+                        WHEN action = 'redeem' THEN -points_change
+                        WHEN action = 'refund' AND points_change > 0 THEN -points_change
+                        ELSE 0 END), 0) AS redeemed
+                 FROM loyalty_point_logs
+                 GROUP BY customer_id",
+            );
+            foreach ($logRows as $log) {
+                $lifetime[(int) $log->customer_id] = [
+                    'earned' => (int) $log->earned,
+                    'redeemed' => (int) $log->redeemed,
+                ];
+            }
+        }
+
+        $spreadsheet = new Spreadsheet;
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Member Points');
+
+        $totalPoints = array_sum(array_column($members, 'points'));
+        $sheet->setCellValue('A1', 'Loyalty Members — Points Summary');
+        $sheet->setCellValue('A2', 'Generated: '.CarbonImmutable::now()->format('M j, Y g:i A'));
+        $sheet->setCellValue('A3', sprintf(
+            'Members: %s    Total points on file: %s',
+            number_format(count($members)),
+            number_format($totalPoints),
+        ));
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+
+        $headers = [
+            'Customer', 'Card Number', 'RFID', 'Tier', 'Status',
+            'Current Points', 'Lifetime Earned', 'Lifetime Redeemed',
+            'Orders', 'Total Spent (₱)', 'Last Card Update',
+        ];
+        $sheet->fromArray($headers, null, 'A5');
+        $sheet->getStyle('A5:K5')->getFont()->setBold(true);
+
+        $firstDataRow = 6;
+        $rowNumber = $firstDataRow;
+        foreach ($members as $row) {
+            $life = $lifetime[$row['customer_id']] ?? ['earned' => 0, 'redeemed' => 0];
+            $sheet->fromArray([
+                $row['customer_name'],
+                (string) ($row['card_number'] ?? ''),
+                (string) ($row['nfc_uid'] ?? ''),
+                $row['tier'] ?? '',
+                $row['card_status'] ?? '',
+                $row['points'],
+                $life['earned'],
+                $life['redeemed'],
+                $row['order_count'],
+                $row['total_spent'],
+                $row['card_updated_at'] ?? '',
+            ], null, 'A'.$rowNumber);
+            // Card numbers / RFID UIDs are identifiers, not numbers.
+            $sheet->setCellValueExplicit('B'.$rowNumber, (string) ($row['card_number'] ?? ''), DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('C'.$rowNumber, (string) ($row['nfc_uid'] ?? ''), DataType::TYPE_STRING);
+            $rowNumber++;
+        }
+
+        $lastDataRow = $rowNumber - 1;
+        $sheet->setCellValue('A'.$rowNumber, 'TOTAL');
+        if ($lastDataRow >= $firstDataRow) {
+            foreach (['F', 'G', 'H', 'I', 'J'] as $column) {
+                $sheet->setCellValue(
+                    $column.$rowNumber,
+                    "=SUM({$column}{$firstDataRow}:{$column}{$lastDataRow})",
+                );
+            }
+        }
+        $sheet->getStyle("A{$rowNumber}:K{$rowNumber}")->getFont()->setBold(true);
+
+        $sheet->getStyle("F{$firstDataRow}:I{$rowNumber}")->getNumberFormat()->setFormatCode('#,##0');
+        $sheet->getStyle("J{$firstDataRow}:J{$rowNumber}")->getNumberFormat()->setFormatCode('#,##0.00');
+
+        foreach (range('A', 'K') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+        $sheet->freezePane('A6');
+
+        $filename = 'loyalty_member_points_'.CarbonImmutable::now()->format('Y-m-d').'.xlsx';
+
+        return new StreamedResponse(function () use ($spreadsheet) {
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'max-age=0',
+        ]);
     }
 
     /**

@@ -145,6 +145,25 @@ export async function downloadLoyaltyActivityExcel(filters: LoyaltyActivityFilte
     URL.revokeObjectURL(url);
 }
 
+export async function downloadMemberPointsExcel(query?: string): Promise<void> {
+    const params = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+    const response = await fetch(`/pos/loyalty/members/export${params}`, {
+        credentials: 'same-origin',
+    });
+
+    if (!response.ok) {
+        throw new Error(`Excel download failed (HTTP ${response.status})`);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `loyalty_member_points_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+}
+
 export async function fetchPointsCustomers(query?: string) {
     const params = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
     return laravelFetch<{ data: PointsCustomer[] }>(`/pos/customers/list${params}`);

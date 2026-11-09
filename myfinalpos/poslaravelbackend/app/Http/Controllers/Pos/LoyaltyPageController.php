@@ -51,6 +51,13 @@ class LoyaltyPageController extends Controller
         );
     }
 
+    public function exportMembers(Request $request): StreamedResponse
+    {
+        return app(CustomerLoyaltyService::class)->downloadMembersExcel(
+            $request->query('q'),
+        );
+    }
+
     public function customerList(Request $request): JsonResponse
     {
         $rows = app(CustomerLoyaltyService::class)->customersWithPoints(

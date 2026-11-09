@@ -2,6 +2,7 @@ import { Head } from '@inertiajs/react';
 import {
     Award,
     Check,
+    FileSpreadsheet,
     Gift,
     History,
     Loader2,
@@ -32,6 +33,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+    downloadMemberPointsExcel,
     fetchLoyaltyCards,
     fetchLoyaltyOverview,
     fetchPointsCustomers,
@@ -230,6 +232,7 @@ export default function PosLoyalty() {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [savingSettings, setSavingSettings] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [nfcLinkTarget, setNfcLinkTarget] = useState<{
         customerId: number;
         customerName: string;
@@ -382,6 +385,17 @@ export default function PosLoyalty() {
         void load();
     }, [load]);
 
+    const exportMemberPoints = async () => {
+        setExporting(true);
+        try {
+            await downloadMemberPointsExcel(query);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Excel download failed');
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const saveProgramSettings = async () => {
         if (settingsForm.loyalty_spend_unit <= 0) {
             toast.error('Spend amount must be greater than zero');
@@ -426,6 +440,19 @@ export default function PosLoyalty() {
                                     <RefreshCw className="size-4" />
                                 )}
                                 Refresh
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={exportMemberPoints}
+                                disabled={exporting}
+                            >
+                                {exporting ? (
+                                    <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                    <FileSpreadsheet className="size-4" />
+                                )}
+                                Download Points (Excel)
                             </Button>
                             <Button size="sm" onClick={() => setDialogOpen(true)}>
                                 <UserPlus className="size-4" />

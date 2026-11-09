@@ -121,6 +121,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/pos/loyalty/cards', [LoyaltyPageController::class, 'cards'])->name('pos.loyalty.cards');
     Route::get('/pos/loyalty/activity', [LoyaltyPageController::class, 'activity'])->name('pos.loyalty.activity');
     Route::get('/pos/loyalty/activity/export', [LoyaltyPageController::class, 'exportActivity'])->name('pos.loyalty.activity.export');
+    Route::get('/pos/loyalty/members/export', [LoyaltyPageController::class, 'exportMembers'])->name('pos.loyalty.members.export');
     Route::post('/pos/loyalty/settings', [LoyaltyPageController::class, 'updateSettings'])->name('pos.loyalty.settings');
     Route::get('/pos/promotions', [PromotionsPageController::class, 'index'])->name('pos.promotions');
     Route::get('/pos/promotions/coupons', [PromotionsPageController::class, 'coupons'])->name('pos.promotions.coupons');
